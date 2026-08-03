@@ -23,21 +23,39 @@ final class WordPressJobQueue implements JobQueueInterface
     public function enqueue(RebuildJob $job): void
     {
         $timestamp = $this->utc(new DateTimeImmutable('now', new DateTimeZone('UTC')));
-        $inserted = $this->db->query($this->db->prepare(
-            "INSERT IGNORE INTO {$this->table}
-                (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, created_at, updated_at)
-             VALUES (%s, %s, %s, %s, %s, %d, %s, 'queued', %s, %s)",
-            $job->jobId(),
-            $job->generationId(),
-            $job->connectorKey(),
-            $job->cursor(),
-            $job->mode(),
-            $job->attempt(),
-            $this->utc($job->availableAt()),
-            $timestamp,
-            $timestamp
-        ));
 
+        if ($job->cursor() === null) {
+            $sql = $this->db->prepare(
+                "INSERT IGNORE INTO {$this->table}
+                    (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, created_at, updated_at)
+                 VALUES (%s, %s, %s, NULL, %s, %d, %s, 'queued', %s, %s)",
+                $job->jobId(),
+                $job->generationId(),
+                $job->connectorKey(),
+                $job->mode(),
+                $job->attempt(),
+                $this->utc($job->availableAt()),
+                $timestamp,
+                $timestamp
+            );
+        } else {
+            $sql = $this->db->prepare(
+                "INSERT IGNORE INTO {$this->table}
+                    (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, created_at, updated_at)
+                 VALUES (%s, %s, %s, %s, %s, %d, %s, 'queued', %s, %s)",
+                $job->jobId(),
+                $job->generationId(),
+                $job->connectorKey(),
+                $job->cursor(),
+                $job->mode(),
+                $job->attempt(),
+                $this->utc($job->availableAt()),
+                $timestamp,
+                $timestamp
+            );
+        }
+
+        $inserted = $this->db->query($sql);
         if ($inserted === false) {
             throw new InvariantViolation('Persistent job enqueue failed.');
         }
@@ -75,11 +93,14 @@ final class WordPressJobQueue implements JobQueueInterface
             }
             $this->db->query('COMMIT');
 
+            $storedCursor = $row['cursor_value'] ?? null;
+            $cursor = $storedCursor === null || $storedCursor === '' ? null : (string) $storedCursor;
+
             return new RebuildJob(
                 (string) $row['job_id'],
                 (string) $row['generation_id'],
                 (string) $row['connector_key'],
-                $row['cursor_value'] === null ? null : (string) $row['cursor_value'],
+                $cursor,
                 (string) $row['mode'],
                 (int) $row['attempt'],
                 new DateTimeImmutable((string) $row['available_at'], new DateTimeZone('UTC'))
@@ -113,7 +134,7 @@ final class WordPressJobQueue implements JobQueueInterface
                 $current = $this->db->get_var($this->db->prepare(
                     "SELECT job_id FROM {$this->table}
                      WHERE generation_id = %s AND connector_key = %s AND mode = %s
-                       AND cursor_value IS NULL AND status = 'running'
+                       AND (cursor_value IS NULL OR cursor_value = '') AND status = 'running'
                      ORDER BY attempt DESC LIMIT 1 FOR UPDATE",
                     $job->generationId(),
                     $job->connectorKey(),
@@ -142,24 +163,50 @@ final class WordPressJobQueue implements JobQueueInterface
                 $current
             ));
 
-            $this->db->query($this->db->prepare(
-                "INSERT INTO {$this->table}
-                    (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, error_code, created_at, updated_at)
-                 VALUES (%s, %s, %s, %s, %s, %d, %s, 'queued', %s, %s, %s)
-                 ON DUPLICATE KEY UPDATE
-                    available_at = VALUES(available_at), status = 'queued', error_code = VALUES(error_code),
-                    lease_expires_at = NULL, updated_at = VALUES(updated_at)",
-                $job->jobId(),
-                $job->generationId(),
-                $job->connectorKey(),
-                $job->cursor(),
-                $job->mode(),
-                $job->attempt(),
-                $this->utc($job->availableAt()),
-                $errorCode,
-                $this->utc($job->availableAt()),
-                $this->utc($job->availableAt())
-            ));
+            if ($job->cursor() === null) {
+                $insertSql = $this->db->prepare(
+                    "INSERT INTO {$this->table}
+                        (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, error_code, created_at, updated_at)
+                     VALUES (%s, %s, %s, NULL, %s, %d, %s, 'queued', %s, %s, %s)
+                     ON DUPLICATE KEY UPDATE
+                        available_at = VALUES(available_at), status = 'queued', error_code = VALUES(error_code),
+                        lease_expires_at = NULL, updated_at = VALUES(updated_at)",
+                    $job->jobId(),
+                    $job->generationId(),
+                    $job->connectorKey(),
+                    $job->mode(),
+                    $job->attempt(),
+                    $this->utc($job->availableAt()),
+                    $errorCode,
+                    $this->utc($job->availableAt()),
+                    $this->utc($job->availableAt())
+                );
+            } else {
+                $insertSql = $this->db->prepare(
+                    "INSERT INTO {$this->table}
+                        (job_id, generation_id, connector_key, cursor_value, mode, attempt, available_at, status, error_code, created_at, updated_at)
+                     VALUES (%s, %s, %s, %s, %s, %d, %s, 'queued', %s, %s, %s)
+                     ON DUPLICATE KEY UPDATE
+                        available_at = VALUES(available_at), status = 'queued', error_code = VALUES(error_code),
+                        lease_expires_at = NULL, updated_at = VALUES(updated_at)",
+                    $job->jobId(),
+                    $job->generationId(),
+                    $job->connectorKey(),
+                    $job->cursor(),
+                    $job->mode(),
+                    $job->attempt(),
+                    $this->utc($job->availableAt()),
+                    $errorCode,
+                    $this->utc($job->availableAt()),
+                    $this->utc($job->availableAt())
+                );
+            }
+
+            $inserted = $this->db->query($insertSql);
+            if ($inserted === false) {
+                throw new InvariantViolation('Persistent retry job insertion failed.');
+            }
+
             $this->db->query('COMMIT');
         } catch (Throwable $exception) {
             $this->db->query('ROLLBACK');
