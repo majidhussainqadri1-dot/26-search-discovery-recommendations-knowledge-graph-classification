@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "test": "php tests/run.php && php tests/phase-26b-review.php",
+    "test": "php tests/run.php && php tests/phase-26b-review.php && php tests/phase-26c-persistence.php && php tests/phase-26c-adversarial.php",
     "lint": "find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l"
   },
   "config": {
