@@ -72,7 +72,8 @@
 - lease expiry/takeover and stale-token release;
 - cross-owner canonical writes;
 - retry exhaustion/dead-letter with active-alias preservation;
-- checksum determinism under reversed ingestion order.
+- checksum determinism under reversed ingestion order;
+- CI action-runtime deprecation and supported checkout migration.
 
 ## Pending acceptance evidence
 
