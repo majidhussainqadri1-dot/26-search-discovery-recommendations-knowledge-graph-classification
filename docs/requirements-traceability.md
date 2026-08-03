@@ -53,34 +53,48 @@
 | F26-C-013 Fail-closed schema/runtime health | activation schema verification and health stage | source/lint; WordPress staging pending |
 | F26-C-014 Truthful runtime identity | plugin/schema `0.3.0` and Phase 26C documentation | repository review and per-head CI |
 
-## Phase 26C review round 1 corrections
+## Phase 26D — Persistent query and operations control plane
 
-- Required complete connector checkpoints before validation.
-- Prevented generation reuse, stale checkpoint overwrite and completed-checkpoint regression.
-- Isolated candidate generations from the active alias during retries and dead-letter failure.
-- Added deterministic checksums, persistent counts and rollback predecessor state.
-- Added activation-time schema verification rather than trusting `dbDelta` invocation alone.
-- Added explicit minimum count, expected count/divergence and tombstone-ceiling policy before promotion.
+| Requirement | Implementation | Evidence |
+|---|---|---|
+| F26-D-001 Internal active-generation query contract | `ActiveGenerationRepositoryInterface`, `PersistentQueryService` | Phase 26D query suite |
+| F26-D-002 Signed snapshot pagination | `QueryCursorCodec`, query fingerprint | tampering, query mismatch and generation-swap tests |
+| F26-D-003 Strict stored-row integrity | payload SHA-256, `SearchDocumentHydrator` | hydration, extra-field, reordered-key and timestamp regressions |
+| F26-D-004 Query-time audience authorization | `EligibilityEvaluator` after persistent hydration | guest, entitlement, age and guardian tests |
+| F26-D-005 Urdu/English deterministic matching | persistent query service and repositories | Unicode and locale-filter tests |
+| F26-D-006 Bounded domain/locale/candidate filters | `PersistentQuery`, repository candidate limits | malformed, duplicate-normalized and over-limit tests |
+| F26-D-007 Bounded reusable worker execution | `WorkerLoop` | two-page completion, idle and ceiling tests |
+| F26-D-008 WP-Cron and real-cron adapters | `WordPressWorkerScheduler`, `WordPressCliAdapter` | source/lint and Phase 26D operations suite |
+| F26-D-009 Missed-run detection and recovery | `MissedRunDetector`, throttled `admin_init` check | idle, never-run, on-time, overdue and future-time tests |
+| F26-D-010 Administrator diagnostics | operations REST route and `WordPressRuntime::diagnostics()` | capability/source review; WordPress integration pending |
+| F26-D-011 Guarded dead-letter replay | dead-letter operations adapters + replay audit fields | error-confirmation, generation and checkpoint regressions |
+| F26-D-012 Read-only owner connector probe | `OwnerConnectorProbe` | terminal, repeated-cursor, checksum and cross-owner tests |
+| F26-D-013 Supported active-plugin schema upgrade | `SchemaUpgradeCoordinator` | version-path adversarial tests; real MariaDB run pending |
+| F26-D-014 Finite cron cleanup | bounded `WordPressWorkerScheduler::unschedule()` | fresh adversarial source regression |
+| F26-D-015 Isolated database harness | manual WordPress/MariaDB workflow and smoke script | workflow execution pending |
+| F26-D-016 Truthful runtime identity | plugin/schema `0.4.0`, internal-only health status | repository review and exact-head CI |
 
-## Phase 26C fresh adversarial review coverage
+## Review round 1 corrections
 
-- unexpectedly empty generation promotion;
-- malformed validation thresholds and retry policies;
-- connector preflight failure and partial-generation prevention;
-- missing or stale checkpoints before provider execution;
-- duplicate job enqueue and competing worker leases;
-- lease expiry/takeover and stale-token release;
-- cross-owner canonical writes;
-- retry exhaustion/dead-letter with active-alias preservation;
-- checksum determinism under reversed ingestion order;
-- CI action-runtime deprecation and supported checkout migration.
+- Preserved Unicode text during candidate matching.
+- Narrowed authorization assertions to restricted-only terms.
+- Corrected the WP-CLI real-cron callback binding.
+- Added a supported locked schema upgrade path for already-active `0.3.0` installations.
+
+## Fresh adversarial review corrections
+
+- Rejected relative and non-ISO stored timestamps.
+- Rejected locale aliases that become duplicates after normalization.
+- Added administrator-only throttled missed-run checks.
+- Bounded cron unscheduling and stopped on WordPress removal failure.
+- Added cursor offset/fingerprint, payload-shape, connector-pagination and schema-skip regressions.
 
 ## Pending acceptance evidence
 
+- Successful manual execution of `.github/workflows/wp-mysql-integration.yml`.
 - WordPress 6.x/7.x activation, upgrade, reactivation and deactivation on isolated Hostinger-equivalent staging.
-- Real MySQL/MariaDB `dbDelta`, transaction, lock-expiry, concurrent-worker and rollback tests.
+- Real MariaDB transaction, advisory-lock contention, worker concurrency, backup/restore and rollback rehearsal.
 - Approved real File 21 and File 10 provider adapters and jointly frozen owner contracts.
-- WP-Cron and real-cron scheduling, missed-cron recovery and operator dead-letter replay.
-- Persistent query reader, staging-data parity, leakage and deletion-propagation SLO evidence.
-- Public-query API, File 20 search surface and File 25 result-card work remain outside this batch.
+- Representative staging-data parity, leakage, deletion-propagation and latency SLO evidence.
+- Public query API, autocomplete, File 20 search surface and File 25 result-card work remain outside this batch.
 - Source/package parity, installable ZIP and Founder staging acceptance remain pending.
