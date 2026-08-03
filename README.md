@@ -15,9 +15,9 @@ It does **not** become the canonical owner of posts, lessons, doctors, clinics, 
 | Specified | Complete planning baseline |
 | Coded | Phases 26A–26D coded on the draft branch |
 | Packaged | Not yet claimed |
-| Automated QA Green | Repository CI evidence required for each exact head |
-| WordPress/MariaDB Smoke | Manual isolated workflow added; successful execution not yet claimed |
-| Staging Accepted | Not yet claimed |
+| Automated QA Green | PHP 8.1/8.3 exact-head matrix required |
+| Isolated WordPress/MariaDB Smoke | Green on WordPress 7.0.2, MariaDB 11.4 and PHP 8.3 |
+| Hostinger-equivalent Staging Accepted | Not yet claimed |
 | Live Deployed | Not claimed |
 | Operational | Not claimed |
 
@@ -80,7 +80,7 @@ After a packaged release, any identifier rename requires approved migration and 
 - Guarded dead-letter replay with exact error confirmation and replay audit counters.
 - Read-only bounded owner-connector probes with cursor, identity and checksum validation.
 - Locked in-place schema upgrade from `0.3.0` to `0.4.0`.
-- Manual isolated WordPress/MariaDB integration workflow and smoke script.
+- Isolated WordPress/MariaDB integration workflow required on every pull-request head.
 
 ## Blue/green safety law
 
@@ -130,12 +130,28 @@ wp sabri-file26 connector probe --connector=<key>
 
 No public query route is registered in Phase 26D.
 
+## Automated verification
+
+The repository matrix runs the complete contract, shadow, persistence, query, operations and adversarial suites on PHP 8.1 and PHP 8.3:
+
+```text
+Foundation and shadow-index suite: 41 assertions
+Phase 26B review suite:           13 assertions
+Phase 26C persistence suite:      32 assertions
+Phase 26C adversarial suite:      22 assertions
+Phase 26D query suite:            28 assertions
+Phase 26D operations suite:       24 assertions
+Phase 26D adversarial suite:      16 assertions
+Total per PHP version:           176 assertions
+```
+
+The isolated database workflow additionally provisions WordPress 7.0.2 with MariaDB 11.4 and PHP 8.3. Its smoke test passed 21 assertions covering activation, schema/table/column verification, persistent generation write/checkpoint/validation/promotion, Urdu active-generation query, persistent queue claim, dead-letter transition and guarded replay.
+
 ## Explicit non-claims
 
 This repository does not yet claim:
 
 - approved live File 21 or File 10 owner adapters;
-- successful execution of the manual WordPress/MariaDB workflow;
 - Hostinger-equivalent migration, concurrency, backup and rollback acceptance;
 - public autocomplete, search REST API or File 20 global-search UI integration;
 - production transliteration, advanced ranking, recommendations, taxonomy or knowledge-graph traversal;
@@ -150,7 +166,7 @@ composer test
 composer lint
 ```
 
-The default contract, query and in-memory generation suites have no WordPress dependency. The separate `File 26 WordPress MariaDB Integration` workflow is manual and must succeed before database acceptance is claimed.
+The default contract, query and in-memory generation suites have no WordPress dependency. Every pull-request head also runs the isolated `File 26 WordPress MariaDB Integration` workflow.
 
 ## Release law
 
