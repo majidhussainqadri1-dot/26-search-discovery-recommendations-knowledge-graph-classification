@@ -45,6 +45,21 @@ final class VisibilityEnvelope
         }
     }
 
+    public static function public(): self
+    {
+        return new self(true);
+    }
+
+    /** @param list<string> $requiredCapabilities */
+    public static function restricted(
+        array $requiredCapabilities = [],
+        ?string $requiredEntitlement = null,
+        ?int $minimumAge = null,
+        bool $guardianConsentRequired = false
+    ): self {
+        return new self(false, $requiredCapabilities, $requiredEntitlement, $minimumAge, $guardianConsentRequired);
+    }
+
     public function isPublic(): bool
     {
         return $this->public;
