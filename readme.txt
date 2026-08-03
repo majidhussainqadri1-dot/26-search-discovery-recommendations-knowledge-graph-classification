@@ -2,16 +2,25 @@
 Contributors: majidhussainqadri1-dot
 Requires at least: 6.0
 Requires PHP: 8.1
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: Proprietary
 
 Canonical File 26 foundation for search, discovery, recommendations, controlled taxonomy, classification and owner-sourced knowledge-graph projections.
 
 == Description ==
 
-Version 0.3.0 adds persistent shadow-generation storage contracts, WordPress schema adapters, bounded rebuild/delta workers, durable checkpoints, retry/dead-letter handling, leases, deterministic checksums, validation thresholds, atomic active-generation promotion and rollback. It does not claim live owner adapters, public search routes, Hostinger staging acceptance, a release package, or production deployment.
+Version 0.4.0 adds an internal-only persistent active-generation query reader, signed snapshot cursors, strict stored-payload hydration, WP-Cron and real-cron worker adapters, missed-run recovery, administrator diagnostics, guarded dead-letter replay, owner-connector probes and a locked schema upgrade path. It does not expose a public search route or claim live owner adapters, Hostinger staging acceptance, release packaging or production deployment.
 
 == Changelog ==
+
+= 0.4.0 =
+* Added internal active-generation query reading with signed generation-bound cursors.
+* Added payload-hash verification, strict ISO-8601 hydration and query-time audience enforcement.
+* Added bounded WP-Cron, real-cron/WP-CLI and missed-run recovery controls.
+* Added administrator diagnostics and guarded, auditable dead-letter replay.
+* Added read-only bounded owner-connector probes and schema 0.3.0 to 0.4.0 upgrade locking.
+* Added Phase 26D query, operations and fresh adversarial suites.
+* Added a manual isolated WordPress/MariaDB integration workflow.
 
 = 0.3.0 =
 * Added blue/green persistent shadow generations and active alias state.
