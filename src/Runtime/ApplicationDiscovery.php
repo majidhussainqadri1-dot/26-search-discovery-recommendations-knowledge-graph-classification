@@ -49,7 +49,7 @@ final class SuggestionService
                 'canonical_key' => $key,
                 'label' => $title,
                 'domain' => $document->toArray()['canonical_domain'],
-                'destination_url' => $document->destinationUrl(),
+                'destination_url' => $document->canonicalUrl(),
                 'click_visibility_recheck_required' => true,
             ];
             if (count($suggestions) >= $limit) {
