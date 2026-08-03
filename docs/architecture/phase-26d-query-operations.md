@@ -2,7 +2,7 @@
 
 ## Decision
 
-Phase 26D adds an **internal-only** active-generation query reader and an administrator/CLI operations control plane. It deliberately does not publish a public search endpoint. Public query exposure remains gated on real owner adapters, WordPress/MariaDB acceptance, leakage evaluation, SLO evidence and File 20/File 25 integration.
+Phase 26D adds an **internal-only** active-generation query reader and an administrator/CLI operations control plane. It deliberately does not publish a public search endpoint. Public query exposure remains gated on approved real owner adapters, Hostinger-equivalent staging, leakage evaluation, measured SLO evidence and File 20/File 25 integration.
 
 ## Query law
 
@@ -104,23 +104,61 @@ No public query route is registered in this phase.
 - Cursor tampering, malformed fingerprints and excessive offsets are covered.
 - Connector probes cover repeated cursors, cross-owner identity and non-terminal pagination.
 
+### Real WordPress/MariaDB correction round
+
+The isolated database workflow exposed two further defects that repository-only tests could not prove:
+
+1. WP-CLI `eval-file` does not permit the smoke script's `strict_types` declaration in its evaluated context; the harness was corrected without weakening plugin source strictness.
+2. Nullable job cursors could return from WordPress/MariaDB as an empty string. `WordPressJobQueue` now writes SQL `NULL` explicitly, normalizes legacy `NULL/''` rows to canonical `null`, and accepts both forms only for legacy retry lookup.
+
+The database smoke was rerun after both corrections and passed.
+
 ## Verification layers
 
-Automated repository suites cover contracts, shadow indexing, persistence, query snapshots, operations and fresh adversarial cases on PHP 8.1 and 8.3.
+### Repository matrix
 
-A separate manual GitHub Actions workflow provisions an isolated WordPress installation with MariaDB and exercises:
+The exact-head matrix runs on PHP 8.1 and PHP 8.3:
 
-- schema installation and replay-column verification;
-- persistent generation write, checkpoint, validation and promotion;
-- active-generation Urdu query;
-- persistent queue dead-letter and guarded replay.
+```text
+Foundation and shadow-index suite: 41 assertions
+Phase 26B review suite:           13 assertions
+Phase 26C persistence suite:      32 assertions
+Phase 26C adversarial suite:      22 assertions
+Phase 26D query suite:            28 assertions
+Phase 26D operations suite:       24 assertions
+Phase 26D adversarial suite:      16 assertions
+Total per PHP version:           176 assertions
+```
 
-The manual workflow is staging evidence only after it has actually run successfully; its presence alone is not acceptance.
+Composer strict validation, complete PHP lint and JSON schema/fixture validation are also required.
+
+### Isolated WordPress/MariaDB integration
+
+Every pull-request head provisions:
+
+- WordPress `7.0.2`;
+- MariaDB `11.4`;
+- PHP `8.3`;
+- WP-CLI `2.12.0`.
+
+The smoke passed **21 assertions** covering:
+
+- plugin activation;
+- schema version and seven derivative tables;
+- replay audit columns;
+- persistent generation creation and checkpointing;
+- document persistence, validation checksum and atomic promotion;
+- Urdu active-generation query;
+- persistent queue enqueue and claim;
+- dead-letter transition;
+- guarded replay and replay-count audit.
+
+This is genuine isolated database integration evidence, but it is not Hostinger staging acceptance.
 
 ## Explicit pending evidence
 
-- Successful execution of the manual WordPress/MariaDB workflow.
-- Hostinger-equivalent backup, restore and rollback rehearsal.
+- Hostinger-equivalent activation, in-place upgrade, backup, restore and rollback rehearsal.
+- Concurrent worker/advisory-lock stress testing under representative load.
 - Approved real File 21 and File 10 source adapters.
 - Query leakage, deletion-lag and latency measurements on representative staging data.
 - Public query API, autocomplete, File 20 search surface and File 25 result cards.
