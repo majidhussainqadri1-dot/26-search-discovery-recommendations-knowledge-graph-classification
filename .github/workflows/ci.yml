@@ -48,7 +48,10 @@ jobs:
       - name: Reject transfer payloads and unresolved markers
         run: |
           ! find tools -maxdepth 1 -type f -name 'phase26e-payload.part*' -print -quit | grep -q .
-          ! grep -RInE 'TODO|FIXME|HACK|temporary payload|apply-phase26e' --exclude-dir=.git --exclude='*.md' .
+          ! grep -RInE '[T]ODO|[F]IXME|[H]ACK|temporary[[:space:]]+payload|apply-phase26[e]' \
+            --exclude-dir=.git \
+            --exclude='*.md' \
+            .
 
   deterministic-package:
     name: Deterministic package and source parity
