@@ -59,6 +59,10 @@ jobs:
             > /tmp/phase26e-payload.b64
           echo '3f8a43e00619e887eaf411fdcb9dcd7d35f202b891baf532231d3454a3ae35ef  /tmp/phase26e-payload.b64' | sha256sum --check --strict
           base64 --decode /tmp/phase26e-payload.b64 | tar --extract --gzip --file -
+          sed -i 's#src/Api/PublicApiController.php#src/Complete/WordPress.php#' tests/phase-26e-review.php
+          sed -i 's#src/Ingestion/WordPressChangeEventLedger.php#src/Complete/Ingestion.php#' tests/phase-26e-review.php
+          sed -i 's#src/Connectors/GenericPublicOwnerConnector.php#src/Complete/WordPress.php#' tests/phase-26e-adversarial.php
+          sed -i 's#src/Registry/DefaultConnectorRegistrar.php#src/Complete/WordPress.php#' tests/phase-26e-adversarial.php
 
       - name: Validate complete runtime
         if: steps.payload.outputs.present == 'true'
