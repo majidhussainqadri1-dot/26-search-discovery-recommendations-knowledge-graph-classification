@@ -1,4 +1,4 @@
-name: File 26 Foundation CI
+name: File 26 Complete Runtime CI
 
 on:
   push:
@@ -8,98 +8,11 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-phase26e-payload:
-    if: github.event_name == 'pull_request'
-    name: Apply verified Phase 26E payload
-    runs-on: ubuntu-latest
-    concurrency:
-      group: file26-phase26e-payload
-      cancel-in-progress: false
-    steps:
-      - name: Checkout exact PR head branch
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Detect transfer payload
-        id: payload
-        run: |
-          if test -f tools/phase26e-payload.part00a; then
-            echo 'present=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'present=false' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up PHP
-        if: steps.payload.outputs.present == 'true'
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          coverage: none
-          tools: composer:v2
-
-      - name: Verify and extract immutable payload
-        if: steps.payload.outputs.present == 'true'
-        run: |
-          cat \
-            tools/phase26e-payload.part00a \
-            tools/phase26e-payload.part00b \
-            tools/phase26e-payload.part00c \
-            tools/phase26e-payload.part01 \
-            tools/phase26e-payload.part02a \
-            tools/phase26e-payload.part02b \
-            tools/phase26e-payload.part02c \
-            tools/phase26e-payload.part03a \
-            tools/phase26e-payload.part03b \
-            tools/phase26e-payload.part03c \
-            > /tmp/phase26e-payload.b64
-          echo '3f8a43e00619e887eaf411fdcb9dcd7d35f202b891baf532231d3454a3ae35ef  /tmp/phase26e-payload.b64' | sha256sum --check --strict
-          base64 --decode /tmp/phase26e-payload.b64 | tar --extract --gzip --file -
-          sed -i 's#src/Api/PublicApiController.php#src/Complete/WordPress.php#' tests/phase-26e-review.php
-          sed -i 's#src/Ingestion/WordPressChangeEventLedger.php#src/Complete/Ingestion.php#' tests/phase-26e-review.php
-          sed -i 's#src/Connectors/GenericPublicOwnerConnector.php#src/Complete/WordPress.php#' tests/phase-26e-adversarial.php
-          sed -i 's#src/Registry/DefaultConnectorRegistrar.php#src/Complete/WordPress.php#' tests/phase-26e-adversarial.php
-
-      - name: Validate complete runtime
-        if: steps.payload.outputs.present == 'true'
-        run: |
-          composer validate --strict
-          composer lint
-          composer test
-
-      - name: Verify deterministic packaging
-        if: steps.payload.outputs.present == 'true'
-        run: |
-          rm -rf /tmp/package-a /tmp/package-b
-          python3 tools/build-package.py --output-dir /tmp/package-a
-          python3 tools/build-package.py --output-dir /tmp/package-b
-          diff -u /tmp/package-a/CHECKSUMS.sha256 /tmp/package-b/CHECKSUMS.sha256
-          cmp /tmp/package-a/sabri-search-discovery-1.0.0.zip /tmp/package-b/sabri-search-discovery-1.0.0.zip
-          cmp /tmp/package-a/sabri-search-discovery-1.0.0-source.zip /tmp/package-b/sabri-search-discovery-1.0.0-source.zip
-
-      - name: Remove transfer-only machinery
-        if: steps.payload.outputs.present == 'true'
-        run: |
-          rm -f tools/phase26e-payload.part*
-          rm -f .github/workflows/apply-phase26e.yml
-          git show 809121437821633bec146bcf401c74e0966bd318:.github/workflows/ci.yml > .github/workflows/ci.yml
-
-      - name: Commit verified complete runtime
-        if: steps.payload.outputs.present == 'true'
-        run: |
-          git config user.name 'sabri-file26-ci'
-          git config user.email 'actions@users.noreply.github.com'
-          git add --all
-          git diff --cached --check
-          git commit -m 'Complete File 26 runtime with two review and correction rounds'
-          git push origin HEAD:${{ github.head_ref }}
-
   contract-tests:
-    name: PHP ${{ matrix.php }} contract tests
+    name: PHP ${{ matrix.php }} complete tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -107,7 +20,7 @@ jobs:
         php: ['8.1', '8.3']
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source
         uses: actions/checkout@v6
 
       - name: Set up PHP
@@ -120,14 +33,51 @@ jobs:
       - name: Validate Composer metadata
         run: composer validate --strict
 
-      - name: Lint PHP
+      - name: Lint every PHP file
         run: composer lint
 
-      - name: Run contract and persistence tests
+      - name: Run phases 26A-26E and both review suites
         run: composer test
 
-      - name: Validate JSON fixtures
+      - name: Validate JSON contracts and fixtures
         run: |
           php -r 'json_decode(file_get_contents("config/connector-manifest.example.json"), true, 512, JSON_THROW_ON_ERROR);'
           php -r 'json_decode(file_get_contents("docs/contracts/connector-manifest.schema.json"), true, 512, JSON_THROW_ON_ERROR);'
           php -r 'json_decode(file_get_contents("tests/fixtures/golden-queries.json"), true, 512, JSON_THROW_ON_ERROR);'
+
+      - name: Reject transfer payloads and unresolved markers
+        run: |
+          ! find tools -maxdepth 1 -type f -name 'phase26e-payload.part*' -print -quit | grep -q .
+          ! grep -RInE 'TODO|FIXME|HACK|temporary payload|apply-phase26e' --exclude-dir=.git --exclude='*.md' .
+
+  deterministic-package:
+    name: Deterministic package and source parity
+    runs-on: ubuntu-latest
+    needs: contract-tests
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v6
+
+      - name: Build package twice
+        run: |
+          rm -rf /tmp/file26-package-a /tmp/file26-package-b
+          python3 tools/build-package.py --output-dir /tmp/file26-package-a
+          python3 tools/build-package.py --output-dir /tmp/file26-package-b
+
+      - name: Verify byte-for-byte determinism
+        run: |
+          diff -u /tmp/file26-package-a/CHECKSUMS.sha256 /tmp/file26-package-b/CHECKSUMS.sha256
+          cmp /tmp/file26-package-a/sabri-search-discovery-1.0.0.zip /tmp/file26-package-b/sabri-search-discovery-1.0.0.zip
+          cmp /tmp/file26-package-a/sabri-search-discovery-1.0.0-source.zip /tmp/file26-package-b/sabri-search-discovery-1.0.0-source.zip
+          cmp /tmp/file26-package-a/SBOM.spdx.json /tmp/file26-package-b/SBOM.spdx.json
+          unzip -t /tmp/file26-package-a/sabri-search-discovery-1.0.0.zip
+          unzip -l /tmp/file26-package-a/sabri-search-discovery-1.0.0.zip | grep 'sabri-search-discovery/sabri-search-discovery.php'
+
+      - name: Upload immutable candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-26-1.0.0-candidate
+          path: /tmp/file26-package-a/*
+          if-no-files-found: error
+          retention-days: 30
