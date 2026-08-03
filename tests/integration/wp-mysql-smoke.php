@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 use Sabri\File26\Contracts\ConnectorBatch;
 use Sabri\File26\Domain\SearchDocument;
 use Sabri\File26\Domain\VisibilityEnvelope;
