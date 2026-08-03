@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Search, Discovery and Knowledge Graph
  * Plugin URI:  https://sabrihomeopathy.com/
  * Description: Canonical connector, indexing, discovery, recommendation, taxonomy, classification and knowledge-graph foundation for the Sabri Social Homeopathy Platform.
- * Version:     0.2.0
+ * Version:     0.3.0
  * Requires at least: 6.0
  * Requires PHP: 8.1
  * Author:      Dr. Allamah Majid Hussain Sabri
@@ -16,7 +16,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-define('SABRI_FILE26_VERSION', '0.2.0');
+define('SABRI_FILE26_VERSION', '0.3.0');
 define('SABRI_FILE26_PLUGIN_FILE', __FILE__);
 define('SABRI_FILE26_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SABRI_FILE26_REST_NAMESPACE', 'sabri-search/v1');
