@@ -28,7 +28,7 @@ jobs:
       - name: Detect transfer payload
         id: payload
         run: |
-          if test -f tools/phase26e-payload.part00; then
+          if test -f tools/phase26e-payload.part00a; then
             echo 'present=true' >> "$GITHUB_OUTPUT"
           else
             echo 'present=false' >> "$GITHUB_OUTPUT"
@@ -46,7 +46,9 @@ jobs:
         if: steps.payload.outputs.present == 'true'
         run: |
           cat \
-            tools/phase26e-payload.part00 \
+            tools/phase26e-payload.part00a \
+            tools/phase26e-payload.part00b \
+            tools/phase26e-payload.part00c \
             tools/phase26e-payload.part01 \
             tools/phase26e-payload.part02a \
             tools/phase26e-payload.part02b \
@@ -80,7 +82,7 @@ jobs:
         run: |
           rm -f tools/phase26e-payload.part*
           rm -f .github/workflows/apply-phase26e.yml
-          git show HEAD^:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git show 809121437821633bec146bcf401c74e0966bd318:.github/workflows/ci.yml > .github/workflows/ci.yml
 
       - name: Commit verified complete runtime
         if: steps.payload.outputs.present == 'true'
