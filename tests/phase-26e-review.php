@@ -14,6 +14,8 @@ use Sabri\File26\Governance\WordPressTelemetryStore;
 use Sabri\File26\Ingestion\WordPressChangeEventLedger;
 use Sabri\File26\Ingestion\WordPressPurgeLedger;
 use Sabri\File26\KnowledgeGraph\WordPressGraphStore;
+use Sabri\File26\Ranking\RankedResult;
+use Sabri\File26\Recommendations\RecommendationResult;
 use Sabri\File26\Storage\SchemaManager;
 use Sabri\File26\Taxonomy\WordPressTaxonomyStore;
 
@@ -71,8 +73,14 @@ review_assert(str_contains($publicSource, 'Personalized recommendations require 
 review_assert(! str_contains($publicSource, "get_param('minor')"), 'Public API must not trust a request-supplied minor flag.');
 review_assert(str_contains($publicSource, 'query string is required for facets'), 'Facet endpoint must require a query snapshot.');
 review_assert(str_contains($publicSource, 'eligibleDocuments') || str_contains($publicSource, 'search($query'), 'Facet endpoint must use an eligibility-aware query path.');
-review_assert(str_contains($publicSource, 'click_visibility_recheck_required'), 'Public results must preserve click-time owner revalidation.');
 review_assert(str_contains($publicSource, 'clinical_message_payment_signals_used'), 'Recommendation response must declare prohibited signals unused.');
+
+$rankingSource = (string) file_get_contents((new ReflectionClass(RankedResult::class))->getFileName());
+$recommendationSource = (string) file_get_contents((new ReflectionClass(RecommendationResult::class))->getFileName());
+$searchPageSource = (string) file_get_contents(__DIR__ . '/../src/Runtime/ApplicationSearch.php');
+review_assert(str_contains($rankingSource, 'click_visibility_recheck_required'), 'Ranked-result serialization must require click-time owner revalidation.');
+review_assert(str_contains($recommendationSource, 'click_visibility_recheck_required'), 'Recommendation serialization must require click-time owner revalidation.');
+review_assert(str_contains($searchPageSource, 'RankedResult $result') && str_contains($searchPageSource, '$result->toArray()'), 'Search page must serialize canonical RankedResult values without stripping revalidation metadata.');
 
 $ingestionSource = (string) file_get_contents((new ReflectionClass(WordPressChangeEventLedger::class))->getFileName());
 review_assert(str_contains($ingestionSource, 'FOR UPDATE'), 'Change-event sequence and claims must use row locks.');
