@@ -1,0 +1,46 @@
+name: File 26 Foundation CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    name: PHP ${{ matrix.php }} contract tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.3']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate Composer metadata
+        run: composer validate --strict
+
+      - name: Lint PHP
+        run: composer lint
+
+      - name: Run foundation tests
+        run: composer test
+
+      - name: Validate JSON fixtures
+        run: |
+          php -r 'json_decode(file_get_contents("config/connector-manifest.example.json"), true, 512, JSON_THROW_ON_ERROR);'
+          php -r 'json_decode(file_get_contents("docs/contracts/connector-manifest.schema.json"), true, 512, JSON_THROW_ON_ERROR);'
+          php -r 'json_decode(file_get_contents("tests/fixtures/golden-queries.json"), true, 512, JSON_THROW_ON_ERROR);'
