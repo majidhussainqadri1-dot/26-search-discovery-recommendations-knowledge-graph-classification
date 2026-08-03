@@ -35,6 +35,11 @@ final class PersistentQuery
 
         $this->assertUniqueList($domains, 20, '/^[a-z][a-z0-9._-]{1,79}$/', 'domains');
         $this->assertUniqueList($locales, 20, '/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$/', 'locales');
+
+        $normalizedLocales = array_map([$this, 'normalizeLocale'], $locales);
+        if (count($normalizedLocales) !== count(array_unique($normalizedLocales))) {
+            throw new InvariantViolation('Persistent query locales must remain unique after normalization.');
+        }
     }
 
     public function text(): string
@@ -85,8 +90,8 @@ final class PersistentQuery
             return false;
         }
 
-        $locale = str_replace('_', '-', (string) $data['locale']);
-        $allowedLocales = array_map(static fn (string $item): string => str_replace('_', '-', $item), $this->locales);
+        $locale = $this->normalizeLocale((string) $data['locale']);
+        $allowedLocales = array_map([$this, 'normalizeLocale'], $this->locales);
 
         return $allowedLocales === [] || in_array($locale, $allowedLocales, true);
     }
@@ -94,7 +99,7 @@ final class PersistentQuery
     public function fingerprint(): string
     {
         $domains = $this->domains;
-        $locales = array_map(static fn (string $item): string => str_replace('_', '-', $item), $this->locales);
+        $locales = array_map([$this, 'normalizeLocale'], $this->locales);
         sort($domains);
         sort($locales);
 
@@ -118,6 +123,11 @@ final class PersistentQuery
                 throw new InvariantViolation('Persistent query ' . $label . ' contain an invalid value.');
             }
         }
+    }
+
+    private function normalizeLocale(string $locale): string
+    {
+        return strtolower(str_replace('_', '-', $locale));
     }
 
     private function normalize(string $value): string
