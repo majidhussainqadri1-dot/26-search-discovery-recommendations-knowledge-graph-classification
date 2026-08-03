@@ -108,6 +108,27 @@ final class SearchDocument
         return $this->visibility;
     }
 
+    /** @return array<string, bool|int|float|string|list<string>|null> */
+    public function fields(): array
+    {
+        return $this->fields;
+    }
+
+    public function lastSourceEventAt(): DateTimeImmutable
+    {
+        return $this->lastSourceEventAt;
+    }
+
+    public function objectVersion(): string
+    {
+        return $this->objectVersion;
+    }
+
+    public function canonicalUrl(): string
+    {
+        return $this->canonicalUrl;
+    }
+
     /** @return array<string, mixed> */
     public function toArray(): array
     {
