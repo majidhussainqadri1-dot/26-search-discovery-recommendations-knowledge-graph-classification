@@ -13,20 +13,22 @@ It does **not** become the canonical owner of posts, lessons, doctors, clinics, 
 | Stage | Status |
 |---|---|
 | Specified | Complete planning baseline |
-| Coded | Phases 26A–26C coded on the draft branch |
+| Coded | Phases 26A–26D coded on the draft branch |
 | Packaged | Not yet claimed |
 | Automated QA Green | Repository CI evidence required for each exact head |
+| WordPress/MariaDB Smoke | Manual isolated workflow added; successful execution not yet claimed |
 | Staging Accepted | Not yet claimed |
 | Live Deployed | Not claimed |
 | Operational | Not claimed |
 
-The current branch contains connector contracts, two public-only connector proofs, a deterministic query proof and a persistent **shadow-generation foundation**. It does not expose a public search endpoint and does not replace canonical owner records.
+The current branch contains connector contracts, two public-only connector proofs, persistent blue/green shadow generations, an **internal active-generation query reader**, and administrator/CLI operations controls. It does not register a public search endpoint and does not replace canonical owner records.
 
 ## Runtime identifiers
 
 - Plugin name: `Sabri Search, Discovery and Knowledge Graph`
-- Plugin version: `0.3.0`
-- Schema version: `0.3.0`
+- Plugin version: `0.4.0`
+- Schema version: `0.4.0`
+- Runtime stage: `phase-26d-query-operations`
 - Plugin slug / text domain: `sabri-search-discovery`
 - PHP namespace: `Sabri\File26`
 - REST namespace: `sabri-search/v1`
@@ -65,6 +67,21 @@ After a packaged release, any identifier rename requires approved migration and 
 - Atomic active-generation promotion with rollback-predecessor restoration.
 - Separate persistence and fresh adversarial regression suites.
 
+## Phase 26D deliverables
+
+- Internal-only persistent query service over active or cursor-bound superseded generations.
+- HMAC-signed opaque cursors tied to the normalized query, filters and generation snapshot.
+- Strict payload SHA-256 verification, canonical JSON hydration and exact ISO-8601 source times.
+- Query-time capability, entitlement, age and guardian enforcement after persistent hydration.
+- Deterministic Urdu/English ranking, domain/locale filters and bounded candidate sets.
+- Five-minute WP-Cron scheduling, bounded worker loops and real-cron WP-CLI execution.
+- Throttled administrator missed-run recovery checks and finite cron cleanup.
+- Administrator-only queue, scheduler and dead-letter diagnostics.
+- Guarded dead-letter replay with exact error confirmation and replay audit counters.
+- Read-only bounded owner-connector probes with cursor, identity and checksum validation.
+- Locked in-place schema upgrade from `0.3.0` to `0.4.0`.
+- Manual isolated WordPress/MariaDB integration workflow and smoke script.
+
 ## Blue/green safety law
 
 ```text
@@ -79,15 +96,50 @@ active generation remains readable
 
 Building, incomplete, failed, unvalidated, unexpectedly empty or excessively divergent generations cannot be promoted through the rebuild coordinator.
 
+## Internal query snapshot law
+
+```text
+fresh query -> current active generation
+continuation cursor -> signed original generation snapshot
+candidate rows -> payload hash and strict hydration
+result eligibility -> rechecked for the current audience
+ranking -> deterministic score plus canonical-key tie break
+```
+
+A generation swap changes new queries only. A valid continuation cursor remains on its original superseded generation while that snapshot is retained and readable.
+
+## Operations surfaces
+
+Administrator-only REST operations:
+
+```text
+GET  /sabri-search/v1/operations
+POST /sabri-search/v1/operations/dead-letter/replay
+POST /sabri-search/v1/operations/connectors/{connector}/probe
+```
+
+WP-CLI operations:
+
+```text
+wp sabri-file26 jobs run
+wp sabri-file26 jobs recover
+wp sabri-file26 operations status
+wp sabri-file26 dead-letter replay --job=<sha256> --error=<current-code>
+wp sabri-file26 connector probe --connector=<key>
+```
+
+No public query route is registered in Phase 26D.
+
 ## Explicit non-claims
 
 This repository does not yet claim:
 
 - approved live File 21 or File 10 owner adapters;
-- completed MySQL/MariaDB concurrency and migration acceptance on WordPress staging;
-- public autocomplete, search or persistent query-reader routes;
-- production ranking, recommendations, taxonomy or knowledge-graph traversal;
-- File 20 global-search UI integration;
+- successful execution of the manual WordPress/MariaDB workflow;
+- Hostinger-equivalent migration, concurrency, backup and rollback acceptance;
+- public autocomplete, search REST API or File 20 global-search UI integration;
+- production transliteration, advanced ranking, recommendations, taxonomy or knowledge-graph traversal;
+- measured staging leakage, deletion-lag and latency SLOs;
 - source/package parity, release ZIP, live deployment or operations.
 
 ## Local verification
@@ -98,7 +150,7 @@ composer test
 composer lint
 ```
 
-The contract and in-memory generation tests have no WordPress dependency. WordPress database behavior remains subject to isolated staging and real MySQL/MariaDB acceptance.
+The default contract, query and in-memory generation suites have no WordPress dependency. The separate `File 26 WordPress MariaDB Integration` workflow is manual and must succeed before database acceptance is claimed.
 
 ## Release law
 
