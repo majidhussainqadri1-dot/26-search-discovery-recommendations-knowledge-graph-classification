@@ -1,0 +1,82 @@
+name: File 26 WordPress MariaDB Integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-mariadb-smoke:
+    name: WordPress MariaDB smoke
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli
+          tools: composer:v2
+
+      - name: Install WP-CLI
+        run: |
+          curl --fail --location --silent --show-error \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            --output /tmp/wp-cli.phar
+          chmod +x /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+
+      - name: Install isolated WordPress
+        run: |
+          php /tmp/wp-cli.phar core download --path=/tmp/wordpress --force
+          php /tmp/wp-cli.phar config create \
+            --path=/tmp/wordpress \
+            --dbname=wordpress \
+            --dbuser=root \
+            --dbpass=root \
+            --dbhost=127.0.0.1:3306 \
+            --skip-check
+          php /tmp/wp-cli.phar config set SABRI_FILE26_INTEGRATION_TESTS true \
+            --raw --path=/tmp/wordpress
+          php /tmp/wp-cli.phar core install \
+            --path=/tmp/wordpress \
+            --url=http://localhost \
+            --title='File 26 Integration' \
+            --admin_user=admin \
+            --admin_password='integration-only-password' \
+            --admin_email=integration@example.invalid \
+            --skip-email
+
+      - name: Mount plugin source
+        run: |
+          mkdir -p /tmp/wordpress/wp-content/plugins/sabri-search-discovery
+          rsync -a \
+            --exclude='.git' \
+            --exclude='vendor' \
+            ./ /tmp/wordpress/wp-content/plugins/sabri-search-discovery/
+
+      - name: Activate plugin and run smoke
+        run: |
+          php /tmp/wp-cli.phar plugin activate sabri-search-discovery --path=/tmp/wordpress
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/wordpress/wp-content/plugins/sabri-search-discovery/tests/integration/wp-mysql-smoke.php \
+            --path=/tmp/wordpress
