@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Sabri\File26;
 
 use Sabri\File26\Registry\ConnectorRegistry;
+use Sabri\File26\Storage\SchemaManager;
 use Throwable;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
+use wpdb;
 
 final class Plugin
 {
@@ -39,18 +41,22 @@ final class Plugin
 
         $this->booted = true;
 
-        try {
-            /**
-             * Companion domain owners register versioned read/index connectors here.
-             * Registration is synchronous; an invalid contract disables File 26
-             * runtime work without taking the whole WordPress site down.
-             */
-            do_action('sabri_file26_register_connectors', $this->registry);
-            do_action('sabri_file26_connectors_registered', $this->registry);
-        } catch (Throwable $exception) {
-            unset($exception);
-            $this->registry = new ConnectorRegistry();
-            $this->bootErrorCode = 'connector-registration-failed';
+        if ((string) get_option('sabri_file26_schema_version', '') !== SchemaManager::SCHEMA_VERSION) {
+            $this->bootErrorCode = 'schema-version-mismatch';
+        } else {
+            try {
+                /**
+                 * Companion domain owners register versioned read/index connectors here.
+                 * Registration is synchronous; an invalid contract disables File 26
+                 * runtime work without taking the whole WordPress site down.
+                 */
+                do_action('sabri_file26_register_connectors', $this->registry);
+                do_action('sabri_file26_connectors_registered', $this->registry);
+            } catch (Throwable $exception) {
+                unset($exception);
+                $this->registry = new ConnectorRegistry();
+                $this->bootErrorCode = 'connector-registration-failed';
+            }
         }
 
         add_action('rest_api_init', [$this, 'registerRestRoutes']);
@@ -102,8 +108,9 @@ final class Plugin
             [
                 'module' => 'file-26',
                 'version' => SABRI_FILE26_VERSION,
-                'stage' => 'phase-26b-shadow-index',
-                'status' => $this->isOperationallyAvailable() ? 'shadow-only' : 'degraded',
+                'schema_version' => SchemaManager::SCHEMA_VERSION,
+                'stage' => 'phase-26c-persistent-generations',
+                'status' => $this->isOperationallyAvailable() ? 'persistent-shadow-only' : 'degraded',
                 'error_code' => $this->bootErrorCode,
                 'connectors' => $this->registry->publicSummary(),
             ],
@@ -136,15 +143,33 @@ final class Plugin
             );
         }
 
-        update_option(
-            'sabri_file26_runtime_state',
-            [
-                'version' => SABRI_FILE26_VERSION,
-                'stage' => 'phase-26b-shadow-index',
-                'activated_at' => gmdate('c'),
-            ],
-            false
-        );
+        try {
+            global $wpdb;
+            if (! $wpdb instanceof wpdb) {
+                throw new \RuntimeException('WordPress database access is unavailable.');
+            }
+
+            SchemaManager::install($wpdb);
+
+            update_option(
+                'sabri_file26_runtime_state',
+                [
+                    'version' => SABRI_FILE26_VERSION,
+                    'schema_version' => SchemaManager::SCHEMA_VERSION,
+                    'stage' => 'phase-26c-persistent-generations',
+                    'activated_at' => gmdate('c'),
+                ],
+                false
+            );
+        } catch (Throwable $exception) {
+            unset($exception);
+            deactivate_plugins(plugin_basename(SABRI_FILE26_PLUGIN_FILE));
+            wp_die(
+                esc_html__('File 26 could not install its persistent shadow schema safely. No public search feature was enabled.', 'sabri-search-discovery'),
+                esc_html__('Activation blocked', 'sabri-search-discovery'),
+                ['back_link' => true]
+            );
+        }
     }
 
     public static function deactivate(): void
