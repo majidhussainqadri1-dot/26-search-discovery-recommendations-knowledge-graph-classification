@@ -50,6 +50,10 @@ final class ConnectorBatch
             throw new InvariantViolation('A continuing batch requires a non-empty next cursor.');
         }
 
+        if (! $hasMore && $nextCursor !== null) {
+            throw new InvariantViolation('A terminal batch must not expose a next cursor.');
+        }
+
         if ($nextCursor !== null && strlen($nextCursor) > 512) {
             throw new InvariantViolation('Connector batch cursor must be bounded.');
         }
