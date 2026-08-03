@@ -102,8 +102,8 @@ final class Plugin
             [
                 'module' => 'file-26',
                 'version' => SABRI_FILE26_VERSION,
-                'stage' => 'phase-26a-foundation',
-                'status' => $this->isOperationallyAvailable() ? 'foundation-only' : 'degraded',
+                'stage' => 'phase-26b-shadow-index',
+                'status' => $this->isOperationallyAvailable() ? 'shadow-only' : 'degraded',
                 'error_code' => $this->bootErrorCode,
                 'connectors' => $this->registry->publicSummary(),
             ],
@@ -140,7 +140,7 @@ final class Plugin
             'sabri_file26_runtime_state',
             [
                 'version' => SABRI_FILE26_VERSION,
-                'stage' => 'phase-26a-foundation',
+                'stage' => 'phase-26b-shadow-index',
                 'activated_at' => gmdate('c'),
             ],
             false
