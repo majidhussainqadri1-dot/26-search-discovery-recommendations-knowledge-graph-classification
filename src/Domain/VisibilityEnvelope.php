@@ -18,6 +18,10 @@ final class VisibilityEnvelope
         private readonly ?int $minimumAge = null,
         private readonly bool $guardianConsentRequired = false
     ) {
+        if (count($requiredCapabilities) !== count(array_unique($requiredCapabilities))) {
+            throw new InvariantViolation('Capabilities must be unique.');
+        }
+
         foreach ($requiredCapabilities as $capability) {
             if (! is_string($capability) || ! preg_match('/^[a-z][a-z0-9_]{2,99}$/', $capability)) {
                 throw new InvariantViolation('Capabilities must use stable lowercase machine keys.');
@@ -50,6 +54,21 @@ final class VisibilityEnvelope
     public function requiredCapabilities(): array
     {
         return $this->requiredCapabilities;
+    }
+
+    public function requiredEntitlement(): ?string
+    {
+        return $this->requiredEntitlement;
+    }
+
+    public function minimumAge(): ?int
+    {
+        return $this->minimumAge;
+    }
+
+    public function guardianConsentRequired(): bool
+    {
+        return $this->guardianConsentRequired;
     }
 
     /** @return array<string, bool|int|string|list<string>|null> */
