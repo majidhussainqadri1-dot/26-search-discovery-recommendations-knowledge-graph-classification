@@ -10,6 +10,7 @@ use Sabri\File26\Operations\WordPressWorkerScheduler;
 use Sabri\File26\Registry\ConnectorRegistry;
 use Sabri\File26\Search\PersistentQueryService;
 use Sabri\File26\Storage\SchemaManager;
+use Sabri\File26\Storage\SchemaUpgradeCoordinator;
 use Sabri\File26\Support\InvariantViolation;
 use Throwable;
 use WP_Error;
@@ -47,9 +48,18 @@ final class Plugin
 
         $this->booted = true;
 
-        if ((string) get_option('sabri_file26_schema_version', '') !== SchemaManager::SCHEMA_VERSION) {
-            $this->bootErrorCode = 'schema-version-mismatch';
-        } else {
+        try {
+            global $wpdb;
+            if (! $wpdb instanceof wpdb) {
+                throw new InvariantViolation('WordPress database access is unavailable.');
+            }
+            (new SchemaUpgradeCoordinator($wpdb))->ensureCurrent();
+        } catch (Throwable $exception) {
+            unset($exception);
+            $this->bootErrorCode = 'schema-upgrade-failed';
+        }
+
+        if ($this->bootErrorCode === null) {
             try {
                 do_action('sabri_file26_register_connectors', $this->registry);
                 do_action('sabri_file26_connectors_registered', $this->registry);
@@ -58,30 +68,30 @@ final class Plugin
                 $this->registry = new ConnectorRegistry();
                 $this->bootErrorCode = 'connector-registration-failed';
             }
+        }
 
-            if ($this->bootErrorCode === null) {
-                try {
-                    global $wpdb;
-                    if (! $wpdb instanceof wpdb) {
-                        throw new InvariantViolation('WordPress database access is unavailable.');
-                    }
-
-                    $secret = function_exists('wp_salt')
-                        ? wp_salt('auth')
-                        : (defined('AUTH_SALT') ? (string) AUTH_SALT : '');
-                    if (strlen($secret) < 32) {
-                        throw new InvariantViolation('A sufficiently strong WordPress authentication salt is required.');
-                    }
-
-                    $this->runtime = new WordPressRuntime($wpdb, $this->registry, $secret);
-                    $this->runtime->register();
-                    (new WordPressCliAdapter($this->runtime))->register();
-                    do_action('sabri_file26_runtime_ready', $this);
-                } catch (Throwable $exception) {
-                    unset($exception);
-                    $this->runtime = null;
-                    $this->bootErrorCode = 'runtime-initialization-failed';
+        if ($this->bootErrorCode === null) {
+            try {
+                global $wpdb;
+                if (! $wpdb instanceof wpdb) {
+                    throw new InvariantViolation('WordPress database access is unavailable.');
                 }
+
+                $secret = function_exists('wp_salt')
+                    ? wp_salt('auth')
+                    : (defined('AUTH_SALT') ? (string) AUTH_SALT : '');
+                if (strlen($secret) < 32) {
+                    throw new InvariantViolation('A sufficiently strong WordPress authentication salt is required.');
+                }
+
+                $this->runtime = new WordPressRuntime($wpdb, $this->registry, $secret);
+                $this->runtime->register();
+                (new WordPressCliAdapter($this->runtime))->register();
+                do_action('sabri_file26_runtime_ready', $this);
+            } catch (Throwable $exception) {
+                unset($exception);
+                $this->runtime = null;
+                $this->bootErrorCode = 'runtime-initialization-failed';
             }
         }
 
