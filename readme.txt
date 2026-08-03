@@ -20,7 +20,8 @@ Version 0.4.0 adds an internal-only persistent active-generation query reader, s
 * Added administrator diagnostics and guarded, auditable dead-letter replay.
 * Added read-only bounded owner-connector probes and schema 0.3.0 to 0.4.0 upgrade locking.
 * Added Phase 26D query, operations and fresh adversarial suites.
-* Added a manual isolated WordPress/MariaDB integration workflow.
+* Added a pull-request-gated isolated WordPress 7.0.2/MariaDB 11.4 smoke; 21 database assertions passed.
+* Corrected nullable persistent job cursors discovered by the real database smoke.
 
 = 0.3.0 =
 * Added blue/green persistent shadow generations and active alias state.
