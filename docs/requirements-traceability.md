@@ -34,27 +34,52 @@
 | F26-B-011 Owner/shadow parity proof | `ShadowIndex::reconcileExpectedKeys()` | missing/orphaned and duplicate-key tests |
 | F26-B-012 Truthful runtime status | plugin `0.2.0`, README and health stage | repository review; WordPress staging pending |
 
-## Review round 1 corrections
+## Phase 26C — Persistent generations and rebuild jobs
 
-- Rejected scalar coercion of owner IDs, versions, locale, timestamps and tombstone fields.
-- Required an unambiguous cursor state: continuing pages have a cursor; terminal pages do not.
-- Added owner page-size enforcement and connector-specific public field allowlists.
-- Added deletion chronology and stale-document resurrection protection.
+| Requirement | Implementation | Evidence |
+|---|---|---|
+| F26-C-001 Backend-neutral persistence contract | `ShadowStoreInterface` | interface/source review and lint |
+| F26-C-002 Persistent derivative schema | `SchemaManager` and `wp_s26_*` tables | schema source review; real `dbDelta` staging pending |
+| F26-C-003 Candidate-generation isolation | `InMemoryShadowStore`, `WordPressShadowStore` | active-alias failure and rollback tests |
+| F26-C-004 Bounded rebuild/delta orchestration | `RebuildCoordinator`, `RebuildWorker` | two-page bounded rebuild tests |
+| F26-C-005 Durable cursor checkpoints | store checkpoint contracts and tables | continuation, terminal, stale and regression tests |
+| F26-C-006 Idempotent job identity | `RebuildJob`, queue implementations | duplicate enqueue and stale-job tests |
+| F26-C-007 Bounded retries and dead letter | `RetryPolicy`, job queues, worker | delayed retry, exhaustion and active-alias safety tests |
+| F26-C-008 Lease and concurrency boundary | in-memory/WordPress lease locks | contention, expiry, takeover and stale-token tests |
+| F26-C-009 Tombstone/document chronology | generation stores | stale write and cross-owner tests |
+| F26-C-010 Deterministic validation checksum | sorted canonical key + payload hashes | ingestion-order checksum regression |
+| F26-C-011 Count/divergence promotion gate | `GenerationValidationPolicy` + coordinator | empty, invalid policy and explicit-zero tests |
+| F26-C-012 Atomic alias promotion and rollback | store lifecycle + predecessor record | replacement, supersession and rollback tests |
+| F26-C-013 Fail-closed schema/runtime health | activation schema verification and health stage | source/lint; WordPress staging pending |
+| F26-C-014 Truthful runtime identity | plugin/schema `0.3.0` and Phase 26C documentation | repository review and per-head CI |
 
-## Fresh adversarial review coverage
+## Phase 26C review round 1 corrections
 
-- external and lookalike canonical-host destinations;
-- unexpected patient/sensitive fields;
-- anonymous restricted-result leakage;
-- missing entitlement, age and guardian assertions;
-- duplicate reconciliation identities;
-- provider payload expansion and over-limit pages.
+- Required complete connector checkpoints before validation.
+- Prevented generation reuse, stale checkpoint overwrite and completed-checkpoint regression.
+- Isolated candidate generations from the active alias during retries and dead-letter failure.
+- Added deterministic checksums, persistent counts and rollback predecessor state.
+- Added activation-time schema verification rather than trusting `dbDelta` invocation alone.
+- Added explicit minimum count, expected count/divergence and tombstone-ceiling policy before promotion.
+
+## Phase 26C fresh adversarial review coverage
+
+- unexpectedly empty generation promotion;
+- malformed validation thresholds and retry policies;
+- connector preflight failure and partial-generation prevention;
+- missing or stale checkpoints before provider execution;
+- duplicate job enqueue and competing worker leases;
+- lease expiry/takeover and stale-token release;
+- cross-owner canonical writes;
+- retry exhaustion/dead-letter with active-alias preservation;
+- checksum determinism under reversed ingestion order.
 
 ## Pending acceptance evidence
 
-- WordPress 6.x/7.x activation and deactivation on isolated Hostinger-equivalent staging.
+- WordPress 6.x/7.x activation, upgrade, reactivation and deactivation on isolated Hostinger-equivalent staging.
+- Real MySQL/MariaDB `dbDelta`, transaction, lock-expiry, concurrent-worker and rollback tests.
 - Approved real File 21 and File 10 provider adapters and jointly frozen owner contracts.
-- Persistent shadow storage design, background jobs, rebuild/checkpoint and rollback implementation.
-- Staging-data parity, leakage, deletion-propagation and measured SLO evidence.
-- Public-query API, File 20 surface and File 25 result-card work remain outside this batch.
-- Founder approval of Phase 26B exit and the next implementation gate.
+- WP-Cron and real-cron scheduling, missed-cron recovery and operator dead-letter replay.
+- Persistent query reader, staging-data parity, leakage and deletion-propagation SLO evidence.
+- Public-query API, File 20 search surface and File 25 result-card work remain outside this batch.
+- Source/package parity, installable ZIP and Founder staging acceptance remain pending.
