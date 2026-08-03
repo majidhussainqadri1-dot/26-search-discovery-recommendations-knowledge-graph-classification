@@ -92,9 +92,15 @@ $expectInvariant(
     'Malformed opaque cursor structure must fail closed.'
 );
 
-$assert(SchemaUpgradeCoordinator::supportsUpgradeFrom('0.3.0'), 'The immediate 0.3.0 to 0.4.0 upgrade path must be supported.');
-$assert(! SchemaUpgradeCoordinator::supportsUpgradeFrom('0.2.0'), 'Skipping the 0.3.0 schema must require an explicit migration path.');
+foreach (['0.1.0', '0.2.0', '0.3.0', '0.4.0'] as $supportedVersion) {
+    $assert(
+        SchemaUpgradeCoordinator::supportsUpgradeFrom($supportedVersion),
+        'Approved additive schema predecessor must support a locked upgrade to 1.0.0: ' . $supportedVersion
+    );
+}
 $assert(! SchemaUpgradeCoordinator::supportsUpgradeFrom(''), 'Unknown schema versions must fail closed.');
+$assert(! SchemaUpgradeCoordinator::supportsUpgradeFrom('0.5.0'), 'Unapproved future schema versions must fail closed.');
+$assert(! SchemaUpgradeCoordinator::supportsUpgradeFrom('1.0.1'), 'Downgrade-like version drift must fail closed.');
 
 $cliSource = (string) file_get_contents(dirname(__DIR__) . '/src/Operations/WordPressCliAdapter.php');
 $assert(
