@@ -1,6 +1,6 @@
 {
   "name": "sabri-platform/file-26-search-discovery",
-  "description": "Search, discovery, recommendations, knowledge graph and content classification foundation for the Sabri Social Homeopathy Platform.",
+  "description": "Search, discovery, recommendations, knowledge graph and content classification runtime for the Sabri Social Homeopathy Platform.",
   "type": "wordpress-plugin",
   "license": "proprietary",
   "require": {
@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "test": "php tests/run.php && php tests/phase-26b-review.php && php tests/phase-26c-persistence.php && php tests/phase-26c-adversarial.php && php tests/phase-26d-query.php && php tests/phase-26d-operations.php && php tests/phase-26d-adversarial.php",
+    "test": "php tests/run.php && php tests/phase-26b-review.php && php tests/phase-26c-persistence.php && php tests/phase-26c-adversarial.php && php tests/phase-26d-query.php && php tests/phase-26d-operations.php && php tests/phase-26d-adversarial.php && php tests/phase-26e-complete.php && php tests/phase-26e-review.php && php tests/phase-26e-adversarial.php",
     "lint": "find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l"
   },
   "config": {
