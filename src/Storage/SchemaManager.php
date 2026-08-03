@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sabri\File26\Storage;
 
+use Sabri\File26\Support\InvariantViolation;
 use wpdb;
 
 final class SchemaManager
@@ -14,6 +15,10 @@ final class SchemaManager
     {
         if (! function_exists('dbDelta') && defined('ABSPATH')) {
             require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        }
+
+        if (! function_exists('dbDelta')) {
+            throw new InvariantViolation('WordPress database migration support is unavailable.');
         }
 
         $charset = $db->get_charset_collate();
@@ -97,6 +102,14 @@ final class SchemaManager
 
         foreach ($sql as $statement) {
             dbDelta($statement);
+        }
+
+        foreach (['generations', 'aliases', 'documents', 'tombstones', 'checkpoints', 'jobs', 'locks'] as $suffix) {
+            $expectedTable = $prefix . $suffix;
+            $actualTable = $db->get_var($db->prepare('SHOW TABLES LIKE %s', $db->esc_like($expectedTable)));
+            if ($actualTable !== $expectedTable) {
+                throw new InvariantViolation('File 26 persistent schema installation is incomplete.');
+            }
         }
 
         update_option('sabri_file26_schema_version', self::SCHEMA_VERSION, false);
