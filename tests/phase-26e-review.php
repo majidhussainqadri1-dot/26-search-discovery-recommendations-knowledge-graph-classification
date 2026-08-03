@@ -29,28 +29,29 @@ function review_assert(bool $condition, string $message): void
     }
 }
 
-$schemaSource = (string) file_get_contents(__DIR__ . '/../src/Storage/SchemaManager.php');
+$schemaSuffixes = SchemaManager::tableSuffixes();
 $stores = [
-    WordPressChangeEventLedger::class => ['s26_change_events', 's26_owner_sequences'],
-    WordPressPurgeLedger::class => ['s26_purge_ledger'],
-    WordPressTaxonomyStore::class => ['s26_taxonomy_terms'],
-    WordPressClassificationStore::class => ['s26_classifications'],
-    WordPressGraphStore::class => ['s26_graph_edges'],
-    WordPressPolicyStore::class => ['s26_policies'],
-    WordPressEvaluationStore::class => ['s26_evaluation_sets'],
-    WordPressTelemetryStore::class => ['s26_telemetry_daily'],
-    WordPressAuditLog::class => ['s26_audit_log'],
+    WordPressChangeEventLedger::class => ['change_events', 'owner_sequences'],
+    WordPressPurgeLedger::class => ['purge_ledger'],
+    WordPressTaxonomyStore::class => ['taxonomy_terms'],
+    WordPressClassificationStore::class => ['classifications'],
+    WordPressGraphStore::class => ['graph_edges'],
+    WordPressPolicyStore::class => ['policies'],
+    WordPressEvaluationStore::class => ['evaluation_sets'],
+    WordPressTelemetryStore::class => ['telemetry_daily'],
+    WordPressAuditLog::class => ['audit_log'],
 ];
-foreach ($stores as $class => $tables) {
+foreach ($stores as $class => $suffixes) {
     $reflection = new ReflectionClass($class);
     $source = (string) file_get_contents((string) $reflection->getFileName());
-    foreach ($tables as $table) {
-        review_assert(str_contains($schemaSource, $table), 'Schema must define table ' . $table . ' used by ' . $class . '.');
-        review_assert(str_contains($source, $table), $class . ' must reference its canonical table ' . $table . '.');
+    foreach ($suffixes as $suffix) {
+        review_assert(in_array($suffix, $schemaSuffixes, true), 'Schema registry must own table suffix ' . $suffix . ' used by ' . $class . '.');
+        review_assert(str_contains($source, 's26_' . $suffix), $class . ' must reference its canonical table s26_' . $suffix . '.');
     }
 }
 review_assert(SchemaManager::SCHEMA_VERSION === '1.0.0', 'Complete schema version must be 1.0.0.');
-review_assert(count(SchemaManager::tableSuffixes()) === 19, 'Complete schema must enumerate nineteen owner-scoped derivative tables.');
+review_assert(count($schemaSuffixes) === 19, 'Complete schema must enumerate nineteen owner-scoped derivative tables.');
+review_assert(count($schemaSuffixes) === count(array_unique($schemaSuffixes, SORT_STRING)), 'Schema table registry must not contain duplicate suffixes.');
 
 $tokenService = new ExportTokenService(str_repeat('x', 32));
 $token = $tokenService->issue(9, ['metrics.read'], new DateTimeImmutable('+5 minutes'));
