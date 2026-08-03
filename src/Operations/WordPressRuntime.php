@@ -25,6 +25,8 @@ final class WordPressRuntime
     private readonly WordPressDeadLetterOperations $deadLetters;
     private readonly PersistentQueryService $queryService;
     private readonly OwnerConnectorProbe $connectorProbe;
+    private readonly WordPressActiveGenerationRepository $activeRepository;
+    private readonly QueryCursorCodec $cursorCodec;
 
     public function __construct(
         wpdb $db,
@@ -37,10 +39,9 @@ final class WordPressRuntime
         $worker = new RebuildWorker($registry, $this->store, $this->queue, $locks);
         $this->scheduler = new WordPressWorkerScheduler(new WorkerLoop($worker), $this->queue);
         $this->deadLetters = new WordPressDeadLetterOperations($db);
-        $this->queryService = new PersistentQueryService(
-            new WordPressActiveGenerationRepository($db),
-            new QueryCursorCodec($cursorSecret)
-        );
+        $this->activeRepository = new WordPressActiveGenerationRepository($db);
+        $this->cursorCodec = new QueryCursorCodec($cursorSecret);
+        $this->queryService = new PersistentQueryService($this->activeRepository, $this->cursorCodec);
         $this->connectorProbe = new OwnerConnectorProbe();
     }
 
@@ -52,6 +53,16 @@ final class WordPressRuntime
     public function queryService(): PersistentQueryService
     {
         return $this->queryService;
+    }
+
+    public function activeRepository(): WordPressActiveGenerationRepository
+    {
+        return $this->activeRepository;
+    }
+
+    public function cursorCodec(): QueryCursorCodec
+    {
+        return $this->cursorCodec;
     }
 
     /** @return array<string,mixed> */
