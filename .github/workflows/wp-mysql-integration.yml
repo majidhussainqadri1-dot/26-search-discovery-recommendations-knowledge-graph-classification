@@ -2,11 +2,6 @@ name: File 26 WordPress MariaDB Integration
 
 on:
   pull_request:
-    paths:
-      - 'src/**'
-      - 'sabri-search-discovery.php'
-      - 'tests/integration/**'
-      - '.github/workflows/wp-mysql-integration.yml'
   workflow_dispatch:
 
 permissions:
