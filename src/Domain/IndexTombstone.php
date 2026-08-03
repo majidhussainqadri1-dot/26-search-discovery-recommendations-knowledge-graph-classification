@@ -51,6 +51,21 @@ final class IndexTombstone
         return $this->canonicalDomain . ':' . $this->objectId;
     }
 
+    public function receivedAt(): DateTimeImmutable
+    {
+        return $this->receivedAt;
+    }
+
+    public function reason(): string
+    {
+        return $this->reason;
+    }
+
+    public function lastObjectVersion(): string
+    {
+        return $this->lastObjectVersion;
+    }
+
     /** @return array<string, string|null> */
     public function toArray(): array
     {
