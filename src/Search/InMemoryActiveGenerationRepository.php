@@ -69,7 +69,10 @@ final class InMemoryActiveGenerationRepository implements ActiveGenerationReposi
 
         $results = [];
         foreach ($this->generations[$generationId]['documents'] as $document) {
-            $haystack = $this->normalize(json_encode($document->fields(), JSON_THROW_ON_ERROR));
+            $haystack = $this->normalize(json_encode(
+                $document->fields(),
+                JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+            ));
             foreach ($terms as $term) {
                 if (str_contains($haystack, $this->normalize($term))) {
                     $results[] = $document;
