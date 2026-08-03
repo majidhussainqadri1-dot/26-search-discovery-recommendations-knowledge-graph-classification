@@ -47,13 +47,22 @@ foreach ($stores as $class => $suffixes) {
     $reflection = new ReflectionClass($class);
     $source = (string) file_get_contents((string) $reflection->getFileName());
     foreach ($suffixes as $suffix) {
-        review_assert(in_array($suffix, $schemaSuffixes, true), 'Schema registry must own table suffix ' . $suffix . ' used by ' . $class . '.');
-        review_assert(str_contains($source, 's26_' . $suffix), $class . ' must reference its canonical table s26_' . $suffix . '.');
+        review_assert(
+            in_array($suffix, $schemaSuffixes, true),
+            'Schema registry must own table suffix ' . $suffix . ' used by ' . $class . '.'
+        );
+        review_assert(
+            str_contains($source, 's26_' . $suffix),
+            $class . ' must reference its canonical table s26_' . $suffix . '.'
+        );
     }
 }
 review_assert(SchemaManager::SCHEMA_VERSION === '1.0.0', 'Complete schema version must be 1.0.0.');
 review_assert(count($schemaSuffixes) === 19, 'Complete schema must enumerate nineteen owner-scoped derivative tables.');
-review_assert(count($schemaSuffixes) === count(array_unique($schemaSuffixes, SORT_STRING)), 'Schema table registry must not contain duplicate suffixes.');
+review_assert(
+    count($schemaSuffixes) === count(array_unique($schemaSuffixes, SORT_STRING)),
+    'Schema table registry must not contain duplicate suffixes.'
+);
 
 $tokenService = new ExportTokenService(str_repeat('x', 32));
 $token = $tokenService->issue(9, ['metrics.read'], new DateTimeImmutable('+5 minutes'));
@@ -69,18 +78,52 @@ try {
 }
 
 $publicSource = (string) file_get_contents((new ReflectionClass(PublicApiController::class))->getFileName());
-review_assert(str_contains($publicSource, 'Personalized recommendations require authentication.'), 'Public API must block anonymous personalized requests.');
-review_assert(! str_contains($publicSource, "get_param('minor')"), 'Public API must not trust a request-supplied minor flag.');
-review_assert(str_contains($publicSource, 'query string is required for facets'), 'Facet endpoint must require a query snapshot.');
-review_assert(str_contains($publicSource, 'eligibleDocuments') || str_contains($publicSource, 'search($query'), 'Facet endpoint must use an eligibility-aware query path.');
-review_assert(str_contains($publicSource, 'clinical_message_payment_signals_used'), 'Recommendation response must declare prohibited signals unused.');
+review_assert(
+    str_contains($publicSource, 'Personalized recommendations require authentication.'),
+    'Public API must block anonymous personalized requests.'
+);
+review_assert(
+    ! str_contains($publicSource, "get_param('minor')"),
+    'Public API must not trust a request-supplied minor flag.'
+);
+review_assert(
+    str_contains($publicSource, 'query string is required for facets'),
+    'Facet endpoint must require a query snapshot.'
+);
+review_assert(
+    str_contains($publicSource, '$this->search->search(')
+        && str_contains($publicSource, '$this->facets->counts('),
+    'Facet endpoint must derive counts from the eligibility-aware search result path.'
+);
+review_assert(
+    str_contains($publicSource, 'clinical_message_payment_signals_used'),
+    'Recommendation response must declare prohibited signals unused.'
+);
+review_assert(
+    str_contains($publicSource, "'v:' . \$normalized"),
+    'Public list parsing must preserve numeric-string identifiers without PHP key coercion.'
+);
+review_assert(
+    str_contains($publicSource, 'array_is_list($value)'),
+    'Public list parsing must reject associative request objects.'
+);
 
 $rankingSource = (string) file_get_contents((new ReflectionClass(RankedResult::class))->getFileName());
 $recommendationSource = (string) file_get_contents((new ReflectionClass(RecommendationResult::class))->getFileName());
 $searchPageSource = (string) file_get_contents(__DIR__ . '/../src/Runtime/ApplicationSearch.php');
-review_assert(str_contains($rankingSource, 'click_visibility_recheck_required'), 'Ranked-result serialization must require click-time owner revalidation.');
-review_assert(str_contains($recommendationSource, 'click_visibility_recheck_required'), 'Recommendation serialization must require click-time owner revalidation.');
-review_assert(str_contains($searchPageSource, 'RankedResult $result') && str_contains($searchPageSource, '$result->toArray()'), 'Search page must serialize canonical RankedResult values without stripping revalidation metadata.');
+review_assert(
+    str_contains($rankingSource, 'click_visibility_recheck_required'),
+    'Ranked-result serialization must require click-time owner revalidation.'
+);
+review_assert(
+    str_contains($recommendationSource, 'click_visibility_recheck_required'),
+    'Recommendation serialization must require click-time owner revalidation.'
+);
+review_assert(
+    str_contains($searchPageSource, 'RankedResult $result')
+        && str_contains($searchPageSource, '$result->toArray()'),
+    'Search page must serialize canonical RankedResult values without stripping revalidation metadata.'
+);
 
 $ingestionSource = (string) file_get_contents((new ReflectionClass(WordPressChangeEventLedger::class))->getFileName());
 review_assert(str_contains($ingestionSource, 'FOR UPDATE'), 'Change-event sequence and claims must use row locks.');
@@ -100,7 +143,13 @@ review_assert(str_contains($pluginSource, "'live_deployed' => false"), 'Health r
 review_assert(str_contains($pluginSource, "'operational' => false"), 'Health response must not falsely claim operational completion.');
 
 $autoloaderSource = (string) file_get_contents(__DIR__ . '/../src/Autoloader.php');
-foreach (['Runtime/ApiPublic.php', 'Runtime/ApplicationRuntime.php', 'Runtime/Taxonomy.php', 'Runtime/KnowledgeGraph.php', 'Runtime/OwnerIntegration.php'] as $bundle) {
+foreach ([
+    'Runtime/ApiPublic.php',
+    'Runtime/ApplicationRuntime.php',
+    'Runtime/Taxonomy.php',
+    'Runtime/KnowledgeGraph.php',
+    'Runtime/OwnerIntegration.php',
+] as $bundle) {
     review_assert(str_contains($autoloaderSource, $bundle), 'Autoloader must map complete runtime bundle: ' . $bundle);
 }
 
