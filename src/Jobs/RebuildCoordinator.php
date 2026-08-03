@@ -6,6 +6,7 @@ namespace Sabri\File26\Jobs;
 
 use DateTimeImmutable;
 use Sabri\File26\Registry\ConnectorRegistry;
+use Sabri\File26\Storage\GenerationValidationPolicy;
 use Sabri\File26\Storage\ShadowStoreInterface;
 use Sabri\File26\Support\InvariantViolation;
 
@@ -46,8 +47,15 @@ final class RebuildCoordinator
     public function validateAndPromote(
         string $generationId,
         array $connectorKeys,
-        DateTimeImmutable $now
+        DateTimeImmutable $now,
+        ?GenerationValidationPolicy $policy = null
     ): array {
+        $summary = $this->store->generationSummary($generationId);
+        ($policy ?? new GenerationValidationPolicy())->assertCounts(
+            $summary['documents'],
+            $summary['tombstones']
+        );
+
         $this->store->validateGeneration($generationId, $connectorKeys, $now);
         $this->store->promote($generationId, $now);
 
