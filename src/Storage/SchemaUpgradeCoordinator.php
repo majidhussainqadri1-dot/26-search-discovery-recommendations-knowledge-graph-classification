@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Sabri\File26\Storage;
 
 use Sabri\File26\Support\InvariantViolation;
-use Throwable;
 use wpdb;
 
 final class SchemaUpgradeCoordinator
@@ -18,7 +17,7 @@ final class SchemaUpgradeCoordinator
 
     public static function supportsUpgradeFrom(string $version): bool
     {
-        return in_array($version, ['0.3.0'], true);
+        return in_array($version, ['0.1.0', '0.2.0', '0.3.0', '0.4.0'], true);
     }
 
     public function ensureCurrent(): void
@@ -31,7 +30,9 @@ final class SchemaUpgradeCoordinator
             throw new InvariantViolation('File 26 schema requires an explicit supported upgrade path.');
         }
 
-        $acquired = $this->db->get_var($this->db->prepare('SELECT GET_LOCK(%s, %d)', self::LOCK_NAME, 3));
+        $acquired = $this->db->get_var(
+            $this->db->prepare('SELECT GET_LOCK(%s, %d)', self::LOCK_NAME, 5)
+        );
         if ((string) $acquired !== '1') {
             throw new InvariantViolation('File 26 schema upgrade lock could not be acquired.');
         }
@@ -49,8 +50,6 @@ final class SchemaUpgradeCoordinator
             if ((string) get_option('sabri_file26_schema_version', '') !== SchemaManager::SCHEMA_VERSION) {
                 throw new InvariantViolation('File 26 schema upgrade did not reach the required version.');
             }
-        } catch (Throwable $exception) {
-            throw $exception;
         } finally {
             $this->db->get_var($this->db->prepare('SELECT RELEASE_LOCK(%s)', self::LOCK_NAME));
         }
