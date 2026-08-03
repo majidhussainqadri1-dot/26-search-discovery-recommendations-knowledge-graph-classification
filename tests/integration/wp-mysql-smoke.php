@@ -15,14 +15,13 @@ use Sabri\File26\Search\QueryCursorCodec;
 use Sabri\File26\Search\WordPressActiveGenerationRepository;
 use Sabri\File26\Storage\SchemaManager;
 use Sabri\File26\Storage\WordPressShadowStore;
-use wpdb;
 
 if (! defined('SABRI_FILE26_INTEGRATION_TESTS') || SABRI_FILE26_INTEGRATION_TESTS !== true) {
     throw new RuntimeException('Phase 26D integration smoke may run only in an explicitly isolated test installation.');
 }
 
 global $wpdb;
-if (! $wpdb instanceof wpdb) {
+if (! $wpdb instanceof \wpdb) {
     throw new RuntimeException('WordPress database access is unavailable.');
 }
 
