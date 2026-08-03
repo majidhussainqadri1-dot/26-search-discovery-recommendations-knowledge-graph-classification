@@ -1,0 +1,12 @@
+{
+  "connector_key": "file-21-publications",
+  "owner_file": "21",
+  "contract_version": "1.0.0",
+  "entity_types": ["publication"],
+  "privacy_classes": ["C1"],
+  "cursor_strategy": "opaque-cursor",
+  "change_source": "owner-outbox",
+  "rebuild_method": "full-rebuild-and-delta",
+  "deletion_semantics": "restrict-then-tombstone-then-purge",
+  "health_check": "bounded-owner-health-contract"
+}
