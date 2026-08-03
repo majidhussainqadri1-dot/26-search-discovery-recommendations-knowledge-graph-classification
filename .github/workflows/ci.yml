@@ -12,17 +12,17 @@ permissions:
 
 jobs:
   apply-phase26e-payload:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/')
+    if: github.event_name == 'pull_request'
     name: Apply verified Phase 26E payload
     runs-on: ubuntu-latest
     concurrency:
       group: file26-phase26e-payload
       cancel-in-progress: false
     steps:
-      - name: Checkout exact branch
+      - name: Checkout exact PR head branch
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Detect transfer payload
@@ -90,7 +90,7 @@ jobs:
           git add --all
           git diff --cached --check
           git commit -m 'Complete File 26 runtime with two review and correction rounds'
-          git push origin HEAD:${{ github.ref_name }}
+          git push origin HEAD:${{ github.head_ref }}
 
   contract-tests:
     name: PHP ${{ matrix.php }} contract tests
