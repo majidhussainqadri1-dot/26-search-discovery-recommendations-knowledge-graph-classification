@@ -126,11 +126,17 @@ abstract class AbstractPublicOwnerConnector implements ConnectorInterface
             }
         }
 
-        if (! is_string($record['state']) || ! in_array($record['state'], ['published', 'corrected'], true)) {
+        foreach (['object_id', 'object_version', 'locale', 'state', 'canonical_url', 'source_event_at'] as $stringKey) {
+            if (! is_string($record[$stringKey])) {
+                throw new InvariantViolation('Owner record identity, state, URL and time fields must be strings.');
+            }
+        }
+
+        if (! in_array($record['state'], ['published', 'corrected'], true)) {
             throw new InvariantViolation('Public connectors accept published or corrected records only; other states require tombstones.');
         }
 
-        if (! is_array($record['fields']) || ! $record['fields']) {
+        if (! is_array($record['fields']) || $record['fields'] === []) {
             throw new InvariantViolation('Owner record fields must be a non-empty map.');
         }
 
@@ -147,13 +153,10 @@ abstract class AbstractPublicOwnerConnector implements ConnectorInterface
             }
         }
 
-        if (! is_string($record['canonical_url'])) {
-            throw new InvariantViolation('Owner record canonical_url must be a string.');
-        }
         $this->assertCanonicalHost($record['canonical_url']);
 
         try {
-            $sourceEventAt = new DateTimeImmutable((string) $record['source_event_at']);
+            $sourceEventAt = new DateTimeImmutable($record['source_event_at']);
         } catch (Throwable $exception) {
             unset($exception);
             throw new InvariantViolation('Owner record source_event_at must be a valid immutable date-time.');
@@ -161,9 +164,9 @@ abstract class AbstractPublicOwnerConnector implements ConnectorInterface
 
         return new SearchDocument(
             $this->canonicalDomain(),
-            (string) $record['object_id'],
-            (string) $record['object_version'],
-            (string) $record['locale'],
+            $record['object_id'],
+            $record['object_version'],
+            $record['locale'],
             $record['state'],
             $record['canonical_url'],
             $record['fields'],
@@ -193,12 +196,20 @@ abstract class AbstractPublicOwnerConnector implements ConnectorInterface
             if (! array_key_exists($requiredKey, $tombstone)) {
                 throw new InvariantViolation('Owner tombstone is missing a required field.');
             }
+
+            if (! is_string($tombstone[$requiredKey])) {
+                throw new InvariantViolation('Owner tombstone identity, reason and time fields must be strings.');
+            }
+        }
+
+        if (array_key_exists('purge_after', $tombstone) && $tombstone['purge_after'] !== null && ! is_string($tombstone['purge_after'])) {
+            throw new InvariantViolation('Owner tombstone purge_after must be null or a string date-time.');
         }
 
         try {
-            $receivedAt = new DateTimeImmutable((string) $tombstone['received_at']);
+            $receivedAt = new DateTimeImmutable($tombstone['received_at']);
             $purgeAfter = isset($tombstone['purge_after']) && $tombstone['purge_after'] !== null
-                ? new DateTimeImmutable((string) $tombstone['purge_after'])
+                ? new DateTimeImmutable($tombstone['purge_after'])
                 : null;
         } catch (Throwable $exception) {
             unset($exception);
@@ -207,9 +218,9 @@ abstract class AbstractPublicOwnerConnector implements ConnectorInterface
 
         return new IndexTombstone(
             $this->canonicalDomain(),
-            (string) $tombstone['object_id'],
-            (string) $tombstone['last_object_version'],
-            (string) $tombstone['reason'],
+            $tombstone['object_id'],
+            $tombstone['last_object_version'],
+            $tombstone['reason'],
             $receivedAt,
             $purgeAfter
         );
