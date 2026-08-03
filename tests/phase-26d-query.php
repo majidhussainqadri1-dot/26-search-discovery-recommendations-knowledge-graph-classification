@@ -98,13 +98,13 @@ $expectInvariant(
     'Cursors must not be reusable across different queries.'
 );
 
-$guestPrivate = $service->search(new PersistentQuery('advanced homeopathy'), AudienceContext::guest());
+$guestPrivate = $service->search(new PersistentQuery('advanced private'), AudienceContext::guest());
 $assert(count($guestPrivate->documents()) === 0, 'Guest queries must not reveal restricted results.');
 $authorized = new AudienceContext(true, ['view_advanced_lessons'], ['education.pro'], 16, true);
-$authorizedPrivate = $service->search(new PersistentQuery('advanced homeopathy'), $authorized);
+$authorizedPrivate = $service->search(new PersistentQuery('advanced private'), $authorized);
 $assert(count($authorizedPrivate->documents()) === 1, 'Complete audience assertions must unlock an eligible restricted result.');
 $underAge = new AudienceContext(true, ['view_advanced_lessons'], ['education.pro'], 14, true);
-$assert(count($service->search(new PersistentQuery('advanced homeopathy'), $underAge)->documents()) === 0, 'Age constraints must be enforced after persistent hydration.');
+$assert(count($service->search(new PersistentQuery('advanced private'), $underAge)->documents()) === 0, 'Age constraints must be enforced after persistent hydration.');
 
 $urduOnly = $service->search(new PersistentQuery('کامیاب', 20, null, [], ['ur-PK']), AudienceContext::guest());
 $assert(count($urduOnly->documents()) === 1, 'Urdu locale filtering must preserve the matching Urdu result.');
