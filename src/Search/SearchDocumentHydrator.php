@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Sabri\File26\Domain\SearchDocument;
 use Sabri\File26\Domain\VisibilityEnvelope;
 use Sabri\File26\Support\InvariantViolation;
-use Throwable;
 
 final class SearchDocumentHydrator
 {
@@ -78,11 +77,14 @@ final class SearchDocumentHydrator
             }
         }
 
-        try {
-            $eventAt = new DateTimeImmutable($data['last_source_event_at']);
-        } catch (Throwable $exception) {
-            unset($exception);
-            throw new InvariantViolation('Stored source-event date is invalid.');
+        $eventAt = DateTimeImmutable::createFromFormat(DATE_ATOM, $data['last_source_event_at']);
+        $dateErrors = DateTimeImmutable::getLastErrors();
+        if (
+            ! $eventAt instanceof DateTimeImmutable
+            || (is_array($dateErrors) && ((int) $dateErrors['warning_count'] > 0 || (int) $dateErrors['error_count'] > 0))
+            || $eventAt->format(DATE_ATOM) !== $data['last_source_event_at']
+        ) {
+            throw new InvariantViolation('Stored source-event date must be an exact ISO-8601 timestamp.');
         }
 
         return new SearchDocument(
