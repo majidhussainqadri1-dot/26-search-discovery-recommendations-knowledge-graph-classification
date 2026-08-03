@@ -31,7 +31,8 @@ interface ShadowStoreInterface
     public function validateGeneration(
         string $generationId,
         array $expectedConnectorKeys,
-        DateTimeImmutable $validatedAt
+        DateTimeImmutable $validatedAt,
+        ?GenerationValidationPolicy $policy = null
     ): array;
 
     public function promote(string $generationId, DateTimeImmutable $promotedAt): void;
