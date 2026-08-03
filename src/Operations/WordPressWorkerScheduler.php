@@ -8,12 +8,14 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Sabri\File26\Jobs\JobQueueInterface;
 use Sabri\File26\Support\InvariantViolation;
+use Throwable;
 
 final class WordPressWorkerScheduler
 {
     public const HOOK = 'sabri_file26_process_jobs';
     public const RECOVERY_HOOK = 'sabri_file26_recover_jobs';
     public const SCHEDULE = 'sabri_file26_five_minutes';
+    private const RECOVERY_CHECK_INTERVAL_SECONDS = 300;
 
     public function __construct(
         private readonly WorkerLoop $loop,
@@ -27,6 +29,7 @@ final class WordPressWorkerScheduler
         add_filter('cron_schedules', [$this, 'addSchedule']);
         add_action(self::HOOK, [$this, 'runScheduled']);
         add_action(self::RECOVERY_HOOK, [$this, 'runRecovery']);
+        add_action('admin_init', [$this, 'checkMissedRun']);
         $this->ensureScheduled();
     }
 
@@ -58,6 +61,32 @@ final class WordPressWorkerScheduler
     public function runRecovery(): void
     {
         $this->run('missed-run-recovery');
+    }
+
+    public function checkMissedRun(): void
+    {
+        if (! current_user_can('manage_options')) {
+            return;
+        }
+
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $lastCheck = $this->strictOptionDate('sabri_file26_last_recovery_check_at');
+        if (
+            $lastCheck !== null
+            && $now->getTimestamp() - $lastCheck->getTimestamp() < self::RECOVERY_CHECK_INTERVAL_SECONDS
+        ) {
+            return;
+        }
+
+        update_option('sabri_file26_last_recovery_check_at', $now->format(DATE_ATOM), false);
+        try {
+            $result = $this->recoverMissedRun($now);
+            update_option('sabri_file26_last_recovery_check_result', $result, false);
+            delete_option('sabri_file26_last_recovery_error_code');
+        } catch (Throwable $exception) {
+            unset($exception);
+            update_option('sabri_file26_last_recovery_error_code', 'recovery-check-failed', false);
+        }
     }
 
     /** @return array{processed:int,idle:bool,status_counts:array<string,int>,last_error_code:?string} */
@@ -98,14 +127,24 @@ final class WordPressWorkerScheduler
             'last_source' => (string) get_option('sabri_file26_last_worker_source', ''),
             'last_result' => is_array($lastResult) ? $this->sanitizeResult($lastResult) : [],
             'missed_run' => $inspection,
+            'last_recovery_check_at' => $this->strictOptionDate('sabri_file26_last_recovery_check_at')?->format(DATE_ATOM),
+            'last_recovery_error_code' => (string) get_option('sabri_file26_last_recovery_error_code', ''),
         ];
     }
 
     public static function unschedule(): void
     {
         foreach ([self::HOOK, self::RECOVERY_HOOK] as $hook) {
-            while (($timestamp = wp_next_scheduled($hook)) !== false) {
-                wp_unschedule_event($timestamp, $hook);
+            for ($attempt = 0; $attempt < 100; ++$attempt) {
+                $timestamp = wp_next_scheduled($hook);
+                if ($timestamp === false) {
+                    break;
+                }
+
+                $removed = wp_unschedule_event($timestamp, $hook);
+                if ($removed !== true) {
+                    break;
+                }
             }
         }
     }
@@ -128,17 +167,27 @@ final class WordPressWorkerScheduler
 
     private function lastRunAt(): ?DateTimeImmutable
     {
-        $value = get_option('sabri_file26_last_worker_run_at', '');
+        return $this->strictOptionDate('sabri_file26_last_worker_run_at');
+    }
+
+    private function strictOptionDate(string $option): ?DateTimeImmutable
+    {
+        $value = get_option($option, '');
         if (! is_string($value) || $value === '') {
             return null;
         }
 
-        try {
-            return new DateTimeImmutable($value, new DateTimeZone('UTC'));
-        } catch (\Throwable $exception) {
-            unset($exception);
+        $date = DateTimeImmutable::createFromFormat(DATE_ATOM, $value);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (
+            ! $date instanceof DateTimeImmutable
+            || (is_array($errors) && ((int) $errors['warning_count'] > 0 || (int) $errors['error_count'] > 0))
+            || $date->format(DATE_ATOM) !== $value
+        ) {
             return null;
         }
+
+        return $date->setTimezone(new DateTimeZone('UTC'));
     }
 
     private function timestampOrNull(int|false $timestamp): ?string
