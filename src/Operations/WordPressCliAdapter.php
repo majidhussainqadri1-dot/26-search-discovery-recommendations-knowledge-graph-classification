@@ -32,7 +32,7 @@ final class WordPressCliAdapter
         unset($args);
         $maximum = $this->boundedInteger($assocArgs['max'] ?? 20, 1, 50, 'max');
         $batch = $this->boundedInteger($assocArgs['batch'] ?? 100, 1, 200, 'batch');
-        $this->execute(static fn () => $this->runtime->runRealCron($maximum, $batch));
+        $this->execute(fn () => $this->runtime->runRealCron($maximum, $batch));
     }
 
     /** @param list<string> $args @param array<string,mixed> $assocArgs */
