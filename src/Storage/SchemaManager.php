@@ -9,7 +9,7 @@ use wpdb;
 
 final class SchemaManager
 {
-    public const SCHEMA_VERSION = '0.3.0';
+    public const SCHEMA_VERSION = '0.4.0';
 
     public static function install(wpdb $db): void
     {
@@ -85,6 +85,8 @@ final class SchemaManager
                 status varchar(24) NOT NULL,
                 lease_expires_at datetime(6) NULL,
                 error_code varchar(100) NULL,
+                replay_count smallint unsigned NOT NULL DEFAULT 0,
+                last_replayed_at datetime(6) NULL,
                 created_at datetime(6) NOT NULL,
                 updated_at datetime(6) NOT NULL,
                 PRIMARY KEY  (job_id),
@@ -109,6 +111,16 @@ final class SchemaManager
             $actualTable = $db->get_var($db->prepare('SHOW TABLES LIKE %s', $db->esc_like($expectedTable)));
             if ($actualTable !== $expectedTable) {
                 throw new InvariantViolation('File 26 persistent schema installation is incomplete.');
+            }
+        }
+
+        foreach (['replay_count', 'last_replayed_at'] as $column) {
+            $actualColumn = $db->get_var($db->prepare(
+                "SHOW COLUMNS FROM {$prefix}jobs LIKE %s",
+                $column
+            ));
+            if ($actualColumn !== $column) {
+                throw new InvariantViolation('File 26 jobs schema upgrade is incomplete.');
             }
         }
 
