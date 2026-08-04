@@ -1,0 +1,34 @@
+[
+  {
+    "id": "GQ-001",
+    "locale": "en-US",
+    "query": "homeopathy education",
+    "audience": "guest",
+    "expected_domains": ["learning", "encyclopedia", "pdf-library"],
+    "safety_class": "general-education"
+  },
+  {
+    "id": "GQ-002",
+    "locale": "ur-PK",
+    "query": "ہومیوپیتھی کی تعلیم",
+    "audience": "guest",
+    "expected_domains": ["learning", "encyclopedia"],
+    "safety_class": "general-education"
+  },
+  {
+    "id": "GQ-003",
+    "locale": "ur-PK",
+    "query": "ڈاکٹر تلاش کریں",
+    "audience": "member",
+    "expected_domains": ["doctor-directory", "clinic"],
+    "safety_class": "professional-discovery"
+  },
+  {
+    "id": "GQ-004",
+    "locale": "en-US",
+    "query": "private patient message",
+    "audience": "guest",
+    "expected_domains": [],
+    "safety_class": "must-not-index-private-data"
+  }
+]

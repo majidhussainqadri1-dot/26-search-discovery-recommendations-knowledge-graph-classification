@@ -1,0 +1,11 @@
+/vendor/
+/build/
+/dist/
+*.zip
+*.log
+.phpunit.result.cache
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
