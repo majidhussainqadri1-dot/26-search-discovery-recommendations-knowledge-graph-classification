@@ -1,106 +1,200 @@
-# File 26 Requirements Traceability
+# File 26 Requirements Traceability — Runtime 1.0.0
 
-## Phase 26A — Foundation
+## Status law
 
-| Requirement | Implementation | Evidence |
+This matrix proves the File 26 **coded, packaged and automated-QA candidate**. It does not convert repository evidence into Hostinger staging acceptance, production deployment or operational readiness.
+
+| Status | Current evidence |
+|---|---|
+| Specified | File 26 reviewed master plan and governing platform plan |
+| Coded | Runtime/plugin/schema `1.0.0`; public/admin/API/operations source present |
+| Packaged | Deterministic install/source ZIP builder, manifest, checksums and SPDX SBOM |
+| Automated-QA Green | PHP 8.1/8.3 complete matrix plus isolated WordPress/MariaDB workflow |
+| Staging-Accepted | Pending real Hostinger-equivalent owner/UI/rollback acceptance |
+| Live-Deployed | Not claimed |
+| Operational | Not claimed |
+
+## Foundation, ownership and safety
+
+| Requirement family | Implementation | Automated/review evidence |
 |---|---|---|
-| F26-A-001 Repository and runtime identity | README, plugin bootstrap, constants | CI lint and repository review |
-| F26-A-002 Fail-closed activation baseline | `Plugin::activate()` | PHP lint; Hostinger-equivalent staging pending |
-| F26-A-003 Versioned connector contract | `ConnectorInterface`, `ConnectorManifest`, JSON Schema | Foundation test suite |
-| F26-A-004 Duplicate connector rejection | `ConnectorRegistry::register()` | Foundation test suite |
-| F26-A-005 Public-safe connector health | `ConnectorRegistry::sanitizeHealth()` | Foundation test suite |
-| F26-A-006 Canonical document identity/version | `SearchDocument` | Foundation test suite |
-| F26-A-007 Visibility-envelope invariants | `VisibilityEnvelope` | Foundation test suite |
-| F26-A-008 Cursor batch and tombstone invariants | `ConnectorBatch`, `IndexTombstone` | Foundation and review suites |
-| F26-A-009 Synthetic evaluation baseline | `tests/fixtures/golden-queries.json` | Foundation test suite |
-| F26-A-010 Threat and data-flow baseline | Architecture and threat-model documents | Manual review |
-| F26-A-011 Non-destructive lifecycle | deactivation and `uninstall.php` | Source review; Hostinger-equivalent staging pending |
-| F26-A-012 Automated checks | GitHub Actions CI | Per-head workflow evidence |
+| One canonical derivative search owner | `Plugin`, `ConnectorRegistry`, `SearchDocument`, owner-prefix validation | foundation, connector and adversarial suites |
+| No canonical owner replacement | owner adapter contract, read-only probes, derivative schema, non-destructive uninstall | source review, default connector tests, WP smoke |
+| Fail-closed activation and health | `SchemaManager`, `SchemaUpgradeCoordinator`, truthful health response | PHP suites; all 19 tables verified in MariaDB |
+| Versioned contracts | `ConnectorInterface`, `ConnectorManifest`, source provider and JSON schema | foundation and Phase 26E complete suites |
+| Public-only indexing boundary | C1 manifests, field allowlists, canonical HTTPS host, visibility envelope | connector field/host/cross-owner negative tests |
+| Private-domain exclusion | no general adapters for messages, clinical charts, identity/payment secrets, drafts or restricted attachments | review/adversarial source checks |
+| Click/action revalidation | ranked/recommendation/topic response markers and audience rechecks | review chain and WP public-route assertions |
+| Non-destructive lifecycle | deactivation scheduler cleanup; `uninstall.php` no destructive table removal | source/lint review; staging uninstall acceptance pending |
 
-## Phase 26B — Public connector and shadow proof
+## Connector and index lifecycle
 
-| Requirement | Implementation | Evidence |
+| Requirement family | Implementation | Evidence |
 |---|---|---|
-| F26-B-001 Typed owner source provider | `SourceBatchProviderInterface` | PHP lint and connector tests |
-| F26-B-002 File 21 public connector | `File21PublicationsConnector` | Public record, field and deletion tests |
-| F26-B-003 File 10 public connector | `File10VideosConnector` | Public video and host-policy tests |
-| F26-B-004 Public field minimization | connector-specific allowlists | Unexpected sensitive-field regression |
-| F26-B-005 Canonical destination protection | `AbstractPublicOwnerConnector::assertCanonicalHost()` | External/lookalike host regressions |
-| F26-B-006 Bounded cursor and page law | connector base + `ConnectorBatch` | Over-limit, continuing and terminal cursor tests |
-| F26-B-007 Strict scalar/no-coercion law | connector record/tombstone mapping | Array identity and numeric reason regressions |
-| F26-B-008 Tombstone propagation | tombstone-bearing `ConnectorBatch`, `ShadowIndex` | Deletion and stale-resurrection regressions |
-| F26-B-009 Query-time eligibility | `AudienceContext`, `EligibilityEvaluator` | guest/capability/entitlement/age/guardian tests |
-| F26-B-010 Deterministic shadow query | `ShadowIndex::query()` | Urdu and English synthetic queries |
-| F26-B-011 Owner/shadow parity proof | `ShadowIndex::reconcileExpectedKeys()` | missing/orphaned and duplicate-key tests |
-| F26-B-012 Truthful runtime status | plugin `0.2.0`, README and health stage | repository review and CI evidence |
+| Approved domain registry | nine `GenericPublicOwnerConnector` registrations for Files 05/06/09/10/11/12/15/18/21 | Phase 26E complete and adversarial suites |
+| Bounded owner pages | `WordPressFilterBatchProvider`, `ConnectorBatch` | cursor/page/type/terminal regressions |
+| Strict record mapping | canonical identity, owner, type, timestamp, URL and field validation | cross-owner, external URL, unsafe value tests |
+| Tombstones and stale resurrection resistance | `IndexTombstone`, shadow/persistent generation stores | Phase 26B/C suites |
+| Blue/green generations | `ShadowStoreInterface`, `WordPressShadowStore` | persistent generation and isolated DB smoke |
+| Durable checkpoints | generation/connector cursor records | pagination, stale checkpoint and DB tests |
+| Validation before promotion | deterministic checksum, minimum count, divergence and tombstone ceilings | Phase 26C persistence/adversarial tests |
+| Atomic promotion and rollback predecessor | active alias and previous generation | unit tests and MariaDB promotion smoke |
+| Ordered delta ingestion | `ChangeEvent`, `WordPressChangeEventLedger`, owner sequence ledger | Phase 26E and MariaDB append/idempotency/ack tests |
+| Deletion reconciliation | `WordPressPurgeLedger`, overdue checks and CLI reconciliation | Phase 26E and MariaDB request/complete/verify tests |
 
-## Phase 26C — Persistent generations and rebuild jobs
+## Query understanding and retrieval
 
-| Requirement | Implementation | Evidence |
+| Requirement family | Implementation | Evidence |
 |---|---|---|
-| F26-C-001 Backend-neutral persistence contract | `ShadowStoreInterface` | interface/source review and lint |
-| F26-C-002 Persistent derivative schema | `SchemaManager` and `wp_s26_*` tables | successful isolated WordPress/MariaDB smoke |
-| F26-C-003 Candidate-generation isolation | `InMemoryShadowStore`, `WordPressShadowStore` | active-alias failure and rollback tests |
-| F26-C-004 Bounded rebuild/delta orchestration | `RebuildCoordinator`, `RebuildWorker` | two-page bounded rebuild tests |
-| F26-C-005 Durable cursor checkpoints | store checkpoint contracts and tables | continuation, terminal, stale and database smoke tests |
-| F26-C-006 Idempotent job identity | `RebuildJob`, queue implementations | duplicate enqueue, stale-job and persistent queue tests |
-| F26-C-007 Bounded retries and dead letter | `RetryPolicy`, job queues, worker | delayed retry, exhaustion, active-alias safety and database smoke |
-| F26-C-008 Lease and concurrency boundary | in-memory/WordPress lease locks | contention, expiry, takeover and stale-token tests; DB stress pending |
-| F26-C-009 Tombstone/document chronology | generation stores | stale write and cross-owner tests |
-| F26-C-010 Deterministic validation checksum | sorted canonical key + payload hashes | ingestion-order regression and database smoke |
-| F26-C-011 Count/divergence promotion gate | `GenerationValidationPolicy` + coordinator | empty, invalid policy and explicit-zero tests |
-| F26-C-012 Atomic alias promotion and rollback | store lifecycle + predecessor record | replacement/rollback tests and database promotion smoke |
-| F26-C-013 Fail-closed schema/runtime health | activation schema verification and health stage | isolated WordPress activation and table/column verification |
-| F26-C-014 Truthful runtime identity | plugin/schema `0.3.0` and Phase 26C documentation | repository review and per-head CI |
+| Unicode normalization | `UnicodeNormalizer` with Arabic/Urdu presentation and digit normalization | Urdu/English and numeric-token regressions |
+| Urdu/English transliteration | versioned `TransliterationService` | Phase 26E complete suite |
+| Approved synonyms | `SynonymRegistry`, prohibited-pair support and bounded expansion | duplicate/numeric-string adversarial tests |
+| Sensitive query classification | `SensitiveQueryClassifier` | email, phone/CNIC-like and clinical tests |
+| No raw sensitive telemetry | `QueryPlan::allowsRawTelemetry`, `TelemetryRedactor` | complete/review tests |
+| Persistent active-generation query | `WordPressActiveGenerationRepository`, `PersistentQueryService` | Phase 26D and MariaDB Urdu query |
+| Signed snapshot cursors | `QueryCursorCodec`, query fingerprint and generation binding | tamper, mismatch, offset and generation-swap tests |
+| Stored payload integrity | SHA-256 and strict `SearchDocumentHydrator` | malformed/reordered/extra/timestamp tests |
+| Eligibility after hydration | `EligibilityEvaluator` with auth/capability/entitlement/age/guardian context | Phase 26B/D tests |
+| Bounded filters and pagination | `PersistentQuery`, normalized domain/locale lists | duplicate/over-limit/type tests |
 
-## Phase 26D — Persistent query and operations control plane
+## Ranking, suggestions and facets
 
-| Requirement | Implementation | Evidence |
+| Requirement family | Implementation | Evidence |
 |---|---|---|
-| F26-D-001 Internal active-generation query contract | `ActiveGenerationRepositoryInterface`, `PersistentQueryService` | Phase 26D query suite and database Urdu query smoke |
-| F26-D-002 Signed snapshot pagination | `QueryCursorCodec`, query fingerprint | tampering, query mismatch and generation-swap tests |
-| F26-D-003 Strict stored-row integrity | payload SHA-256, `SearchDocumentHydrator` | hydration, extra-field, reordered-key and timestamp regressions |
-| F26-D-004 Query-time audience authorization | `EligibilityEvaluator` after persistent hydration | guest, entitlement, age and guardian tests |
-| F26-D-005 Urdu/English deterministic matching | persistent query service and repositories | Unicode/locale tests and real WordPress/MariaDB Urdu query |
-| F26-D-006 Bounded domain/locale/candidate filters | `PersistentQuery`, repository candidate limits | malformed, duplicate-normalized and over-limit tests |
-| F26-D-007 Bounded reusable worker execution | `WorkerLoop` | two-page completion, idle and ceiling tests |
-| F26-D-008 WP-Cron and real-cron adapters | `WordPressWorkerScheduler`, `WordPressCliAdapter` | source/lint and Phase 26D operations suite |
-| F26-D-009 Missed-run detection and recovery | `MissedRunDetector`, throttled `admin_init` check | idle, never-run, on-time, overdue and future-time tests |
-| F26-D-010 Administrator diagnostics | operations REST route and `WordPressRuntime::diagnostics()` | capability/source review; Hostinger-equivalent acceptance pending |
-| F26-D-011 Guarded dead-letter replay | dead-letter adapters + replay audit fields | unit/adversarial regressions and successful database replay smoke |
-| F26-D-012 Read-only owner connector probe | `OwnerConnectorProbe` | terminal, repeated-cursor, checksum and cross-owner tests |
-| F26-D-013 Supported active-plugin schema upgrade | `SchemaUpgradeCoordinator` | version-path tests; fresh schema/database verification green; live upgrade rehearsal pending |
-| F26-D-014 Finite cron cleanup | bounded `WordPressWorkerScheduler::unschedule()` | fresh adversarial source regression |
-| F26-D-015 Isolated database harness | PR-gated WordPress/MariaDB workflow and smoke script | WordPress 7.0.2, MariaDB 11.4, PHP 8.3; 21 assertions passed |
-| F26-D-016 Truthful runtime identity | plugin/schema `0.4.0`, internal-only health status | repository review and exact-head CI |
-| F26-D-017 Nullable persistent cursor parity | explicit SQL `NULL`, legacy `NULL/''` normalization | defect discovered by real DB run; corrected smoke rerun green |
+| Versioned ranking | `RankingPolicy`, `RankingEngine`, `RankedResult` | complete and adversarial suites |
+| Relevance/authority/quality/freshness | bounded component scoring and explanations | deterministic ranking tests |
+| Diversity/anti-concentration | creator/domain caps | dominant-creator adversarial test |
+| Deterministic ties | canonical-key tie breaking | ranking suite |
+| Safe suggestions | prefix normalization and post-eligibility documents only | complete/review tests and public route registration |
+| Eligibility-aware facets | actual search snapshot then `FacetService::counts()` | review contract trace and route smoke |
+| Public API parsing safety | bounded integer/cursor/list/boolean parsers; numeric-string preservation | review/adversarial tests |
 
-## Review round 1 corrections
+## Recommendations and user controls
 
-- Preserved Unicode text during candidate matching.
-- Narrowed authorization assertions to restricted-only terms.
-- Corrected the WP-CLI real-cron callback binding.
-- Added a supported locked schema upgrade path for already-active `0.3.0` installations.
+| Requirement family | Implementation | Evidence |
+|---|---|---|
+| Guest/cold start | `RecommendationContext::coldStart`, source-quality curation | complete suite |
+| Consented personalization | authenticated public API and explicit consent | review/adversarial source checks |
+| Minor protection | canonical audience age plus verified guardian requirement | adversarial tests |
+| Educational/source-quality priority | recommendation scoring and reason codes | complete suite |
+| Explainability | `why_this` reason list and policy version | complete suite |
+| Hide/not-interested/reset/opt-out | result controls and idempotent feedback store | in-memory and MariaDB feedback tests |
+| Reversible feedback | active/reversed states and actor purge | complete and DB tests |
+| Prohibited signal exclusion | API declaration and no clinical/message/payment inputs | review/adversarial tests |
 
-## Fresh adversarial review corrections
+## Taxonomy, classification and knowledge graph
 
-- Rejected relative and non-ISO stored timestamps.
-- Rejected locale aliases that become duplicates after normalization.
-- Added administrator-only throttled missed-run checks.
-- Bounded cron unscheduling and stopped on WordPress removal failure.
-- Added cursor offset/fingerprint, payload-shape, connector-pagination and schema-skip regressions.
+| Requirement family | Implementation | Evidence |
+|---|---|---|
+| Stable versioned taxonomy | `TaxonomyTerm`, `TaxonomyRegistry`, `WordPressTaxonomyStore` | complete and MariaDB round-trip |
+| Label/alias collision prevention | normalized active-label registry | adversarial collision test |
+| Parent cycle prevention | DFS cycle check | adversarial cycle test |
+| Merge preview and redirect | preview/version check, affected relation rewrite | complete/adversarial tests |
+| Reviewed classification | `ClassificationWorkflow`, independent reviewer law | self-review rejection and approval tests |
+| Appeals | explicit appealed state | complete suite |
+| Typed graph edges | controlled edge types and endpoint existence | complete suite |
+| Provenance enforcement | source owner must own source endpoint or be `file26-curated` | fresh adversarial defect regression and DB hydration |
+| Visibility-aware traversal | audience eligibility on start/target/edge | guest vs authorized tests |
+| Bounded graph reads | depth/degree/node ceilings and hash-verified persistent edges | adversarial and MariaDB tests |
 
-## Real database correction record
+## Governance, evaluation, telemetry and export
 
-- Corrected the WP-CLI `eval-file` smoke harness context without weakening plugin strict typing.
-- Corrected nullable job-cursor persistence: SQL `NULL` is now explicit, hydrated `NULL/''` becomes canonical `null`, and legacy retry lookup accepts both historical forms.
-- Re-ran the full isolated WordPress/MariaDB smoke after correction; all 21 assertions passed.
+| Requirement family | Implementation | Evidence |
+|---|---|---|
+| Versioned rollbackable policies | `VersionedConfiguration`, `ConfigurationRegistry`, persistent policy store | complete/adversarial tests |
+| Dual approval for high risk | independent approvers and predecessor identity | adversarial tests |
+| Reviewed evaluation sets | `EvaluationCase`, `EvaluationRegistry`, persistent store | complete tests |
+| Safety-critical release block | forbidden hit/missing critical expectation makes `release_pass=false` | complete/adversarial tests |
+| Stable metrics | recall is always a float | defect regression |
+| Privacy-minimized telemetry | `TelemetryRedactor`, daily aggregate store and retention purge | complete/review tests and CLI |
+| Health guardrails | connector lag, failed events, leakage, zero result, latency and graph integrity | complete/adversarial tests |
+| Signed scoped export | `ExportTokenService`, persistent single-use store and export package | review/adversarial tests |
+| Cross-user/private exclusion | export metadata and source review | review suite |
+| Audit evidence | `WordPressAuditLog`, trace/reason/policy fields | schema/store traceability and MariaDB table verification |
 
-## Pending acceptance evidence
+## Public, admin and operations interfaces
 
-- WordPress activation, in-place `0.3.0` to `0.4.0` upgrade, reactivation and deactivation on isolated Hostinger-equivalent staging.
-- MariaDB advisory-lock contention, concurrent-worker stress, backup/restore and rollback rehearsal.
-- Approved real File 21 and File 10 provider adapters and jointly frozen owner contracts.
-- Representative staging-data parity, leakage, deletion-propagation and latency SLO evidence.
-- Public query API, autocomplete, File 20 search surface and File 25 result-card work remain outside this batch.
-- Source/package parity, installable ZIP and Founder staging acceptance remain pending.
+| Requirement family | Implementation | Evidence |
+|---|---|---|
+| Public search/suggest/facets | `PublicApiController` | PHP suites and WordPress route/query smoke |
+| Recommendations/feedback/topic APIs | `PublicApiController` | PHP suites and route/topic smoke |
+| Admin health/taxonomy/graph/classification | `AdminApiController` | route registration and 19-table DB smoke |
+| Policy/evaluation/telemetry/export | `AdminApiController`, governance stores | route and source tests |
+| Queue/scheduler diagnostics | `WordPressRuntime`, operations route | Phase 26D and DB tests |
+| Guarded dead-letter replay | exact job/error/generation/checkpoint/replay conditions | Phase 26D and DB replay test |
+| Connector probe | `OwnerConnectorProbe` and REST/CLI adapters | repeated cursor/cross-owner/checksum tests |
+| WP-Cron and real cron | `WordPressWorkerScheduler`, `WorkerLoop`, WP-CLI | Phase 26D tests |
+| Missed-run recovery | `MissedRunDetector` and throttled admin check | operations/adversarial tests |
+| Reconciliation and retention CLI | `WordPressCliApplication` | source review and operations runbook |
+
+## Schema, migration and package
+
+| Requirement family | Implementation | Evidence |
+|---|---|---|
+| Complete schema identity | `SchemaManager::SCHEMA_VERSION = 1.0.0` | 19-table registry and MariaDB assertions |
+| Supported locked upgrade | advisory lock; 0.1/0.2/0.3/0.4 to 1.0 | Phase 26D adversarial and DB fresh install; Hostinger upgrade rehearsal pending |
+| Deterministic package | `tools/build-package.py` | two independent builds compared byte-for-byte |
+| Install/source parity | canonical sorted file manifests in both artifacts | deterministic package CI |
+| Checksums | `CHECKSUMS.sha256` | package CI artifact |
+| SBOM | `SBOM.spdx.json` | package CI artifact |
+| No transfer/prototype residue | temporary payloads/workflow and duplicate `src/Complete` implementations removed | unresolved-marker and repository review |
+| Mandatory two review suites | Composer and CI include Phase 26E complete, review and adversarial suites | exact-head CI |
+
+## Automated evidence totals
+
+Per PHP version:
+
+| Suite | Assertions |
+|---|---:|
+| Foundation and shadow index | 41 |
+| Phase 26B review | 13 |
+| Phase 26C persistence | 32 |
+| Phase 26C adversarial | 22 |
+| Phase 26D query | 28 |
+| Phase 26D operations | 24 |
+| Phase 26D adversarial | 20 |
+| Phase 26E complete runtime | 55 |
+| Review round 1 | 55 |
+| Fresh adversarial review round 2 | 30 |
+| **Total** | **320** |
+
+The PHP 8.1/8.3 matrix therefore executes 640 assertions. The isolated WordPress 7.0.2 / MariaDB 11.4 / PHP 8.3 smoke executes 83 additional assertions.
+
+## Defects corrected during final coding cycle
+
+- reconciled legacy schema tests with the approved locked upgrade chain;
+- corrected a nonexistent destination accessor;
+- added explicit public visibility construction;
+- prevented numeric-string coercion in query tokens, synonyms, transliteration, API lists and recommendation maps;
+- stabilized evaluation recall as a float metric;
+- reconciled Phase 26E tests to canonical contracts rather than temporary DTO prototypes;
+- removed duplicate prototype implementations;
+- enforced graph source-owner provenance at creation, insertion and hydration;
+- made topic/result click-time revalidation explicit;
+- hardened public cursor, boolean and associative-list parsing;
+- expanded the real database smoke from 21 to 83 assertions and all 19 tables;
+- removed temporary payload transfer machinery;
+- corrected CI unresolved-marker self-matching.
+
+## Remaining non-coding acceptance gates
+
+The following are not hidden coding omissions; they require external modules, real environments, people or operational evidence:
+
+1. jointly freeze and implement the owner-side provider filters in the relevant File 05/06/09/10/11/12/15/18/21 repositories;
+2. run representative real-data parity, leakage, deletion-lag and latency measurements;
+3. integrate File 20 global search surface and File 25 result/topic cards without duplicate ownership;
+4. rehearse fresh install and each deployed-version upgrade on Hostinger-equivalent staging;
+5. run concurrent-worker/advisory-lock stress and large-data/load tests;
+6. prove backup restore, generation rollback and plugin rollback;
+7. complete responsive, browser, RTL and WCAG acceptance through File 20/File 25;
+8. record security/privacy/medical/Sharīʿah and Founder acceptance as applicable;
+9. deploy only the approved immutable artifact, run production smoke and retain a monitored rollback window;
+10. establish operational owners, alerts, support, backups and incident routines.
+
+Until those gates pass, the correct label is:
+
+```text
+File 26 v1.0.0 — Coded, Packaged and Automated-QA Candidate
+```
+
+It is not yet `Staging-Accepted`, `Live-Deployed` or `Operational`.
