@@ -43,7 +43,6 @@ final class Doctor_Ranking {
 			$payload['global_doctor_rank'] = $rank;
 			$payload['doctor_rank_score'] = round( $item['score'], 6 );
 			$payload['doctor_rank_policy_version'] = $policy['version'];
-			$payload['doctor_rank_recomputed_at'] = DB::now();
 			$wpdb->update(
 				$table,
 				array( 'payload' => wp_json_encode( $payload ), 'updated_at' => DB::now() ),
@@ -60,13 +59,13 @@ final class Doctor_Ranking {
 			'object_type' => 'ranking_policy',
 			'object_key' => $policy['version'],
 			'reason' => sanitize_text_field( $reason ),
-			'metadata' => array( 'eligible_doctors' => count( $scored ) ),
+			'metadata' => array( 'eligible_doctors' => count( $scored ), 'safe_fallback' => ! empty( $policy['safe_fallback'] ) ),
 		) );
 		do_action( 'sabri_file26_event', 'DoctorRankingRecomputed', array(
 			'policy_version' => $policy['version'],
 			'eligible_doctors' => count( $scored ),
 		) );
-		return array( 'policy_version' => $policy['version'], 'eligible_doctors' => count( $scored ) );
+		return array( 'policy_version' => $policy['version'], 'eligible_doctors' => count( $scored ), 'safe_fallback' => ! empty( $policy['safe_fallback'] ) );
 	}
 
 	/**
@@ -105,7 +104,7 @@ final class Doctor_Ranking {
 		$scored = array();
 		foreach ( $this->eligible_rows() as $row ) {
 			$payload = json_decode( $row['payload'], true );
-			if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) || ! $this->matches_context( $payload, $context, $value ) ) {
+			if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) || ! $this->matches_context( $row, $payload, $context, $value ) ) {
 				continue;
 			}
 			$global_rank = isset( $payload['global_doctor_rank'] ) ? max( 0, (int) $payload['global_doctor_rank'] ) : 0;
@@ -118,6 +117,8 @@ final class Doctor_Ranking {
 				'url' => $row['canonical_url'],
 				'country' => $row['country'],
 				'location' => $row['location'],
+				'locale' => $row['locale'],
+				'author_key' => $row['author_key'],
 				'payload' => $payload,
 				'score' => $this->score( $payload, $policy['weights'] ),
 				'global_rank' => $global_rank,
@@ -139,6 +140,7 @@ final class Doctor_Ranking {
 		return array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 			'policy_version' => $policy['version'],
+			'policy_safe_fallback' => ! empty( $policy['safe_fallback'] ),
 			'context' => $context,
 			'context_value' => $value,
 			'tier' => $tier,
@@ -168,6 +170,7 @@ final class Doctor_Ranking {
 		global $wpdb;
 		$defaults = array(
 			'version' => (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' ),
+			'safe_fallback' => false,
 			'weights' => array(
 				'qualification_score' => 0.16,
 				'experience_score' => 0.12,
@@ -190,19 +193,23 @@ final class Doctor_Ranking {
 		$features = json_decode( $row['features_json'], true );
 		$features = is_array( $features ) ? $features : array();
 		$weights = isset( $features['weights'] ) && is_array( $features['weights'] ) ? $features['weights'] : $features;
-		foreach ( $defaults['weights'] as $field => $fallback ) {
+		$candidate = $defaults['weights'];
+		foreach ( $candidate as $field => $fallback ) {
 			if ( isset( $weights[ $field ] ) && is_numeric( $weights[ $field ] ) ) {
-				$defaults['weights'][ $field ] = min( 1.0, max( 0.0, (float) $weights[ $field ] ) );
+				$candidate[ $field ] = min( 1.0, max( 0.0, (float) $weights[ $field ] ) );
 			}
 		}
-		$total = array_sum( $defaults['weights'] );
+		$total = array_sum( $candidate );
 		if ( $total <= 0 ) {
-			return new \WP_Error( 'file26_invalid_doctor_policy', 'The active doctor-ranking policy has no positive weights.', array( 'status' => 503 ) );
+			$defaults['safe_fallback'] = true;
+			$defaults['version'] = 'safe-fallback-' . sanitize_key( $row['version'] );
+			return $defaults;
 		}
-		foreach ( $defaults['weights'] as &$weight ) {
+		foreach ( $candidate as &$weight ) {
 			$weight = $weight / $total;
 		}
 		unset( $weight );
+		$defaults['weights'] = $candidate;
 		$defaults['version'] = sanitize_text_field( $row['version'] );
 		return $defaults;
 	}
@@ -212,7 +219,7 @@ final class Doctor_Ranking {
 		$documents = DB::table( 'documents' );
 		$connectors = DB::table( 'connectors' );
 		return (array) $wpdb->get_results(
-			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.payload
+			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.author_key,d.topic_ids,d.payload
 			 FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active'
 			 WHERE d.entity_type='doctor' AND d.state IN ('published','active','corrected') AND d.visibility='public'
 			 ORDER BY d.canonical_key",
@@ -220,33 +227,34 @@ final class Doctor_Ranking {
 		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
-	private function matches_context( array $payload, $context, $value ) {
+	private function matches_context( array $row, array $payload, $context, $value ) {
 		if ( 'global' === $context ) {
 			return true;
 		}
+		$topics = json_decode( isset( $row['topic_ids'] ) ? $row['topic_ids'] : '', true );
+		$topics = is_array( $topics ) ? array_map( 'sanitize_key', $topics ) : array();
 		if ( 'educator' === $context ) {
-			return ! empty( $payload['is_educator'] ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.6 );
+			return in_array( 'educator', $topics, true ) || in_array( 'teacher', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.6 );
 		}
 		if ( 'researcher' === $context ) {
-			return ! empty( $payload['is_researcher'] ) || ( isset( $payload['research_contribution_score'] ) && (float) $payload['research_contribution_score'] >= 0.5 );
+			return in_array( 'researcher', $topics, true ) || in_array( 'research', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.75 );
 		}
-		$field_map = array(
-			'country' => 'country',
-			'city' => 'city',
-			'language' => 'languages',
-			'specialization' => 'specializations',
-		);
-		$field = isset( $field_map[ $context ] ) ? $field_map[ $context ] : '';
-		if ( ! $field || ! isset( $payload[ $field ] ) ) {
-			return false;
-		}
-		$values = is_array( $payload[ $field ] ) ? $payload[ $field ] : array( $payload[ $field ] );
 		$needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $value ), 'UTF-8' ) : strtolower( trim( $value ) );
-		foreach ( $values as $candidate ) {
-			$candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $candidate ), 'UTF-8' ) : strtolower( trim( (string) $candidate ) );
-			if ( $candidate === $needle ) {
-				return true;
-			}
+		if ( 'country' === $context ) {
+			$candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['country'] ), 'UTF-8' ) : strtolower( trim( (string) $row['country'] ) );
+			return $candidate === $needle;
+		}
+		if ( 'city' === $context ) {
+			$candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['location'] ), 'UTF-8' ) : strtolower( trim( (string) $row['location'] ) );
+			return $candidate === $needle;
+		}
+		if ( 'language' === $context ) {
+			$language = isset( $payload['language'] ) ? (string) $payload['language'] : (string) $row['locale'];
+			$candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $language ), 'UTF-8' ) : strtolower( trim( $language ) );
+			return $candidate === $needle || 0 === strpos( $candidate, $needle . '-' );
+		}
+		if ( 'specialization' === $context ) {
+			return in_array( sanitize_key( $value ), $topics, true );
 		}
 		return false;
 	}
