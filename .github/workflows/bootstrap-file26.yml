@@ -1,4 +1,4 @@
-name: Bootstrap File 26 Source
+name: Diagnose File 26 Bootstrap
 on:
   push:
     branches:
@@ -6,22 +6,23 @@ on:
 permissions:
   contents: write
 jobs:
-  unpack:
+  diagnose:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Expand, verify and test reviewed source tree
+      - name: Capture bootstrap diagnostics
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          if [ -f bootstrap-diagnostic.txt ]; then
+            echo 'Diagnostic already committed.'
+            exit 0
+          fi
+          exec > >(tee bootstrap-diagnostic.txt) 2>&1
+          set +e
+          echo "HEAD=$(git rev-parse HEAD)"
           : > /tmp/file26-source.tar.gz
           for sha in \
             72192aca18a5b4cddd4889d040bdff170055adc4 \
@@ -33,17 +34,18 @@ jobs:
             c2af48a409c2209e62be5c5e202225cb384a820c \
             7eebb2592e267fab873771e253fafa8795cabfff
           do
+            echo "BLOB $sha size=$(git cat-file -s "$sha" 2>&1) status=$?"
             git cat-file blob "$sha" >> /tmp/file26-source.tar.gz
+            echo "append status=$?"
           done
           sha256sum /tmp/file26-source.tar.gz
-          echo '017228cfa65888f0ac31a0148b7b33fc2822f366ed3bbdf60cdb80998f01c188  /tmp/file26-source.tar.gz' | sha256sum -c -
+          echo "sha status=$?"
           gzip -t /tmp/file26-source.tar.gz
-          mkdir -p /tmp/file26-source
-          tar -xzf /tmp/file26-source.tar.gz -C /tmp/file26-source
-          rsync -a --delete --exclude='.git/' /tmp/file26-source/ ./
-          bash qa/run-tests.sh
+          echo "gzip status=$?"
+          tar -tzf /tmp/file26-source.tar.gz | head -20
+          echo "tar status=${PIPESTATUS[0]}"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat: implement File 26 complete search and discovery system'
+          git add bootstrap-diagnostic.txt
+          git commit -m 'chore: record bootstrap diagnostics'
           git push origin HEAD:codex/file26-complete-v1.0.0-r2
