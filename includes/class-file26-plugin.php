@@ -9,6 +9,7 @@ final class Plugin {
 	private $normalizer;
 	private $ranking;
 	private $connectors;
+	private $owner_contracts;
 	private $indexer;
 	private $search;
 	private $recommendations;
@@ -36,6 +37,7 @@ final class Plugin {
 		$this->normalizer = new Normalizer();
 		$this->ranking = new Ranking( $this->normalizer );
 		$this->connectors = new Connectors( $this->security );
+		$this->owner_contracts = new Owner_Contracts( $this->connectors );
 		$this->indexer = new Indexer( $this->connectors, $this->normalizer, $this->security );
 		$this->search = new Search( $this->normalizer, $this->ranking, $this->security, $this->connectors );
 		$this->recommendations = new Recommendations( $this->search, $this->security );
@@ -44,7 +46,7 @@ final class Plugin {
 		$this->governance = new Governance( $this->security, $this->taxonomy, $this->graph );
 		$this->doctor_ranking = new Doctor_Ranking( $this->security );
 		$this->doctor_appeals = new Doctor_Appeals( $this->security );
-		$this->health = new Health( $this->connectors );
+		$this->health = new Health( $this->connectors, $this->owner_contracts );
 		$this->rest = new REST(
 			$this->search,
 			$this->recommendations,
@@ -71,6 +73,8 @@ final class Plugin {
 		load_plugin_textdomain( 'sabri-file26', false, dirname( plugin_basename( SABRI_FILE26_FILE ) ) . '/languages' );
 		Roles::install();
 		Doctor_Appeals::install_schema();
+		add_filter( 'sabri_file26_connector_manifests', array( $this->owner_contracts, 'collect' ), 5 );
+		add_filter( 'sabri_file26_activation_gate_approved', array( $this->owner_contracts, 'activation_gate' ), 10, 3 );
 		$this->connectors->boot();
 		add_action( 'init', array( $this->routes, 'register' ), 20 );
 		add_action( 'rest_api_init', array( $this->rest, 'register' ) );
@@ -147,6 +151,7 @@ final class Plugin {
 				'separation-of-duties',
 				'dual-approved-policy-rollback',
 				'doctor-ranking-appeals',
+				'required-owner-contract-gate',
 				'rate-limits',
 				'audit',
 			),
@@ -169,6 +174,7 @@ final class Plugin {
 	}
 
 	public function connectors() { return $this->connectors; }
+	public function owner_contracts() { return $this->owner_contracts; }
 	public function indexer() { return $this->indexer; }
 	public function search() { return $this->search; }
 	public function recommendations() { return $this->recommendations; }
