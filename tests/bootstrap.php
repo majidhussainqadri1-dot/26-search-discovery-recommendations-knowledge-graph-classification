@@ -2,8 +2,12 @@
 namespace {
 	define( 'ABSPATH', __DIR__ . '/' );
 	define( 'DAY_IN_SECONDS', 86400 );
+	define( 'ARRAY_A', 'ARRAY_A' );
 	$GLOBALS['f26_test_logged_in'] = false;
 	$GLOBALS['f26_test_filter_values'] = array();
+	$GLOBALS['wpdb'] = new class {
+		public function get_row() { return null; }
+	};
 	function __( $text ) { return $text; }
 	function apply_filters( $tag, $value ) { return array_key_exists( $tag, $GLOBALS['f26_test_filter_values'] ) ? $GLOBALS['f26_test_filter_values'][ $tag ] : $value; }
 	function is_user_logged_in() { return (bool) $GLOBALS['f26_test_logged_in']; }
@@ -17,5 +21,6 @@ namespace Sabri\File26 {
 	final class DB {
 		public static function settings() { return array( 'synonyms' => array(), 'transliteration_aliases' => array(), 'unsafe_auto_synonyms' => array() ); }
 		public static function setting( $key, $default = null ) { return $default; }
+		public static function table( $name ) { return 'wp_f26_' . $name; }
 	}
 }
