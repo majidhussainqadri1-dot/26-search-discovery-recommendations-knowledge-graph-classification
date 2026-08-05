@@ -47,6 +47,27 @@ check_case( $r->score( $base, '"جگر کی سوزش"' ) > $r->score( $base, 'ن
 check_case( 'top_10' === $r->doctor_tier( array( 'verified_doctor' => true, 'global_doctor_rank' => 7 ) )['key'], 'Top 10 verified doctor tier.' );
 check_case( 'all_verified' === $r->doctor_tier( array( 'verified_doctor' => true, 'global_doctor_rank' => 1200 ) )['key'], 'All Verified Doctors tier uses dignified wording.' );
 
+$GLOBALS['wpdb']->row = array(
+	'version' => 'test-policy-2.0',
+	'features_json' => json_encode( array(
+		'weights' => array(
+			'exact_phrase' => 50,
+			'title_relevance' => 0,
+			'body_relevance' => 0,
+			'fuzzy_relevance' => 0,
+			'authority' => 0,
+			'quality' => 0,
+			'freshness' => 0,
+			'popularity' => 0,
+			'relationship' => 0,
+		),
+	) ),
+);
+$policy_ranking = new Ranking( $n );
+check_case( 'test-policy-2.0' === $policy_ranking->policy_version(), 'Active policy version is loaded at runtime.' );
+check_case( $policy_ranking->score( $base, '"جگر کی سوزش"' ) > 40, 'Active policy weights materially change runtime scoring.' );
+$GLOBALS['wpdb']->row = null;
+
 $security = new Security();
 $GLOBALS['f26_test_logged_in'] = false;
 check_case( true === $security->audience()['valid'], 'Anonymous public audience is valid for public-only retrieval.' );
@@ -67,8 +88,16 @@ $doctor_base = array(
 	'profile_completeness_score' => .9, 'complaint_appeal_outcome_score' => .85,
 	'manipulation_resistant_engagement_score' => .6,
 );
-$doctor_paid = $doctor_base; $doctor_paid['donation'] = 1000000; $doctor_paid['payment'] = 1000000;
-check_case( $doctor->score( $doctor_base ) === $doctor->score( $doctor_paid ), 'Doctor ranking excludes donation and payment.' );
+$doctor_paid = $doctor_base; $doctor_paid['donation'] = 1000000; $doctor_paid['payment'] = 1000000; $doctor_paid['followers'] = 999999999;
+check_case( $doctor->score( $doctor_base ) === $doctor->score( $doctor_paid ), 'Doctor ranking excludes donation, payment and followers.' );
+
+$GLOBALS['wpdb']->row = array(
+	'version' => 'doctor-policy-zero',
+	'features_json' => json_encode( array( 'weights' => array_fill_keys( array_keys( $doctor_base ), 0 ) ) ),
+);
+$safe_policy = ( new Doctor_Ranking( new Security() ) )->policy();
+check_case( true === $safe_policy['safe_fallback'], 'Invalid zero-weight doctor policy fails safely to the disclosed baseline.' );
+$GLOBALS['wpdb']->row = null;
 
 printf( "Passed: %d\nFailed: %d\n", $passed, $failed );
 exit( $failed ? 1 : 0 );
