@@ -85,6 +85,7 @@ final class Plugin {
 		add_action( DB::CRON_QUEUE, array( $this->indexer, 'process_queue' ) );
 		add_action( DB::CRON_RECONCILE, array( $this->indexer, 'reconcile' ) );
 		add_action( DB::CRON_RETENTION, array( $this->indexer, 'retention' ) );
+		add_action( DB::CRON_RETENTION, array( $this, 'retain_doctor_appeals' ), 20 );
 		add_action( DB::CRON_DOCTOR_RANKING, array( $this->doctor_ranking, 'recompute' ) );
 		add_action( 'sabri_file26_doctor_ranking_recompute_requested', array( $this, 'recompute_doctor_ranking_after_appeal' ), 10, 2 );
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
@@ -110,6 +111,44 @@ final class Plugin {
 	public function cron_schedules( $schedules ) {
 		$schedules['sabri_file26_monthly'] = array( 'interval' => 30 * DAY_IN_SECONDS, 'display' => 'Every 30 days — File 26' );
 		return $schedules;
+	}
+
+	public function retain_doctor_appeals() {
+		global $wpdb;
+		$table = Doctor_Appeals::table();
+		$final_days = max( 365, min( 3650, (int) DB::setting( 'ranking_appeal_retention_days', 1095 ) ) );
+		$open_days = max( $final_days, min( 3650, (int) DB::setting( 'ranking_appeal_open_retention_days', 1460 ) ) );
+		$final_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $final_days * DAY_IN_SECONDS ) );
+		$open_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $open_days * DAY_IN_SECONDS ) );
+		$withdrawn = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s",
+				'[redacted after retention expiry]',
+				'Closed after the documented maximum open-appeal retention period.',
+				DB::now(),
+				DB::now(),
+				$open_cutoff
+			)
+		);
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s",
+				$final_cutoff
+			)
+		);
+		if ( $withdrawn || $deleted ) {
+			$this->security->audit( 'doctor_ranking_appeal_retention', array(
+				'object_type' => 'ranking_appeal',
+				'object_key' => 'retention',
+				'metadata' => array(
+					'withdrawn_count' => max( 0, (int) $withdrawn ),
+					'deleted_count' => max( 0, (int) $deleted ),
+					'final_retention_days' => $final_days,
+					'open_retention_days' => $open_days,
+				),
+			) );
+		}
+		return array( 'withdrawn' => max( 0, (int) $withdrawn ), 'deleted' => max( 0, (int) $deleted ) );
 	}
 
 	public function recompute_doctor_ranking_after_appeal( $doctor_key, $appeal_uuid ) {
@@ -151,6 +190,7 @@ final class Plugin {
 				'separation-of-duties',
 				'dual-approved-policy-rollback',
 				'doctor-ranking-appeals',
+				'doctor-ranking-appeal-retention',
 				'required-owner-contract-gate',
 				'rate-limits',
 				'audit',
