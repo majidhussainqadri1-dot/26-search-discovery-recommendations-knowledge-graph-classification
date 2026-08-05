@@ -68,16 +68,23 @@ final class Doctor_Appeals {
 			return new \WP_Error( 'file26_invalid_appeal', 'A valid doctor reference and a reason between 20 and 4000 characters are required.', array( 'status' => 400 ) );
 		}
 		$document = $wpdb->get_row(
-			$wpdb->prepare( 'SELECT canonical_key,payload FROM ' . DB::table( 'documents' ) . " WHERE canonical_key=%s AND entity_type='doctor' LIMIT 1", $doctor_key ),
+			$wpdb->prepare( 'SELECT canonical_key,author_key,payload FROM ' . DB::table( 'documents' ) . " WHERE canonical_key=%s AND entity_type='doctor' AND state IN ('published','active','corrected') AND visibility='public' LIMIT 1", $doctor_key ),
 			ARRAY_A
 		);
 		if ( ! $document ) {
-			return new \WP_Error( 'file26_doctor_not_found', 'The doctor ranking record was not found.', array( 'status' => 404 ) );
+			return new \WP_Error( 'file26_doctor_not_found', 'The eligible doctor ranking record was not found.', array( 'status' => 404 ) );
 		}
 		$payload = json_decode( $document['payload'], true );
 		$payload = is_array( $payload ) ? $payload : array();
-		$owns_profile = ! empty( $payload['user_id'] ) && (int) $payload['user_id'] === $user_id;
-		$allowed = apply_filters( 'sabri_file26_can_appeal_doctor_ranking', $owns_profile, $user_id, $doctor_key, $payload );
+		if ( empty( $payload['verified_doctor'] ) ) {
+			return new \WP_Error( 'file26_doctor_not_eligible', 'Only a verified-doctor ranking record may be appealed.', array( 'status' => 409 ) );
+		}
+		$owner_aliases = array( (string) $user_id, 'u:' . $user_id, 'user:' . $user_id, 'wp:' . $user_id );
+		$owns_profile = in_array( (string) $document['author_key'], $owner_aliases, true );
+		$allowed = apply_filters( 'sabri_file26_can_appeal_doctor_ranking', $owns_profile, $user_id, $doctor_key, array(
+			'author_key' => $document['author_key'],
+			'policy_version' => isset( $payload['doctor_rank_policy_version'] ) ? $payload['doctor_rank_policy_version'] : '',
+		) );
 		if ( ! $allowed ) {
 			return new \WP_Error( 'file26_appeal_forbidden', 'Only the affected verified doctor or an authorized representative may appeal.', array( 'status' => 403 ) );
 		}
@@ -129,9 +136,10 @@ final class Doctor_Appeals {
 		$appeal_uuid = sanitize_text_field( $appeal_uuid );
 		$decision = sanitize_key( $decision );
 		$reason = trim( wp_strip_all_tags( (string) $reason, true ) );
+		$reason_length = function_exists( 'mb_strlen' ) ? mb_strlen( $reason, 'UTF-8' ) : strlen( $reason );
 		$allowed = array( 'under_review', 'changes_requested', 'upheld', 'corrected', 'rejected' );
-		if ( ! in_array( $decision, $allowed, true ) || strlen( $reason ) < 10 ) {
-			return new \WP_Error( 'file26_invalid_appeal_decision', 'A valid decision and reason are required.', array( 'status' => 400 ) );
+		if ( ! in_array( $decision, $allowed, true ) || $reason_length < 10 || $reason_length > 4000 ) {
+			return new \WP_Error( 'file26_invalid_appeal_decision', 'A valid decision and reason between 10 and 4000 characters are required.', array( 'status' => 400 ) );
 		}
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' WHERE appeal_uuid=%s', $appeal_uuid ), ARRAY_A );
 		if ( ! $row || in_array( $row['status'], array( 'upheld', 'corrected', 'rejected', 'withdrawn' ), true ) ) {
