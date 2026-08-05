@@ -6,7 +6,9 @@ namespace {
 	$GLOBALS['f26_test_logged_in'] = false;
 	$GLOBALS['f26_test_filter_values'] = array();
 	$GLOBALS['wpdb'] = new class {
-		public function get_row() { return null; }
+		public $row = null;
+		public function prepare( $query ) { return $query; }
+		public function get_row() { return $this->row; }
 	};
 	function __( $text ) { return $text; }
 	function apply_filters( $tag, $value ) { return array_key_exists( $tag, $GLOBALS['f26_test_filter_values'] ) ? $GLOBALS['f26_test_filter_values'][ $tag ] : $value; }
