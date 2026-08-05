@@ -65,6 +65,7 @@ final class Plugin {
 		}
 		$this->booted = true;
 		load_plugin_textdomain( 'sabri-file26', false, dirname( plugin_basename( SABRI_FILE26_FILE ) ) . '/languages' );
+		Roles::install();
 		$this->connectors->boot();
 		add_action( 'init', array( $this->routes, 'register' ), 20 );
 		add_action( 'rest_api_init', array( $this->rest, 'register' ) );
@@ -92,6 +93,7 @@ final class Plugin {
 			DB::install_schema();
 			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
 		}
+		Roles::install();
 	}
 
 	public function cron_schedules( $schedules ) {
@@ -117,10 +119,13 @@ final class Plugin {
 			'data_classes' => array( 'C1-public-derivative', 'C2-internal', 'C3-private-derived' ),
 			'native_controls' => array(
 				'three-stage-visibility',
+				'production-lane-connector-isolation',
 				'tombstone-purge',
 				'query-redaction',
 				'bounded-graph',
 				'consent-controls',
+				'separation-of-duties',
+				'dual-approved-policy-rollback',
 				'rate-limits',
 				'audit',
 			),
@@ -135,45 +140,19 @@ final class Plugin {
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 			'search' => array( $this->search, 'run' ),
 			'discover' => array( $this->recommendations, 'get' ),
-			'result_schema' => 'sabri.file26.result.v1',
+			'result_schema' => 'sabri.file26.result.v1.1',
 			'primary_accent' => '#138A36',
 		);
 		return $providers;
 	}
 
-	public function connectors() {
-		return $this->connectors;
-	}
-
-	public function indexer() {
-		return $this->indexer;
-	}
-
-	public function search() {
-		return $this->search;
-	}
-
-	public function recommendations() {
-		return $this->recommendations;
-	}
-
-	public function taxonomy() {
-		return $this->taxonomy;
-	}
-
-	public function graph() {
-		return $this->graph;
-	}
-
-	public function doctor_ranking() {
-		return $this->doctor_ranking;
-	}
-
-	public function governance() {
-		return $this->governance;
-	}
-
-	public function health() {
-		return $this->health;
-	}
+	public function connectors() { return $this->connectors; }
+	public function indexer() { return $this->indexer; }
+	public function search() { return $this->search; }
+	public function recommendations() { return $this->recommendations; }
+	public function taxonomy() { return $this->taxonomy; }
+	public function graph() { return $this->graph; }
+	public function doctor_ranking() { return $this->doctor_ranking; }
+	public function governance() { return $this->governance; }
+	public function health() { return $this->health; }
 }
