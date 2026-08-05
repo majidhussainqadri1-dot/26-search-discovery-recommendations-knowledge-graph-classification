@@ -1,0 +1,35 @@
+name: Bootstrap File 26 Source
+on:
+  push:
+    branches:
+      - codex/file26-complete-v1.0.0-final
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Expand, verify and test reviewed source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/part-* > /tmp/file26-source.tar.gz
+          echo '017228cfa65888f0ac31a0148b7b33fc2822f366ed3bbdf60cdb80998f01c188  /tmp/file26-source.tar.gz' | sha256sum -c -
+          mkdir -p /tmp/file26-source
+          tar -xzf /tmp/file26-source.tar.gz -C /tmp/file26-source
+          rsync -a --delete --exclude='.git/' /tmp/file26-source/ ./
+          bash qa/run-tests.sh
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement File 26 complete search and discovery system'
+          git push origin HEAD:codex/file26-complete-v1.0.0-final
