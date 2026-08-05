@@ -17,6 +17,7 @@ final class Plugin {
 	private $health;
 	private $governance;
 	private $doctor_ranking;
+	private $doctor_appeals;
 	private $rest;
 	private $routes;
 	private $admin;
@@ -42,6 +43,7 @@ final class Plugin {
 		$this->graph = new Graph( $this->security );
 		$this->governance = new Governance( $this->security, $this->taxonomy, $this->graph );
 		$this->doctor_ranking = new Doctor_Ranking( $this->security );
+		$this->doctor_appeals = new Doctor_Appeals( $this->security );
 		$this->health = new Health( $this->connectors );
 		$this->rest = new REST(
 			$this->search,
@@ -52,7 +54,9 @@ final class Plugin {
 			$this->health,
 			$this->security,
 			$this->connectors,
-			$this->governance
+			$this->governance,
+			$this->doctor_ranking,
+			$this->doctor_appeals
 		);
 		$this->routes = new Routes( $this->search, $this->recommendations, $this->taxonomy );
 		$this->admin = new Admin( $this->health, $this->connectors, $this->indexer, $this->taxonomy, $this->security );
@@ -66,6 +70,7 @@ final class Plugin {
 		$this->booted = true;
 		load_plugin_textdomain( 'sabri-file26', false, dirname( plugin_basename( SABRI_FILE26_FILE ) ) . '/languages' );
 		Roles::install();
+		Doctor_Appeals::install_schema();
 		$this->connectors->boot();
 		add_action( 'init', array( $this->routes, 'register' ), 20 );
 		add_action( 'rest_api_init', array( $this->rest, 'register' ) );
@@ -77,6 +82,7 @@ final class Plugin {
 		add_action( DB::CRON_RECONCILE, array( $this->indexer, 'reconcile' ) );
 		add_action( DB::CRON_RETENTION, array( $this->indexer, 'retention' ) );
 		add_action( DB::CRON_DOCTOR_RANKING, array( $this->doctor_ranking, 'recompute' ) );
+		add_action( 'sabri_file26_doctor_ranking_recompute_requested', array( $this, 'recompute_doctor_ranking_after_appeal' ), 10, 2 );
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
 
 		add_action( 'sabri_file26_source_upsert', array( $this->indexer, 'upsert' ), 10, 1 );
@@ -94,11 +100,25 @@ final class Plugin {
 			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
 		}
 		Roles::install();
+		Doctor_Appeals::install_schema();
 	}
 
 	public function cron_schedules( $schedules ) {
 		$schedules['sabri_file26_monthly'] = array( 'interval' => 30 * DAY_IN_SECONDS, 'display' => 'Every 30 days — File 26' );
 		return $schedules;
+	}
+
+	public function recompute_doctor_ranking_after_appeal( $doctor_key, $appeal_uuid ) {
+		$result = $this->doctor_ranking->recompute( 'appeal_corrected' );
+		$this->security->audit( 'doctor_ranking_appeal_recompute', array(
+			'object_type' => 'ranking_appeal',
+			'object_key' => sanitize_text_field( $appeal_uuid ),
+			'metadata' => array(
+				'doctor_key' => sanitize_text_field( $doctor_key ),
+				'success' => ! is_wp_error( $result ),
+			),
+		) );
+		return $result;
 	}
 
 	public function source_restrict( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) {
@@ -126,6 +146,7 @@ final class Plugin {
 				'consent-controls',
 				'separation-of-duties',
 				'dual-approved-policy-rollback',
+				'doctor-ranking-appeals',
 				'rate-limits',
 				'audit',
 			),
@@ -140,6 +161,7 @@ final class Plugin {
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 			'search' => array( $this->search, 'run' ),
 			'discover' => array( $this->recommendations, 'get' ),
+			'doctor_ranking' => array( $this->doctor_ranking, 'directory' ),
 			'result_schema' => 'sabri.file26.result.v1.1',
 			'primary_accent' => '#138A36',
 		);
@@ -153,6 +175,7 @@ final class Plugin {
 	public function taxonomy() { return $this->taxonomy; }
 	public function graph() { return $this->graph; }
 	public function doctor_ranking() { return $this->doctor_ranking; }
+	public function doctor_appeals() { return $this->doctor_appeals; }
 	public function governance() { return $this->governance; }
 	public function health() { return $this->health; }
 }
