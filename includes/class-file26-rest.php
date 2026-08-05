@@ -66,7 +66,7 @@ final class REST {
 
 	public function search( \WP_REST_Request $request ) {
 		$filters = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'date_from', 'date_to' ) as $key ) {
+		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to' ) as $key ) {
 			if ( null !== $request->get_param( $key ) ) {
 				$filters[ $key ] = $request->get_param( $key );
 			}
@@ -92,6 +92,8 @@ final class REST {
 			'context' => $request->get_param( 'context' ) ?: 'discover',
 			'limit' => $request->get_param( 'limit' ) ?: 12,
 			'cursor' => $request->get_param( 'cursor' ),
+			'locale' => $request->get_param( 'locale' ),
+			'session_topics' => (array) $request->get_param( 'session_topics' ),
 		) ), 200, ! is_user_logged_in() );
 	}
 
@@ -114,12 +116,22 @@ final class REST {
 		}
 		if ( 'merged' === $term['status'] && ! empty( $term['redirect_uuid'] ) ) {
 			$redirect = $this->taxonomy->get( $term['redirect_uuid'] );
-			if ( $redirect ) { $term = $redirect; }
+			if ( $redirect ) {
+				$term = $redirect;
+			}
 		}
-		$results = $this->search->run( array( 'q' => $term['preferred_label'], 'locale' => $term['language'], 'limit' => 20 ) );
+		// Canonical topic retrieval follows approved classification IDs, not label coincidence.
+		$results = $this->search->run( array(
+			'q' => '',
+			'locale' => $term['language'],
+			'limit' => 20,
+			'filters' => array( 'topic' => $term['term_uuid'] ),
+		) );
 		return $this->respond( array(
 			'term' => $term,
 			'related' => is_wp_error( $results ) ? array() : $results['results'],
+			'partial' => is_wp_error( $results ) ? true : $results['partial'],
+			'partial_domains' => is_wp_error( $results ) ? array( array( 'health' => 'search_unavailable' ) ) : $results['partial_domains'],
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 		), 200, true );
 	}
@@ -154,8 +166,18 @@ final class REST {
 		return is_wp_error( $uuid ) ? $uuid : $this->respond( array( 'policy_uuid' => $uuid ), 201 );
 	}
 
-	public function activate_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->activate_ranking_policy( $request['policy'], $request->get_param( 'second_approver_id' ), $request->get_param( 'reason' ) ) ); }
-	public function rollback_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->rollback_ranking_policy( $request['policy'], $request->get_param( 'reason' ) ) ); }
+	public function activate_ranking( \WP_REST_Request $request ) {
+		return $this->respond( $this->governance->activate_ranking_policy( $request['policy'], $request->get_param( 'second_approver_id' ), $request->get_param( 'reason' ) ) );
+	}
+
+	public function rollback_ranking( \WP_REST_Request $request ) {
+		return $this->respond( $this->governance->rollback_ranking_policy(
+			$request['policy'],
+			$request->get_param( 'reason' ),
+			$request->get_param( 'second_approver_id' )
+		) );
+	}
+
 	public function review_classification( \WP_REST_Request $request ) { return $this->respond( $this->governance->review_classification( $request->get_param( 'object_key' ), $request->get_param( 'term_uuid' ), $request->get_param( 'decision' ), $request->get_param( 'reason' ) ) ); }
 	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
 	public function reports() { return $this->respond( $this->governance->reports() ); }
@@ -167,7 +189,9 @@ final class REST {
 	public function can_audit() { return $this->security->can_audit(); }
 
 	private function respond( $data, $status = 200, $public_cache = false ) {
-		if ( is_wp_error( $data ) ) { return $data; }
+		if ( is_wp_error( $data ) ) {
+			return $data;
+		}
 		$response = new \WP_REST_Response( $data, $status );
 		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
 		$response->header( 'X-Content-Type-Options', 'nosniff' );
