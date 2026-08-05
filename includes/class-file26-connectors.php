@@ -69,14 +69,16 @@ final class Connectors {
 		$now = DB::now();
 		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT owner_file,contract_version,status FROM $table WHERE slug=%s", $manifest['slug'] ), ARRAY_A );
 		if ( $existing && $existing['owner_file'] === $manifest['owner_file'] && $existing['contract_version'] === $manifest['contract_version'] ) {
+			// Governance state survives code reloads; manifests cannot self-promote or undo suspension.
 			$manifest['status'] = $existing['status'];
-		} elseif ( $existing ) {
+		} else {
+			// Every new connector and every owner/contract change starts a fresh governed lifecycle.
 			$manifest['status'] = 'proposed';
 		}
 		$sql = $wpdb->prepare(
 			"INSERT INTO $table (slug,owner_file,contract_version,status,manifest,last_event_version,health_state,last_health,created_at,updated_at)
 			 VALUES (%s,%s,%s,%s,%s,0,'unknown',NULL,%s,%s)
-			 ON DUPLICATE KEY UPDATE owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),updated_at=VALUES(updated_at)",
+			 ON DUPLICATE KEY UPDATE owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),last_event_version=0,health_state='unknown',last_health=NULL,updated_at=VALUES(updated_at)",
 			$manifest['slug'], $manifest['owner_file'], $manifest['contract_version'], $manifest['status'], wp_json_encode( $manifest ), $now, $now
 		);
 		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
