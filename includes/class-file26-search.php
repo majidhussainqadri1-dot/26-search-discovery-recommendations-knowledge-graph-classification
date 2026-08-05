@@ -158,6 +158,8 @@ final class Search {
 			$scan_limit_hit = true;
 		}
 
+		// Active, public, provenance-governed graph edges contribute only a bounded relationship signal.
+		$eligible = $this->apply_graph_relationship_scores( $eligible );
 		$ranked = $this->ranking->sort_and_diversify( $eligible, $query, count( $eligible ) );
 		if ( ! empty( $filters['sort'] ) && in_array( $filters['sort'], array( 'newest', 'oldest', 'authority' ), true ) ) {
 			usort( $ranked, static function ( $a, $b ) use ( $filters ) {
@@ -245,6 +247,46 @@ final class Search {
 		return $output;
 	}
 
+	private function apply_graph_relationship_scores( array $rows ) {
+		global $wpdb;
+		if ( count( $rows ) < 2 ) {
+			return $rows;
+		}
+		$index = array();
+		foreach ( $rows as $position => $row ) {
+			$index[ $row['canonical_key'] ] = $position;
+		}
+		$keys = array_keys( $index );
+		$counts = array_fill_keys( $keys, 0 );
+		$seen = array();
+		$edge_table = DB::table( 'edges' );
+		foreach ( array_chunk( $keys, 200 ) as $chunk ) {
+			$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%s' ) );
+			$args = array_merge( $chunk, $chunk, array( 5000 ) );
+			$sql = $wpdb->prepare(
+				"SELECT edge_uuid,source_key,target_key FROM $edge_table WHERE state='active' AND visibility='public' AND (source_key IN ($placeholders) OR target_key IN ($placeholders)) ORDER BY edge_uuid LIMIT %d",
+				$args
+			);
+			$edges = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			foreach ( (array) $edges as $edge ) {
+				if ( isset( $seen[ $edge['edge_uuid'] ] ) ) {
+					continue;
+				}
+				$seen[ $edge['edge_uuid'] ] = true;
+				if ( isset( $index[ $edge['source_key'] ], $index[ $edge['target_key'] ] ) ) {
+					$counts[ $edge['source_key'] ]++;
+					$counts[ $edge['target_key'] ]++;
+				}
+			}
+		}
+		foreach ( $counts as $key => $count ) {
+			$position = $index[ $key ];
+			$rows[ $position ]['payload']['relationship_score'] = min( 1.0, $count / 5 );
+			$rows[ $position ]['payload']['graph_relation_count'] = min( 1000, (int) $count );
+		}
+		return $rows;
+	}
+
 	private function hydrate_row( array $row ) {
 		$row['payload'] = json_decode( isset( $row['payload'] ) ? $row['payload'] : '', true );
 		$row['payload'] = is_array( $row['payload'] ) ? $row['payload'] : array();
@@ -309,6 +351,9 @@ final class Search {
 		}
 		if ( (float) $row['quality_score'] >= 0.7 ) {
 			$codes[] = 'source_quality';
+		}
+		if ( ! empty( $row['payload']['relationship_score'] ) ) {
+			$codes[] = 'knowledge_graph_relation';
 		}
 		if ( in_array( $row['state'], array( 'corrected', 'retracted' ), true ) ) {
 			$codes[] = 'status_disclosed';
