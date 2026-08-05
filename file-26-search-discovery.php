@@ -33,6 +33,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-taxonomy.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-graph.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-governance.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-doctor-ranking.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-doctor-appeals.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-rest.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-routes.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-admin.php';
@@ -43,6 +44,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
 register_activation_hook( __FILE__, static function () {
 	\Sabri\File26\DB::activate();
 	\Sabri\File26\Roles::install( true );
+	\Sabri\File26\Doctor_Appeals::install_schema();
 } );
 register_deactivation_hook( __FILE__, array( 'Sabri\\File26\\DB', 'deactivate' ) );
 
