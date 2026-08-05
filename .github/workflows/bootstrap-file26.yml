@@ -1,0 +1,26 @@
+name: Bootstrap File 26 Source
+on:
+  push:
+    branches:
+      - codex/file26-complete-v1.0.0
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand reviewed source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-source
+          tar -xzf .bootstrap/file26-source.tar.gz -C /tmp/file26-source
+          rsync -a --delete --exclude='.git/' /tmp/file26-source/ ./
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement File 26 complete search and discovery system'
+          git push origin HEAD:codex/file26-complete-v1.0.0
