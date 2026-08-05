@@ -1,0 +1,30 @@
+name: File 26 QA
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run complete local QA
+        run: bash qa/run-tests.sh
+      - name: Upload deterministic package
+        if: matrix.php == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: file26-wordpress-package
+          path: release/26-sabri-file26-search-discovery-1.0.0.zip
