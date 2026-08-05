@@ -63,34 +63,34 @@ final class Security {
 		return false;
 	}
 
+	/** Configuration authority only; it is not an operational super-capability. */
 	public function can_manage() {
 		return current_user_can( 'manage_sabri_search' );
 	}
 
 	public function can_operate() {
-		return current_user_can( 'operate_sabri_search' ) || $this->can_manage();
+		return current_user_can( 'operate_sabri_search' );
 	}
 
 	public function can_curate() {
-		return current_user_can( 'curate_sabri_taxonomy' ) || $this->can_manage();
+		return current_user_can( 'curate_sabri_taxonomy' );
 	}
 
 	public function can_approve_ranking() {
-		return current_user_can( 'approve_sabri_ranking' ) || $this->can_manage();
+		return current_user_can( 'approve_sabri_ranking' );
 	}
 
 	public function can_audit() {
-		return current_user_can( 'audit_sabri_search' ) || $this->can_manage();
+		return current_user_can( 'audit_sabri_search' );
 	}
 
 	public function require_step_up( $purpose ) {
-		$allowed = (bool) apply_filters(
+		return (bool) apply_filters(
 			'sabri_file26_step_up_authorized',
 			false,
 			get_current_user_id(),
 			(string) $purpose
 		);
-		return $allowed || ( $this->can_manage() && defined( 'WP_CLI' ) && WP_CLI );
 	}
 
 	public function sanitize_query( $query ) {
@@ -138,7 +138,6 @@ final class Security {
 		return $url;
 	}
 
-
 	public function safe_resource_url( $url, $purpose = 'resource' ) {
 		$url = trim( (string) $url );
 		if ( '' === $url ) {
@@ -184,7 +183,7 @@ final class Security {
 			return false;
 		}
 		$payload = json_decode( $decoded, true );
-		return is_array( $payload ) && 1 === (int) $payload['v'] ? $payload : false;
+		return is_array( $payload ) && isset( $payload['v'] ) && 1 === (int) $payload['v'] ? $payload : false;
 	}
 
 	public function rate_limit( $bucket, $limit, $window_seconds ) {
@@ -199,18 +198,10 @@ final class Security {
 			"INSERT INTO $table (bucket_key,window_start,count_value,expires_at)
 			VALUES (%s,%d,1,%s)
 			ON DUPLICATE KEY UPDATE count_value = count_value + 1, expires_at = VALUES(expires_at)",
-			$bucket,
-			$window,
-			$expires
+			$bucket, $window, $expires
 		);
 		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT count_value FROM $table WHERE bucket_key=%s AND window_start=%d",
-				$bucket,
-				$window
-			)
-		);
+		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT count_value FROM $table WHERE bucket_key=%s AND window_start=%d", $bucket, $window ) );
 		return $count <= $limit;
 	}
 
@@ -225,8 +216,7 @@ final class Security {
 
 	public function audit( $action, array $context = array() ) {
 		global $wpdb;
-		$metadata = isset( $context['metadata'] ) && is_array( $context['metadata'] ) ? $context['metadata'] : array();
-		unset( $metadata['query'], $metadata['raw_query'], $metadata['password'], $metadata['token'], $metadata['secret'] );
+		$metadata = isset( $context['metadata'] ) && is_array( $context['metadata'] ) ? $this->sanitize_audit_metadata( $context['metadata'] ) : array();
 		$wpdb->insert(
 			DB::table( 'audit' ),
 			array(
@@ -241,5 +231,28 @@ final class Security {
 			),
 			array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
+	}
+
+	private function sanitize_audit_metadata( array $metadata, $depth = 0 ) {
+		if ( $depth > 3 ) {
+			return array();
+		}
+		$blocked = array( 'query', 'raw_query', 'password', 'token', 'secret', 'otp', 'cnic', 'passport', 'message_body', 'patient_record', 'identity_document' );
+		$clean = array();
+		foreach ( array_slice( $metadata, 0, 100, true ) as $key => $value ) {
+			$key = sanitize_key( (string) $key );
+			if ( ! $key || in_array( $key, $blocked, true ) ) {
+				continue;
+			}
+			if ( is_array( $value ) ) {
+				$clean[ $key ] = $this->sanitize_audit_metadata( $value, $depth + 1 );
+			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+				$clean[ $key ] = $value;
+			} elseif ( is_scalar( $value ) ) {
+				$text = sanitize_text_field( (string) $value );
+				$clean[ $key ] = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 512, 'UTF-8' ) : substr( $text, 0, 512 );
+			}
+		}
+		return $clean;
 	}
 }
