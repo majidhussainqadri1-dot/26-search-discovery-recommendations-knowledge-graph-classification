@@ -20,7 +20,10 @@ final class Connectors {
 		$manifests = apply_filters( 'sabri_file26_connector_manifests', array() );
 		foreach ( (array) $manifests as $manifest ) {
 			if ( is_array( $manifest ) ) {
-				$this->register( $manifest );
+				$result = $this->register( $manifest );
+				if ( is_wp_error( $result ) ) {
+					$this->security->audit( 'connector_registration_failed', array( 'object_type' => 'connector', 'object_key' => isset( $manifest['slug'] ) ? sanitize_key( $manifest['slug'] ) : '', 'reason' => $result->get_error_code() ) );
+				}
 			}
 		}
 		do_action( 'sabri_file26_connectors_ready', $this );
@@ -68,7 +71,11 @@ final class Connectors {
 		foreach ( array( 'list_batch', 'can_view', 'health', 'fetch_object', 'secret', 'token', 'credentials' ) as $private_key ) {
 			unset( $public_manifest[ $private_key ] );
 		}
-		$manifest['status'] = $this->persist( $public_manifest );
+		$persisted = $this->persist( $public_manifest );
+		if ( is_wp_error( $persisted ) ) {
+			return $persisted;
+		}
+		$manifest['status'] = $persisted;
 		$this->registry[ $slug ] = $manifest;
 		return true;
 	}
@@ -78,6 +85,9 @@ final class Connectors {
 		$table = DB::table( 'connectors' );
 		$now = DB::now();
 		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT owner_file,contract_version,status FROM $table WHERE slug=%s", $manifest['slug'] ), ARRAY_A );
+		if ( null === $existing && $wpdb->last_error ) {
+			return new \WP_Error( 'file26_connector_registry_read_failed', 'Connector registry could not be read; registration fails closed.' );
+		}
 		if ( $existing && $existing['owner_file'] === $manifest['owner_file'] && $existing['contract_version'] === $manifest['contract_version'] ) {
 			// Governance state survives code reloads; manifests cannot self-promote or undo suspension.
 			$manifest['status'] = $existing['status'];
@@ -95,7 +105,9 @@ final class Connectors {
 			 owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),updated_at=VALUES(updated_at)",
 			$manifest['slug'], $manifest['owner_file'], $manifest['contract_version'], $manifest['status'], wp_json_encode( $manifest ), $now, $now
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			return new \WP_Error( 'file26_connector_registry_write_failed', 'Connector registry could not be persisted; connector remains unavailable.' );
+		}
 		return $manifest['status'];
 	}
 
@@ -163,6 +175,21 @@ final class Connectors {
 		);
 	}
 
+	private function safe_health_detail( array $detail ) {
+		$clean = array();
+		$allowed = array( 'message', 'code', 'lag_seconds', 'queue_depth', 'last_sequence', 'expected_sequence', 'error_class' );
+		foreach ( $allowed as $key ) {
+			if ( ! array_key_exists( $key, $detail ) ) { continue; }
+			$value = $detail[ $key ];
+			if ( is_int( $value ) || is_float( $value ) || is_bool( $value ) ) {
+				$clean[ $key ] = $value;
+			} elseif ( is_scalar( $value ) ) {
+				$clean[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 200 );
+			}
+		}
+		return $clean;
+	}
+
 	public function health_snapshot() {
 		global $wpdb;
 		$result = array();
@@ -174,7 +201,7 @@ final class Connectors {
 					$value = call_user_func( $manifest['health'] );
 					if ( is_array( $value ) ) {
 						$state = isset( $value['state'] ) ? sanitize_key( $value['state'] ) : 'unknown';
-						$detail = $value;
+						$detail = $this->safe_health_detail( $value );
 					} else {
 						$state = $value ? 'healthy' : 'degraded';
 					}
@@ -183,8 +210,13 @@ final class Connectors {
 					$detail = array( 'error_class' => get_class( $e ) );
 				}
 			}
+			$written = $wpdb->update( DB::table( 'connectors' ), array( 'health_state' => $state, 'last_health' => DB::now(), 'updated_at' => DB::now() ), array( 'slug' => $slug ), array( '%s', '%s', '%s' ), array( '%s' ) );
+			if ( false === $written ) {
+				$state = 'unknown';
+				$detail = array( 'code' => 'health_persistence_failed' );
+				$this->security->audit( 'connector_health_persistence_failed', array( 'object_type' => 'connector', 'object_key' => $slug ) );
+			}
 			$result[ $slug ] = array( 'state' => $state, 'contract_version' => $manifest['contract_version'], 'owner_file' => $manifest['owner_file'], 'status' => $manifest['status'], 'detail' => $detail );
-			$wpdb->update( DB::table( 'connectors' ), array( 'health_state' => $state, 'last_health' => DB::now(), 'updated_at' => DB::now() ), array( 'slug' => $slug ), array( '%s', '%s', '%s' ), array( '%s' ) );
 		}
 		return $result;
 	}
