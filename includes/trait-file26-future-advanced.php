@@ -9,11 +9,11 @@ trait Future_Advanced_Trait {
 		$params = $this->params( $request );
 		$q = $this->query( $params );
 		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A private-vault query is required.', array( 'status' => 400 ) ); }
-		$results = apply_filters( 'sabri_file26_private_vault_provider', null, get_current_user_id(), $q, array( 'limit' => max( 1, min( 30, isset( $params['limit'] ) ? (int) $params['limit'] : 20 ) ), 'step_up_verified' => true, 'public_index_forbidden' => true ) );
-		if ( ! is_array( $results ) ) { return array( 'state' => 'private_owner_provider_unavailable', 'results' => array(), 'public_index_used' => false ); }
+		$provided = apply_filters( 'sabri_file26_private_vault_provider', null, get_current_user_id(), $q, array( 'limit' => max( 1, min( 30, isset( $params['limit'] ) ? (int) $params['limit'] : 20 ) ), 'step_up_verified' => true, 'public_index_forbidden' => true, 'authorization_attestation_required' => true ) );
+		if ( ! is_array( $provided ) || 'owner_authorized' !== ( isset( $provided['authorization_attestation'] ) ? $provided['authorization_attestation'] : '' ) || ! isset( $provided['results'] ) || ! is_array( $provided['results'] ) ) { return array( 'state' => 'private_owner_provider_unavailable_or_not_authorized', 'results' => array(), 'public_index_used' => false ); }
 		$out = array();
-		foreach ( array_slice( $results, 0, 30 ) as $item ) { if ( is_array( $item ) && ! empty( $item['owner'] ) && ! empty( $item['object_id'] ) ) { $out[] = array( 'owner' => sanitize_key( (string) $item['owner'] ), 'object_id' => sanitize_text_field( (string) $item['object_id'] ), 'title' => isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '', 'excerpt' => isset( $item['excerpt'] ) ? wp_strip_all_tags( (string) $item['excerpt'] ) : '', 'open_contract' => isset( $item['open_contract'] ) ? sanitize_text_field( (string) $item['open_contract'] ) : '' ); } }
-		return array( 'state' => 'ok', 'results' => $out, 'public_index_used' => false, 'cache_policy' => 'no-store', 'authorization_owner' => 'native private-data owner' );
+		foreach ( array_slice( $provided['results'], 0, 30 ) as $item ) { if ( is_array( $item ) && ! empty( $item['owner'] ) && ! empty( $item['object_id'] ) ) { $out[] = array( 'owner' => sanitize_key( (string) $item['owner'] ), 'object_id' => sanitize_text_field( (string) $item['object_id'] ), 'title' => isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '', 'excerpt' => isset( $item['excerpt'] ) ? wp_strip_all_tags( (string) $item['excerpt'] ) : '', 'open_contract' => isset( $item['open_contract'] ) ? sanitize_text_field( (string) $item['open_contract'] ) : '' ); } }
+		return array( 'state' => 'ok', 'results' => $out, 'public_index_used' => false, 'cache_policy' => 'no-store', 'authorization_owner' => 'native private-data owner', 'authorization_attestation' => 'owner_authorized' );
 	}
 
 /** F26-FUT-23 — clearly separated, approved external evidence lane. */
@@ -25,16 +25,16 @@ trait Future_Advanced_Trait {
 		if ( '' === $connector || ! apply_filters( 'sabri_file26_external_evidence_connector_approved', false, $connector ) ) {
 			return array( 'state' => 'external_connector_not_approved', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false );
 		}
-		$provided = apply_filters( 'sabri_file26_external_evidence_provider', null, $connector, $q, array( 'limit' => 20, 'must_label_external' => true, 'rights_required' => true, 'provenance_required' => true ) );
-		if ( ! is_array( $provided ) ) { return array( 'state' => 'external_provider_unavailable', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false ); }
+		$provided = apply_filters( 'sabri_file26_external_evidence_provider', null, $connector, $q, array( 'limit' => 20, 'must_label_external' => true, 'rights_required' => true, 'provenance_required' => true, 'eligibility_attestation_required' => true ) );
+		if ( ! is_array( $provided ) || 'approved_external_public' !== ( isset( $provided['eligibility_attestation'] ) ? $provided['eligibility_attestation'] : '' ) || ! isset( $provided['results'] ) || ! is_array( $provided['results'] ) ) { return array( 'state' => 'external_provider_unavailable_or_not_attested', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false ); }
 		$out = array();
-		foreach ( array_slice( $provided, 0, 20 ) as $item ) {
+		foreach ( array_slice( $provided['results'], 0, 20 ) as $item ) {
 			if ( ! is_array( $item ) || empty( $item['source_name'] ) || empty( $item['source_url'] ) || empty( $item['retrieved_at'] ) || empty( $item['rights_status'] ) || empty( $item['provenance'] ) ) { continue; }
 			$url = esc_url_raw( (string) $item['source_url'], array( 'https' ) );
 			if ( '' === $url ) { continue; }
 			$out[] = array( 'external' => true, 'connector' => $connector, 'title' => isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '', 'excerpt' => isset( $item['excerpt'] ) ? wp_strip_all_tags( (string) $item['excerpt'] ) : '', 'source_name' => sanitize_text_field( (string) $item['source_name'] ), 'source_url' => $url, 'retrieved_at' => sanitize_text_field( (string) $item['retrieved_at'] ), 'rights_status' => sanitize_key( (string) $item['rights_status'] ), 'provenance' => sanitize_text_field( (string) $item['provenance'] ) );
 		}
-		return array( 'state' => 'ok', 'connector' => $connector, 'results' => $out, 'merged_into_organic_ranking' => false, 'canonical_platform_truth' => false, 'external_source_label_required' => true );
+		return array( 'state' => 'ok', 'connector' => $connector, 'results' => $out, 'merged_into_organic_ranking' => false, 'canonical_platform_truth' => false, 'external_source_label_required' => true, 'eligibility_attestation' => 'approved_external_public' );
 	}
 
 /** F26-FUT-24 — read-only relevance laboratory; cannot write active production policy. */
