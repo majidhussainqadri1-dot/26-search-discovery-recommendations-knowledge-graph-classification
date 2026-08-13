@@ -9,7 +9,7 @@ $checks = array(
 	"acquire_state_lock( 'saved-query-user:'" => 'saved-query writes and erasure serialize per account',
 	"acquire_state_lock( 'content-gap-registry'" => 'content-gap option mutation is serialized',
 	'Sensitive identifiers are not allowed in saved-query name or filter metadata.' => 'saved-query label cannot leak sensitive identifiers',
-	"$wpdb->usermeta" => 'retention actively scans saved-query usermeta',
+	'$wpdb->usermeta' => 'retention actively scans saved-query usermeta',
 	'Saved-query erasure could not be verified' => 'privacy erasure verifies deletion',
 	'sensitive_queries_revealed' => 'sensitive saved-query reveal is explicit and disclosed',
 );
