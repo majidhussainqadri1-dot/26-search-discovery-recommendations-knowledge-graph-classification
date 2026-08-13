@@ -3,7 +3,7 @@
  * Plugin Name: File 26 — Search, Discovery, Recommendations, Knowledge Graph and Classification
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Federated, privacy-safe search, discovery, recommendations, taxonomy, knowledge graph and content-classification infrastructure for the Sabri Social Homeopathy Platform.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,9 +13,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SABRI_FILE26_VERSION', '1.2.0' );
+define( 'SABRI_FILE26_VERSION', '1.3.0' );
 define( 'SABRI_FILE26_SCHEMA_VERSION', '1.0.0' );
-define( 'SABRI_FILE26_CONTRACT_VERSION', '1.2' );
+define( 'SABRI_FILE26_CONTRACT_VERSION', '1.3' );
 define( 'SABRI_FILE26_FILE', __FILE__ );
 define( 'SABRI_FILE26_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SABRI_FILE26_URL', plugin_dir_url( __FILE__ ) );
@@ -42,6 +42,16 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-privacy.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-health.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-central-plan.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-infra-trait.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-rest-trait.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-utility-trait.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-search-core.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-multimodal.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-knowledge.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-user-data.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-user-discovery.php';
+require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-advanced.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-future-intelligence.php';
 
 register_activation_hook( __FILE__, static function () {
 	\Sabri\File26\DB::activate();
@@ -102,6 +112,12 @@ function sabri_file26_recommendations( array $request = array() ) {
 
 function sabri_file26_ranking_constitution() {
 	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
+}
+
+/** Return the complete Future Search & Knowledge Intelligence Superset 24 registry. */
+function sabri_file26_future_capabilities() {
+	$future = isset( $GLOBALS['sabri_file26_future_intelligence'] ) ? $GLOBALS['sabri_file26_future_intelligence'] : null;
+	return $future instanceof \Sabri\File26\Future_Intelligence ? $future->capability_manifest() : array();
 }
 
 /**
