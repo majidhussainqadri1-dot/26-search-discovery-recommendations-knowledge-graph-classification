@@ -19,6 +19,7 @@ final class Plugin {
 	private $governance;
 	private $doctor_ranking;
 	private $doctor_appeals;
+	private $central_plan;
 	private $rest;
 	private $routes;
 	private $admin;
@@ -47,6 +48,7 @@ final class Plugin {
 		$this->doctor_ranking = new Doctor_Ranking( $this->security );
 		$this->doctor_appeals = new Doctor_Appeals( $this->security );
 		$this->health = new Health( $this->connectors, $this->owner_contracts );
+		$this->central_plan = new Central_Plan( $this->search, $this->normalizer, $this->security, $this->ranking, $this->doctor_ranking, $this->health );
 		$this->rest = new REST(
 			$this->search,
 			$this->recommendations,
@@ -81,6 +83,7 @@ final class Plugin {
 		add_action( 'admin_init', array( $this, 'maybe_upgrade' ) );
 		$this->admin->register();
 		$this->privacy->register();
+		$this->central_plan->boot();
 
 		add_action( DB::CRON_QUEUE, array( $this->indexer, 'process_queue' ) );
 		add_action( DB::CRON_RECONCILE, array( $this->indexer, 'reconcile' ) );
@@ -192,6 +195,14 @@ final class Plugin {
 				'doctor-ranking-appeals',
 				'doctor-ranking-appeal-retention',
 				'required-owner-contract-gate',
+				'advanced-search',
+				'account-owned-saved-queries',
+				'zero-result-recovery',
+				'search-safety-diversion',
+				'index-freshness-evidence',
+				'privacy-minimized-editorial-radar',
+				'public-ranking-constitution',
+				'single-free-tier-rank-parity',
 				'rate-limits',
 				'audit',
 			),
@@ -200,15 +211,22 @@ final class Plugin {
 		return $manifests;
 	}
 
+	public function search_contract( array $request ) {
+		$result = $this->search->run( $request );
+		return $this->central_plan->augment_search_result( $result, $request );
+	}
+
 	public function visual_provider( $providers ) {
 		$providers = is_array( $providers ) ? $providers : array();
 		$providers['file26'] = array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-			'search' => array( $this->search, 'run' ),
+			'search' => array( $this, 'search_contract' ),
 			'discover' => array( $this->recommendations, 'get' ),
 			'doctor_ranking' => array( $this->doctor_ranking, 'directory' ),
-			'result_schema' => 'sabri.file26.result.v1.1',
-			'primary_accent' => '#138A36',
+			'ranking_constitution' => array( $this->central_plan, 'ranking_constitution' ),
+			'result_schema' => 'sabri.file26.result.v1.2',
+			'primary_accent_fallback' => '#087A4E',
+			'visual_owner' => 'File 25',
 		);
 		return $providers;
 	}
@@ -224,4 +242,5 @@ final class Plugin {
 	public function doctor_appeals() { return $this->doctor_appeals; }
 	public function governance() { return $this->governance; }
 	public function health() { return $this->health; }
+	public function central_plan() { return $this->central_plan; }
 }
