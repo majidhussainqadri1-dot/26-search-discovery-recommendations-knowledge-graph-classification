@@ -37,135 +37,141 @@ final class Indexer {
 				$document['state']
 			);
 		}
-		$tombstone_version = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT object_version FROM ' . DB::table( 'tombstones' ) . ' WHERE canonical_key=%s', $document['canonical_key'] ) );
-		if ( $tombstone_version >= (int) $document['object_version'] ) {
-			$this->security->audit( 'index_event_ignored', array( 'object_type' => 'document', 'object_key' => $document['canonical_key'], 'reason' => 'tombstone_precedence', 'metadata' => array( 'tombstone_version' => $tombstone_version, 'incoming_version' => (int) $document['object_version'] ) ) );
-			return true;
-		}
-		$table = DB::table( 'documents' );
-		$existing = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT object_version,source_event_sequence,checksum FROM $table WHERE canonical_key=%s",
-				$document['canonical_key']
-			),
-			ARRAY_A
-		);
-		if ( $existing ) {
-			if ( (int) $document['object_version'] < (int) $existing['object_version'] ) {
-				$this->security->audit(
-					'index_event_ignored',
-					array(
-						'object_type' => 'document',
-						'object_key' => $document['canonical_key'],
-						'reason' => 'stale_object_version',
-					)
-				);
-				return true;
-			}
-			if (
-				(int) $document['object_version'] === (int) $existing['object_version'] &&
-				(int) $document['source_event_sequence'] < (int) $existing['source_event_sequence']
-			) {
-				return true;
-			}
-			if ( hash_equals( (string) $existing['checksum'], $document['checksum'] ) ) {
-				return true;
-			}
+
+		$lock = $this->acquire_object_lock( $document['canonical_key'] );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
 
-		$format = array(
-			'%s','%s','%s','%s','%d','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s',
-			'%s','%s','%s','%s','%f','%f','%f','%s','%s','%s','%s','%d','%s','%s','%s',
-		);
-		$sql = $wpdb->prepare(
-			"INSERT INTO $table
-			(canonical_key,connector_slug,domain_name,object_id,object_version,entity_type,locale,state,visibility,
-			 title,excerpt,normalized_title,normalized_body,canonical_url,author_key,topic_ids,country,location,
-			 availability,quality_score,authority_score,popularity_score,freshness_at,safety_class,payload,
-			 source_event_id,source_event_sequence,checksum,indexed_at,updated_at)
-			VALUES (" . implode( ',', array_fill( 0, 30, '%s' ) ) . ")
-			ON DUPLICATE KEY UPDATE
-				object_version=VALUES(object_version),
-				entity_type=VALUES(entity_type),
-				locale=VALUES(locale),
-				state=VALUES(state),
-				visibility=VALUES(visibility),
-				title=VALUES(title),
-				excerpt=VALUES(excerpt),
-				normalized_title=VALUES(normalized_title),
-				normalized_body=VALUES(normalized_body),
-				canonical_url=VALUES(canonical_url),
-				author_key=VALUES(author_key),
-				topic_ids=VALUES(topic_ids),
-				country=VALUES(country),
-				location=VALUES(location),
-				availability=VALUES(availability),
-				quality_score=VALUES(quality_score),
-				authority_score=VALUES(authority_score),
-				popularity_score=VALUES(popularity_score),
-				freshness_at=VALUES(freshness_at),
-				safety_class=VALUES(safety_class),
-				payload=VALUES(payload),
-				source_event_id=VALUES(source_event_id),
-				source_event_sequence=VALUES(source_event_sequence),
-				checksum=VALUES(checksum),
-				indexed_at=VALUES(indexed_at),
-				updated_at=VALUES(updated_at)",
-			$document['canonical_key'],
-			$document['connector_slug'],
-			$document['domain_name'],
-			$document['object_id'],
-			$document['object_version'],
-			$document['entity_type'],
-			$document['locale'],
-			$document['state'],
-			$document['visibility'],
-			$document['title'],
-			$document['excerpt'],
-			$document['normalized_title'],
-			$document['normalized_body'],
-			$document['canonical_url'],
-			$document['author_key'],
-			$document['topic_ids'],
-			$document['country'],
-			$document['location'],
-			$document['availability'],
-			$document['quality_score'],
-			$document['authority_score'],
-			$document['popularity_score'],
-			$document['freshness_at'],
-			$document['safety_class'],
-			$document['payload'],
-			$document['source_event_id'],
-			$document['source_event_sequence'],
-			$document['checksum'],
-			$document['indexed_at'],
-			$document['updated_at']
-		);
-		$ok = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( false === $ok ) {
-			return new \WP_Error( 'file26_index_write_failed', 'Search document could not be indexed.' );
-		}
-		$wpdb->delete( DB::table( 'tombstones' ), array( 'canonical_key' => $document['canonical_key'] ), array( '%s' ) );
-		$this->upsert_node( $document );
-		$this->security->audit(
-			'search_document_indexed',
-			array(
-				'object_type' => 'document',
-				'object_key' => $document['canonical_key'],
-				'metadata' => array(
-					'connector' => $document['connector_slug'],
-					'entity_type' => $document['entity_type'],
-					'version' => $document['object_version'],
+		try {
+			$tombstone_version = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT object_version FROM ' . DB::table( 'tombstones' ) . ' WHERE canonical_key=%s', $document['canonical_key'] ) );
+			if ( $tombstone_version >= (int) $document['object_version'] ) {
+				$this->security->audit( 'index_event_ignored', array( 'object_type' => 'document', 'object_key' => $document['canonical_key'], 'reason' => 'tombstone_precedence', 'metadata' => array( 'tombstone_version' => $tombstone_version, 'incoming_version' => (int) $document['object_version'] ) ) );
+				return true;
+			}
+			$table = DB::table( 'documents' );
+			$existing = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT object_version,source_event_sequence,checksum FROM $table WHERE canonical_key=%s",
+					$document['canonical_key']
 				),
-			)
-		);
-		do_action( 'sabri_file26_event', 'SearchDocumentIndexed', array(
-			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-			'canonical_key' => $document['canonical_key'],
-			'object_version' => $document['object_version'],
-		) );
-		return $document['canonical_key'];
+				ARRAY_A
+			);
+			if ( $existing ) {
+				if ( (int) $document['object_version'] < (int) $existing['object_version'] ) {
+					$this->security->audit(
+						'index_event_ignored',
+						array(
+							'object_type' => 'document',
+							'object_key' => $document['canonical_key'],
+							'reason' => 'stale_object_version',
+						)
+					);
+					return true;
+				}
+				if (
+					(int) $document['object_version'] === (int) $existing['object_version'] &&
+					(int) $document['source_event_sequence'] < (int) $existing['source_event_sequence']
+				) {
+					return true;
+				}
+				if ( hash_equals( (string) $existing['checksum'], $document['checksum'] ) ) {
+					return true;
+				}
+			}
+
+			$sql = $wpdb->prepare(
+				"INSERT INTO $table
+				(canonical_key,connector_slug,domain_name,object_id,object_version,entity_type,locale,state,visibility,
+				 title,excerpt,normalized_title,normalized_body,canonical_url,author_key,topic_ids,country,location,
+				 availability,quality_score,authority_score,popularity_score,freshness_at,safety_class,payload,
+				 source_event_id,source_event_sequence,checksum,indexed_at,updated_at)
+				VALUES (" . implode( ',', array_fill( 0, 30, '%s' ) ) . ")
+				ON DUPLICATE KEY UPDATE
+					object_version=VALUES(object_version),
+					entity_type=VALUES(entity_type),
+					locale=VALUES(locale),
+					state=VALUES(state),
+					visibility=VALUES(visibility),
+					title=VALUES(title),
+					excerpt=VALUES(excerpt),
+					normalized_title=VALUES(normalized_title),
+					normalized_body=VALUES(normalized_body),
+					canonical_url=VALUES(canonical_url),
+					author_key=VALUES(author_key),
+					topic_ids=VALUES(topic_ids),
+					country=VALUES(country),
+					location=VALUES(location),
+					availability=VALUES(availability),
+					quality_score=VALUES(quality_score),
+					authority_score=VALUES(authority_score),
+					popularity_score=VALUES(popularity_score),
+					freshness_at=VALUES(freshness_at),
+					safety_class=VALUES(safety_class),
+					payload=VALUES(payload),
+					source_event_id=VALUES(source_event_id),
+					source_event_sequence=VALUES(source_event_sequence),
+					checksum=VALUES(checksum),
+					indexed_at=VALUES(indexed_at),
+					updated_at=VALUES(updated_at)",
+				$document['canonical_key'],
+				$document['connector_slug'],
+				$document['domain_name'],
+				$document['object_id'],
+				$document['object_version'],
+				$document['entity_type'],
+				$document['locale'],
+				$document['state'],
+				$document['visibility'],
+				$document['title'],
+				$document['excerpt'],
+				$document['normalized_title'],
+				$document['normalized_body'],
+				$document['canonical_url'],
+				$document['author_key'],
+				$document['topic_ids'],
+				$document['country'],
+				$document['location'],
+				$document['availability'],
+				$document['quality_score'],
+				$document['authority_score'],
+				$document['popularity_score'],
+				$document['freshness_at'],
+				$document['safety_class'],
+				$document['payload'],
+				$document['source_event_id'],
+				$document['source_event_sequence'],
+				$document['checksum'],
+				$document['indexed_at'],
+				$document['updated_at']
+			);
+			$ok = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( false === $ok ) {
+				return new \WP_Error( 'file26_index_write_failed', 'Search document could not be indexed.' );
+			}
+			$wpdb->delete( DB::table( 'tombstones' ), array( 'canonical_key' => $document['canonical_key'] ), array( '%s' ) );
+			$this->upsert_node( $document );
+			$this->security->audit(
+				'search_document_indexed',
+				array(
+					'object_type' => 'document',
+					'object_key' => $document['canonical_key'],
+					'metadata' => array(
+						'connector' => $document['connector_slug'],
+						'entity_type' => $document['entity_type'],
+						'version' => $document['object_version'],
+					),
+				)
+			);
+			do_action( 'sabri_file26_event', 'SearchDocumentIndexed', array(
+				'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+				'canonical_key' => $document['canonical_key'],
+				'object_version' => $document['object_version'],
+			) );
+			return $document['canonical_key'];
+		} finally {
+			$this->release_object_lock( $lock );
+		}
 	}
 
 	private function sanitize_document( array $document ) {
@@ -289,78 +295,87 @@ final class Indexer {
 	public function tombstone( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) {
 		global $wpdb;
 		$key = self::canonical_key( $connector, $domain, $object_id );
-		$table = DB::table( 'tombstones' );
-		$document_table = DB::table( 'documents' );
-		$existing_version = (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT object_version FROM $document_table WHERE canonical_key=%s", $key )
-		);
-		if ( $existing_version > (int) $object_version ) {
-			return true;
+		$lock = $this->acquire_object_lock( $key );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
-		$now = DB::now();
-		$days = max( 90, min( 180, (int) DB::setting( 'tombstone_retention_days', 180 ) ) );
-		$expires = gmdate( 'Y-m-d H:i:s', time() + ( $days * DAY_IN_SECONDS ) );
-		$wpdb->query( 'START TRANSACTION' );
+
 		try {
-			$sql = $wpdb->prepare(
-				"INSERT INTO $table
-					(canonical_key,connector_slug,domain_name,object_id,object_version,reason_class,received_at,purged_at,expires_at)
-				VALUES (%s,%s,%s,%s,%d,%s,%s,%s,%s)
-				ON DUPLICATE KEY UPDATE
-					object_version=GREATEST(object_version,VALUES(object_version)),
-					reason_class=VALUES(reason_class),
-					received_at=VALUES(received_at),
-					purged_at=VALUES(purged_at),
-					expires_at=VALUES(expires_at)",
-				$key,
-				sanitize_key( $connector ),
-				sanitize_key( $domain ),
-				sanitize_text_field( $object_id ),
-				max( 1, (int) $object_version ),
-				sanitize_key( $reason ),
-				$now,
-				$now,
-				$expires
+			$table = DB::table( 'tombstones' );
+			$document_table = DB::table( 'documents' );
+			$existing_version = (int) $wpdb->get_var(
+				$wpdb->prepare( "SELECT object_version FROM $document_table WHERE canonical_key=%s", $key )
 			);
-			if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				throw new \RuntimeException( 'Tombstone write failed.' );
+			if ( $existing_version > (int) $object_version ) {
+				return true;
 			}
-			$wpdb->delete( $document_table, array( 'canonical_key' => $key ), array( '%s' ) );
-			$wpdb->delete( DB::table( 'nodes' ), array( 'node_key' => $key ), array( '%s' ) );
-			$wpdb->delete( DB::table( 'classifications' ), array( 'object_key' => $key ), array( '%s' ) );
-			$wpdb->query(
-				$wpdb->prepare(
-					'DELETE FROM ' . DB::table( 'edges' ) . ' WHERE source_key=%s OR target_key=%s',
+			$now = DB::now();
+			$days = max( 90, min( 180, (int) DB::setting( 'tombstone_retention_days', 180 ) ) );
+			$expires = gmdate( 'Y-m-d H:i:s', time() + ( $days * DAY_IN_SECONDS ) );
+			$wpdb->query( 'START TRANSACTION' );
+			try {
+				$sql = $wpdb->prepare(
+					"INSERT INTO $table
+						(canonical_key,connector_slug,domain_name,object_id,object_version,reason_class,received_at,purged_at,expires_at)
+					VALUES (%s,%s,%s,%s,%d,%s,%s,%s,%s)
+					ON DUPLICATE KEY UPDATE
+						object_version=GREATEST(object_version,VALUES(object_version)),
+						reason_class=IF(VALUES(object_version) >= object_version,VALUES(reason_class),reason_class),
+						received_at=IF(VALUES(object_version) >= object_version,VALUES(received_at),received_at),
+						purged_at=IF(VALUES(object_version) >= object_version,VALUES(purged_at),purged_at),
+						expires_at=IF(VALUES(object_version) >= object_version,VALUES(expires_at),expires_at)",
 					$key,
-					$key
+					sanitize_key( $connector ),
+					sanitize_key( $domain ),
+					sanitize_text_field( $object_id ),
+					max( 1, (int) $object_version ),
+					sanitize_key( $reason ),
+					$now,
+					$now,
+					$expires
+				);
+				if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					throw new \RuntimeException( 'Tombstone write failed.' );
+				}
+				$wpdb->delete( $document_table, array( 'canonical_key' => $key ), array( '%s' ) );
+				$wpdb->delete( DB::table( 'nodes' ), array( 'node_key' => $key ), array( '%s' ) );
+				$wpdb->delete( DB::table( 'classifications' ), array( 'object_key' => $key ), array( '%s' ) );
+				$wpdb->query(
+					$wpdb->prepare(
+						'DELETE FROM ' . DB::table( 'edges' ) . ' WHERE source_key=%s OR target_key=%s',
+						$key,
+						$key
+					)
+				);
+				$wpdb->query( 'COMMIT' );
+			} catch ( \Throwable $e ) {
+				$wpdb->query( 'ROLLBACK' );
+				return new \WP_Error( 'file26_tombstone_failed', 'Document revocation could not be completed.' );
+			}
+			if ( function_exists( 'wp_cache_flush_group' ) ) {
+				wp_cache_flush_group( 'sabri_file26' );
+			} else {
+				wp_cache_flush();
+			}
+			$this->security->audit(
+				'search_document_tombstoned',
+				array(
+					'object_type' => 'document',
+					'object_key' => $key,
+					'reason' => $reason,
+					'metadata' => array( 'version' => (int) $object_version ),
 				)
 			);
-			$wpdb->query( 'COMMIT' );
-		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' );
-			return new \WP_Error( 'file26_tombstone_failed', 'Document revocation could not be completed.' );
+			do_action( 'sabri_file26_event', 'SearchDocumentTombstoned', array(
+				'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+				'canonical_key' => $key,
+				'object_version' => (int) $object_version,
+				'reason_class' => sanitize_key( $reason ),
+			) );
+			return true;
+		} finally {
+			$this->release_object_lock( $lock );
 		}
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'sabri_file26' );
-		} else {
-			wp_cache_flush();
-		}
-		$this->security->audit(
-			'search_document_tombstoned',
-			array(
-				'object_type' => 'document',
-				'object_key' => $key,
-				'reason' => $reason,
-				'metadata' => array( 'version' => (int) $object_version ),
-			)
-		);
-		do_action( 'sabri_file26_event', 'SearchDocumentTombstoned', array(
-			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-			'canonical_key' => $key,
-			'object_version' => (int) $object_version,
-			'reason_class' => sanitize_key( $reason ),
-		) );
-		return true;
 	}
 
 	private function upsert_node( array $document ) {
@@ -499,6 +514,23 @@ final class Indexer {
 			),
 			array( 'id' => (int) $id, 'lock_token' => $token )
 		);
+	}
+
+	private function acquire_object_lock( $canonical_key ) {
+		global $wpdb;
+		$lock_name = 'file26:' . substr( hash( 'sha256', (string) $canonical_key ), 0, 48 );
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock_name ) );
+		if ( '1' !== (string) $acquired ) {
+			return new \WP_Error( 'file26_object_busy', 'Search object is busy; retry safely.' );
+		}
+		return $lock_name;
+	}
+
+	private function release_object_lock( $lock_name ) {
+		global $wpdb;
+		if ( is_string( $lock_name ) && '' !== $lock_name ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
 	}
 
 	public function reconcile() {
