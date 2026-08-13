@@ -174,9 +174,9 @@ final class Security {
 		if ( $same_origin ) {
 			return $same_origin;
 		}
-		$url = esc_url_raw( $url, array( 'http', 'https' ) );
+		$url = esc_url_raw( $url, array( 'https' ) );
 		$parts = $url ? wp_parse_url( $url ) : false;
-		if ( ! $parts || empty( $parts['scheme'] ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
+		if ( ! $parts || empty( $parts['scheme'] ) || 'https' !== strtolower( $parts['scheme'] ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
 			return '';
 		}
 		$host = strtolower( $parts['host'] );
@@ -186,8 +186,18 @@ final class Security {
 		return apply_filters( 'sabri_file26_allowed_external_resource_url', false, $url, sanitize_key( $purpose ), $host ) ? $url : '';
 	}
 
+	private function cursor_subject() {
+		$user_id = get_current_user_id();
+		return $user_id ? 'u:' . (int) $user_id : 'public';
+	}
+
 	public function sign_cursor( array $payload ) {
-		$payload['v'] = 1;
+		$now = time();
+		$ttl = max( 60, min( HOUR_IN_SECONDS, (int) apply_filters( 'sabri_file26_cursor_ttl_seconds', 900, $payload ) ) );
+		$payload['v'] = 2;
+		$payload['iat'] = $now;
+		$payload['exp'] = $now + $ttl;
+		$payload['sub'] = $this->cursor_subject();
 		$json = wp_json_encode( $payload );
 		$body = rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
 		$sig = hash_hmac( 'sha256', $body, wp_salt( 'auth' ) );
@@ -210,7 +220,17 @@ final class Security {
 			return false;
 		}
 		$payload = json_decode( $decoded, true );
-		return is_array( $payload ) && isset( $payload['v'] ) && 1 === (int) $payload['v'] ? $payload : false;
+		if ( ! is_array( $payload ) || ! isset( $payload['v'], $payload['iat'], $payload['exp'], $payload['sub'] ) || 2 !== (int) $payload['v'] ) {
+			return false;
+		}
+		$now = time();
+		if ( (int) $payload['iat'] > $now + 30 || (int) $payload['exp'] < $now || (int) $payload['exp'] <= (int) $payload['iat'] ) {
+			return false;
+		}
+		if ( ! hash_equals( (string) $payload['sub'], $this->cursor_subject() ) ) {
+			return false;
+		}
+		return $payload;
 	}
 
 	public function rate_limit( $bucket, $limit, $window_seconds ) {
@@ -250,7 +270,7 @@ final class Security {
 	public function audit( $action, array $context = array() ) {
 		global $wpdb;
 		$metadata = isset( $context['metadata'] ) && is_array( $context['metadata'] ) ? $this->sanitize_audit_metadata( $context['metadata'] ) : array();
-		$wpdb->insert(
+		return false !== $wpdb->insert(
 			DB::table( 'audit' ),
 			array(
 				'action_name' => sanitize_key( $action ),
