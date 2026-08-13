@@ -4,11 +4,6 @@ namespace Sabri\File26;
 defined( 'ABSPATH' ) || exit;
 
 trait Future_Rest_Trait {
-/**
-	 * The complete Future Superset 24 capability registry.
-	 *
-	 * @return array<string,array<string,mixed>>
-	 */
 	public function capability_manifest() {
 		return array(
 			'conversational-grounded-search' => array( 'id' => 'F26-FUT-01', 'methods' => 'POST', 'auth' => 'public', 'handler' => 'conversational_grounded_search' ),
@@ -40,41 +35,21 @@ trait Future_Rest_Trait {
 
 	public function register_routes() {
 		foreach ( $this->capability_manifest() as $slug => $definition ) {
-			register_rest_route(
-				self::REST_NAMESPACE,
-				'/future/' . $slug,
-				array(
-					'methods' => $definition['methods'],
-					'callback' => array( $this, 'dispatch' ),
-					'permission_callback' => array( $this, 'permission' ),
-				)
-			);
+			register_rest_route( self::REST_NAMESPACE, '/future/' . $slug, array( 'methods' => $definition['methods'], 'callback' => array( $this, 'dispatch' ), 'permission_callback' => array( $this, 'permission' ) ) );
 		}
 	}
 
 	public function permission( \WP_REST_Request $request ) {
 		$slug = $this->route_slug( $request );
 		$manifest = $this->capability_manifest();
-		if ( ! isset( $manifest[ $slug ] ) ) {
-			return new \WP_Error( 'file26_future_unknown_capability', 'Unknown Future Search Intelligence capability.', array( 'status' => 404 ) );
-		}
+		if ( ! isset( $manifest[ $slug ] ) ) { return new \WP_Error( 'file26_future_unknown_capability', 'Unknown Future Search Intelligence capability.', array( 'status' => 404 ) ); }
 		$auth = $manifest[ $slug ]['auth'];
-		if ( 'public' === $auth ) {
-			return true;
-		}
-		if ( ! is_user_logged_in() ) {
-			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
-		}
+		if ( 'public' === $auth ) { return true; }
+		if ( ! is_user_logged_in() ) { return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) ); }
 		$audience = $this->security->audience();
-		if ( empty( $audience['valid'] ) || ! empty( $audience['suspended'] ) ) {
-			return new \WP_Error( 'file26_membership_assertion_invalid', 'Current membership/identity assertions are required.', array( 'status' => 403 ) );
-		}
-		if ( 'member' === $auth ) {
-			return true;
-		}
-		if ( 'audit' === $auth ) {
-			return $this->security->can_audit() ? true : new \WP_Error( 'file26_forbidden', 'Search audit capability is required.', array( 'status' => 403 ) );
-		}
+		if ( empty( $audience['valid'] ) || ! empty( $audience['suspended'] ) ) { return new \WP_Error( 'file26_membership_assertion_invalid', 'Current membership/identity assertions are required.', array( 'status' => 403 ) ); }
+		if ( 'member' === $auth ) { return true; }
+		if ( 'audit' === $auth ) { return $this->security->can_audit() ? true : new \WP_Error( 'file26_forbidden', 'Search audit capability is required.', array( 'status' => 403 ) ); }
 		if ( 'step_up' === $auth ) {
 			$verified = $this->security->require_step_up( 'future_' . $slug ) || (bool) apply_filters( 'sabri_file26_future_step_up_verified', false, $slug, get_current_user_id() );
 			return $verified ? true : new \WP_Error( 'file26_step_up_required', 'Recent step-up verification is required.', array( 'status' => 403 ) );
@@ -85,18 +60,27 @@ trait Future_Rest_Trait {
 	public function dispatch( \WP_REST_Request $request ) {
 		$slug = $this->route_slug( $request );
 		$manifest = $this->capability_manifest();
-		if ( ! isset( $manifest[ $slug ] ) || ! method_exists( $this, $manifest[ $slug ]['handler'] ) ) {
-			return new \WP_Error( 'file26_future_unknown_capability', 'Unknown Future Search Intelligence capability.', array( 'status' => 404 ) );
+		if ( ! isset( $manifest[ $slug ] ) || ! method_exists( $this, $manifest[ $slug ]['handler'] ) ) { return new \WP_Error( 'file26_future_unknown_capability', 'Unknown Future Search Intelligence capability.', array( 'status' => 404 ) ); }
+		if ( ! $this->security->rate_limit( 'future|' . $slug . '|' . $this->security->client_bucket(), 'audit' === $manifest[ $slug ]['auth'] ? 20 : 40, 60 ) ) { return new \WP_Error( 'file26_rate_limited', 'Too many Future Search Intelligence requests. Please retry shortly.', array( 'status' => 429 ) ); }
+
+		$params = $this->params( $request );
+		if ( 'external-evidence' === $slug ) {
+			$q = $this->query( $params );
+			if ( $this->sensitive_query( $q ) || $this->autonomous_clinical_intent( $q ) ) { return new \WP_Error( 'file26_external_query_not_eligible', 'This query is not eligible for an external evidence request.', array( 'status' => 400 ) ); }
+			$consent = isset( $params['external_consent'] ) ? strtolower( trim( (string) $params['external_consent'] ) ) : '';
+			if ( ! in_array( $consent, array( '1', 'true', 'yes', 'consent' ), true ) ) { return new \WP_Error( 'file26_external_consent_required', 'Explicit per-request consent is required for external evidence.', array( 'status' => 400 ) ); }
 		}
-		if ( ! $this->security->rate_limit( 'future|' . $slug . '|' . $this->security->client_bucket(), 'audit' === $manifest[ $slug ]['auth'] ? 20 : 40, 60 ) ) {
-			return new \WP_Error( 'file26_rate_limited', 'Too many Future Search Intelligence requests. Please retry shortly.', array( 'status' => 429 ) );
-		}
+
 		$handler = $manifest[ $slug ]['handler'];
 		$result = $this->{$handler}( $request );
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
+		if ( is_wp_error( $result ) ) { return $result; }
 		if ( is_array( $result ) ) {
+			if ( 'relevance-lab' === $slug && isset( $result['baseline'], $result['candidate'] ) && is_array( $result['baseline'] ) && is_array( $result['candidate'] ) ) {
+				$eligible = array();
+				foreach ( $result['baseline'] as $item ) { if ( is_array( $item ) && ! empty( $item['key'] ) ) { $eligible[ (string) $item['key'] ] = true; } }
+				$result['candidate'] = array_values( array_filter( $result['candidate'], static function ( $item ) use ( $eligible ) { return is_array( $item ) && ! empty( $item['key'] ) && isset( $eligible[ (string) $item['key'] ] ); } ) );
+				$result['candidate_scope'] = 'eligible_baseline_keys_only';
+			}
 			$result['future_contract'] = self::CONTRACT;
 			$result['future_capability_id'] = $manifest[ $slug ]['id'];
 			$result['canonical_owner_boundary'] = 'File 26 returns derivative discovery data only; click/action time must revalidate native owner authority.';
@@ -109,5 +93,4 @@ trait Future_Rest_Trait {
 		$prefix = '/' . self::REST_NAMESPACE . '/future/';
 		return 0 === strpos( $route, $prefix ) ? sanitize_key( substr( $route, strlen( $prefix ) ) ) : '';
 	}
-
 }
