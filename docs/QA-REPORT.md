@@ -1,83 +1,90 @@
 # File 26 v1.2.0 — Repository QA Report
 
 Date: 2026-08-13 (Asia/Karachi)
-Status target: **Coded + Packaged + Automated-QA Green repository candidate; staging/live remain separate**
+Status target: **Coded corrective candidate; Packaged and Automated-QA Green only when proven on the exact final head; staging/live remain separate**
 
 ## Governing baseline
 
-- Newly supplied Three Central Plans Consolidated Governing Master Plan 2026.
-- Newly supplied File 26 Four-Round Reviewed and Corrected Master Plan.
-- Existing File26-FR-001 through File26-FR-036 requirements.
-- New central-plan requirements CV-164 through CV-175 and F26-CEN-01/F26-CEN-02, with CV-170/CV-171 implemented strictly as consumer/owner-boundary contracts rather than duplicate source-of-truth systems.
+- Current Three Central Plans Consolidated Governing Master Plan 2026.
+- Current File 26 Four-Round Reviewed and Corrected Master Plan.
+- File26-FR-001 through File26-FR-036 requirements and current central-plan completion contracts.
+- Independent 20-round corrective review ledger: `docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md`.
 
 ## Runtime/source identity
 
 - Plugin/runtime version: `1.2.0`
 - Schema version: `1.0.0`
 - Contract version: `1.2`
-- Corrective branch: `codex/file-26-new-governing-plans-complete-1.2.0`
-- Draft PR: `#4`
+- Corrective branch: `review/file26-next-20-round-2026-08-13`
+- Frozen starting main SHA: `e5f0dc21db57889b9df9f724edfd5652fc1675fb`
 
-The schema stays at 1.0.0 because this completion adds no new File 26 SQL table; the new saved-query and explicit-gap records use governed WordPress user-meta/options storage and existing aggregate-metrics tables.
+The software version remains 1.2.0 because this cycle is a corrective hardening review of that candidate, not a claim that a new version has been deployed. Runtime schema migration is now serialized and verified before File 26 routes/connectors/search are exposed.
 
-## Two required post-coding review/fix cycles
+## Independent 20-round corrective result
 
-### Round 1
+Defect rounds: **1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20**.
 
-A complete review was finished before corrections began. It found and corrected public doctor-ranking internal-reference leakage, advanced pagination defects, source/connector conflation, unsafe access-filter fallback, plaintext sensitive saved-query storage, stale emergency-resource verification, incomplete freshness/integrity evidence, hardcoded retention and missing governed zero-result help destinations.
+Clean rounds: **4, 5, 14**.
 
-Evidence record: `docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md`.
+Total: **20/20 rounds; 17 defect rounds and 3 clean rounds**.
 
-### Fresh adversarial Round 2
-
-The second independent review targeted resource exhaustion, deep cursors, stale/cached authorization, sensitive secondary metadata, protected-query decryption, exact-field semantics and self-harm/violence safety paths. It corrected bounded-cursor self-loop risk, missing explicit cache/no-store semantics, sensitive saved-filter persistence, missing decryption step-up, weak field-scoped exact matching, missing advanced-search abuse budget and incomplete self-harm/abuse-support classification.
-
-Evidence record: `docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md`.
+The corrections cover index/tombstone concurrency, connector checkpoint durability, sensitive-query caching, deterministic ordering, personalization revocation, taxonomy merge/split governance, graph activation/visibility, REST caching, File 00 assertion binding, privacy export/erasure, real two-person ranking approval, classification CAS/domain review, doctor ranking/appeals concurrency, topic redirect safety, migration-before-runtime, admin operation truth, stale-worker recovery, deletion reconciliation, health drift and autocomplete race/accessibility.
 
 ## Automated QA gate
 
-The workflow runs the following full gate on both PHP 7.4 and PHP 8.3:
+The workflow runs the complete gate on PHP 7.4 and PHP 8.3:
 
 1. every PHP file syntax check;
 2. JavaScript syntax check;
 3. pure normalization/ranking behavioral assertions;
-4. architecture/policy/File26-FR-001–036 traceability assertions;
+4. architecture/policy/File26-FR traceability assertions;
 5. corrective architecture/security/owner-contract assertions;
-6. new central-governing-plan assertions;
-7. dangerous execution primitive scan;
-8. forbidden money/favoritism ranking and sensitive foreign-table scans;
-9. required release-evidence files;
-10. runtime/readme/contract/brand parity;
-11. deterministic byte-identical double package build;
-12. ZIP single-root/path-safety/integrity check;
-13. clean-extract test rerun and source/package manifest parity.
+6. current central-governing-plan assertions;
+7. every `tests/review-round-*.php` regression from the 20-round cycle;
+8. dangerous execution primitive scan;
+9. forbidden money/favoritism ranking and sensitive foreign-table scans;
+10. required release-evidence files, including the 20-round ledger;
+11. runtime/readme/contract/brand parity;
+12. deterministic byte-identical double package build;
+13. ZIP single-root/path-safety/integrity check;
+14. clean-extract rerun of all core and review-round tests plus source/package manifest parity.
 
-A pre-report exact branch-head run on `22c9e4da758cf71514c21987a174b52f36f79773` completed successfully in GitHub Actions run `31674972548`: PHP 7.4 and 8.3 both passed; 22 behavioral, 75 architecture/traceability, 48 corrective and 59 new central-plan assertions passed per PHP version, with all package/security gates green. Because this report itself is a repository change, the release decision must use the subsequent final-head CI run rather than treating that pre-report SHA/package checksum as the immutable final artifact.
+Official GitHub Actions are pinned by immutable SHA; the current checkout, setup-node and upload-artifact releases used here run on Node 24. The exact final-head GitHub Actions run—not an older run or this document alone—determines the `Automated-QA Green` status.
 
-## Security / privacy evidence carried by v1.2
+## Corrective security / privacy / resilience evidence
 
+- per-object serialization around index/tombstone lifecycle;
+- durable connector event/health checkpoints across same-contract reloads;
 - active production connector lane only for public/member retrieval;
 - owner/state/visibility revalidation and tombstones;
 - no payment/donation/follower/Founder favoritism ranking inputs;
-- no sponsored/paid organic search path;
-- explicit recommendation consent and reset/opt-out controls;
-- sensitive saved queries fail closed without an approved encryption provider;
-- sensitive saved-query metadata is rejected and decryption requires fresh step-up;
-- raw sensitive query history is unavailable to editorial radar;
-- emergency-resource details require current owner verification and safe destination validation;
-- unknown freshness stays unknown and never broadens access;
-- File 20 remains shell owner, File 25 visual owner, File 15 trend owner, and canonical domain modules retain write authority.
+- sensitive queries excluded from shared object and public HTTP caching;
+- explicit recommendation consent, reset/opt-out and signal purge;
+- authenticated subject cannot be replaced by membership-adapter assertions;
+- privileged operations require current valid File 00 assertions plus native capability;
+- taxonomy merge/split/deprecation has preview, owner gate, CAS/lock, audit, rollback mapping and reindex signal;
+- graph edges require governed activation and final visibility recheck;
+- high-risk ranking activation/rollback needs a separately recorded distinct second approver;
+- high-impact classification approval has expected-version and domain-review controls;
+- privacy export is paged and erasure is transactional;
+- doctor ranking recompute and open-appeal creation are serialized;
+- stale workers are recoverable and health exposes stale worker, cron and schema drift;
+- schema migration is serialized and verified before runtime exposure;
+- autocomplete rejects stale network responses and implements keyboard/ARIA listbox interaction;
+- File 20 remains shell owner, File 25 visual owner, and canonical domain modules retain write authority.
 
 ## Honest completion status
 
 | Status | Repository result |
 |---|---|
-| Specified | Complete against the two newly supplied governing plans |
-| Coded | Complete in the v1.2 corrective candidate scope |
-| Packaged | Deterministic package generated by CI when the full gate passes |
-| Automated-QA Green | Determined only from the exact final branch-head run after this report commit |
+| Specified | Governed by the current central and File 26 plans |
+| Coded | Corrective v1.2.0 repository candidate after the 20-round cycle |
+| Packaged | Only when the exact final-head deterministic package is produced and checksum verified |
+| Automated-QA Green | Only when the exact final-head GitHub Actions run is green on the full matrix |
 | Hostinger staging accepted | Pending / not claimed |
 | Live deployed | Pending / not claimed |
 | Operational | Pending / not claimed |
 
 No live/production claim is made by this report. Exact deployed code, deployed database/schema version and migration state must be verified independently before any live diagnosis or “resolved” claim.
+
+Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
