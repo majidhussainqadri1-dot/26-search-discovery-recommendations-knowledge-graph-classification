@@ -3,7 +3,7 @@
  * Plugin Name: File 26 — Search, Discovery, Recommendations, Knowledge Graph and Classification
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Federated, privacy-safe search, discovery, recommendations, taxonomy, knowledge graph and content-classification infrastructure for the Sabri Social Homeopathy Platform.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,9 +13,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SABRI_FILE26_VERSION', '1.1.0' );
+define( 'SABRI_FILE26_VERSION', '1.2.0' );
 define( 'SABRI_FILE26_SCHEMA_VERSION', '1.0.0' );
-define( 'SABRI_FILE26_CONTRACT_VERSION', '1.1' );
+define( 'SABRI_FILE26_CONTRACT_VERSION', '1.2' );
 define( 'SABRI_FILE26_FILE', __FILE__ );
 define( 'SABRI_FILE26_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SABRI_FILE26_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +40,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-routes.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-admin.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-privacy.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-health.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-central-plan.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
 
 register_activation_hook( __FILE__, static function () {
@@ -90,11 +91,17 @@ function sabri_file26_tombstone_document( $connector, $domain, $object_id, $obje
 }
 
 function sabri_file26_search( array $request ) {
-	return \Sabri\File26\Plugin::instance()->search()->run( $request );
+	$plugin = \Sabri\File26\Plugin::instance();
+	$result = $plugin->search()->run( $request );
+	return $plugin->central_plan()->augment_search_result( $result, $request );
 }
 
 function sabri_file26_recommendations( array $request = array() ) {
 	return \Sabri\File26\Plugin::instance()->recommendations()->get( $request );
+}
+
+function sabri_file26_ranking_constitution() {
+	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
 }
 
 /**
