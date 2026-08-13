@@ -23,8 +23,11 @@ trait Future_Knowledge_Trait {
 			if ( ! is_array( $filtered ) || 'owner_revalidated_for_request' !== ( isset( $filtered['eligibility_attestation'] ) ? $filtered['eligibility_attestation'] : '' ) || ! isset( $filtered['results'] ) || ! is_array( $filtered['results'] ) ) {
 				return array( 'state' => 'owner_research_constraint_provider_unavailable', 'query' => $q, 'filters' => $filters, 'results' => array(), 'reproducibility' => array( 'state' => 'not_evaluated' ) );
 			}
-			$results = $this->safe_results( $filtered['results'] );
-			$constraint_state = 'owner_revalidated_special_constraints';
+			$eligible = array();
+			foreach ( $results as $eligible_item ) { if ( is_array( $eligible_item ) && ! empty( $eligible_item['key'] ) ) { $eligible[ (string) $eligible_item['key'] ] = true; } }
+			$provider_results = $this->safe_results( $filtered['results'] );
+			$results = array_values( array_filter( $provider_results, static function ( $item ) use ( $eligible ) { return is_array( $item ) && ! empty( $item['key'] ) && isset( $eligible[ (string) $item['key'] ] ); } ) );
+			$constraint_state = 'owner_revalidated_special_constraints_eligible_keys_only';
 		}
 		$snapshot = apply_filters( 'sabri_file26_research_snapshot_provider', null, array( 'query' => $q, 'filters' => $filters, 'policy_version' => isset( $result['policy_version'] ) ? $result['policy_version'] : '' ) );
 		$reproducibility = array( 'state' => 'snapshot_provider_unavailable', 'current_results_not_claimed_historical' => true );
@@ -38,22 +41,16 @@ trait Future_Knowledge_Trait {
 	public function result_clusters( \WP_REST_Request $request ) {
 		$params = $this->params( $request );
 		$q = $this->query( $params );
+		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
 		$result = $this->base_search( $q, array( 'limit' => 30, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		$by = isset( $params['cluster_by'] ) ? sanitize_key( (string) $params['cluster_by'] ) : 'entity_type';
 		if ( ! in_array( $by, array( 'entity_type', 'domain', 'topic' ), true ) ) { $by = 'entity_type'; }
 		$clusters = array();
 		foreach ( (array) $result['results'] as $item ) {
-			if ( 'topic' === $by ) {
-				$keys = ! empty( $item['topics'] ) ? array_slice( (array) $item['topics'], 0, 3 ) : array( 'other' );
-			} else {
-				$keys = array( ! empty( $item[ $by ] ) ? sanitize_key( (string) $item[ $by ] ) : 'other' );
-			}
-			foreach ( $keys as $cluster_key ) {
-				$cluster_key = sanitize_key( (string) $cluster_key ) ?: 'other';
-				if ( ! isset( $clusters[ $cluster_key ] ) ) { $clusters[ $cluster_key ] = array(); }
-				if ( count( $clusters[ $cluster_key ] ) < 12 ) { $clusters[ $cluster_key ][] = $this->safe_result( $item ); }
-			}
+			if ( 'topic' === $by ) { $keys = ! empty( $item['topics'] ) ? array_slice( (array) $item['topics'], 0, 3 ) : array( 'other' ); }
+			else { $keys = array( ! empty( $item[ $by ] ) ? sanitize_key( (string) $item[ $by ] ) : 'other' ); }
+			foreach ( $keys as $cluster_key ) { $cluster_key = sanitize_key( (string) $cluster_key ) ?: 'other'; if ( ! isset( $clusters[ $cluster_key ] ) ) { $clusters[ $cluster_key ] = array(); } if ( count( $clusters[ $cluster_key ] ) < 12 ) { $clusters[ $cluster_key ][] = $this->safe_result( $item ); } }
 		}
 		return array( 'query' => $q, 'cluster_by' => $by, 'clusters' => $clusters );
 	}
@@ -66,12 +63,14 @@ trait Future_Knowledge_Trait {
 		if ( '' === $from || '' === $to ) { return new \WP_Error( 'file26_graph_endpoints_required', 'Both graph endpoints are required.', array( 'status' => 400 ) ); }
 		$path = apply_filters( 'sabri_file26_graph_path_provider', null, $from, $to, array( 'max_depth' => 6, 'public_only' => true, 'provenance_required' => true, 'eligibility_attestation_required' => true ) );
 		if ( ! is_array( $path ) || 'owner_revalidated_for_request' !== ( isset( $path['eligibility_attestation'] ) ? $path['eligibility_attestation'] : '' ) || empty( $path['nodes'] ) || empty( $path['edges'] ) ) { return array( 'state' => 'no_verified_path_or_provider_unavailable', 'from' => $from, 'to' => $to, 'nodes' => array(), 'edges' => array() ); }
-		$nodes = array();
-		foreach ( array_slice( (array) $path['nodes'], 0, 40 ) as $node ) { if ( is_array( $node ) ) { $nodes[] = $this->sanitize_graph_node( $node ); } }
+		$nodes = array(); $node_ids = array();
+		foreach ( array_slice( (array) $path['nodes'], 0, 40 ) as $node ) { if ( is_array( $node ) ) { $clean = $this->sanitize_graph_node( $node ); if ( '' !== $clean['id'] ) { $nodes[] = $clean; $node_ids[ $clean['id'] ] = true; } } }
 		$edges = array();
 		foreach ( array_slice( (array) $path['edges'], 0, 60 ) as $edge ) {
 			if ( ! is_array( $edge ) || empty( $edge['provenance'] ) ) { return new \WP_Error( 'file26_graph_provenance_required', 'Every graph edge must carry provenance.', array( 'status' => 409 ) ); }
-			$edges[] = $this->sanitize_graph_edge( $edge );
+			$clean = $this->sanitize_graph_edge( $edge );
+			if ( '' === $clean['from'] || '' === $clean['to'] || ! isset( $node_ids[ $clean['from'] ], $node_ids[ $clean['to'] ] ) ) { return new \WP_Error( 'file26_graph_referential_integrity', 'Every graph edge must reference returned graph nodes.', array( 'status' => 409 ) ); }
+			$edges[] = $clean;
 		}
 		return array( 'state' => 'ok', 'from' => $from, 'to' => $to, 'nodes' => $nodes, 'edges' => $edges, 'inferred_sensitive_relationships' => false );
 	}
@@ -86,7 +85,9 @@ trait Future_Knowledge_Trait {
 		$relations = array();
 		foreach ( array_slice( isset( $map['relations'] ) ? (array) $map['relations'] : array(), 0, 100 ) as $relation ) {
 			if ( ! is_array( $relation ) || empty( $relation['type'] ) || empty( $relation['provenance'] ) || ! in_array( $relation['type'], array( 'supports', 'discusses', 'contradicts', 'corrects', 'retracts' ), true ) ) { continue; }
-			$relations[] = $this->sanitize_evidence_relation( $relation );
+			$clean = $this->sanitize_evidence_relation( $relation );
+			if ( 64 !== strlen( $clean['source_key'] ) || '' === $clean['owner'] || '' === $clean['provenance'] ) { continue; }
+			$relations[] = $clean;
 		}
 		return array( 'state' => 'ok', 'claim' => $claim, 'relations' => $relations, 'hidden_inference_presented_as_fact' => false );
 	}
@@ -99,9 +100,7 @@ trait Future_Knowledge_Trait {
 		$result = $this->base_search( '"' . str_replace( '"', '', $q ) . '"', array( 'limit' => 20 ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		$candidates = array();
-		foreach ( $this->safe_results( (array) $result['results'] ) as $item ) {
-			$candidates[] = array( 'key' => isset( $item['key'] ) ? $item['key'] : '', 'title' => isset( $item['title'] ) ? $item['title'] : '', 'entity_type' => isset( $item['entity_type'] ) ? $item['entity_type'] : '', 'domain' => isset( $item['domain'] ) ? $item['domain'] : '', 'source' => isset( $item['source'] ) ? $item['source'] : '', 'url' => isset( $item['url'] ) ? $item['url'] : ( isset( $item['canonical_url'] ) ? $item['canonical_url'] : '' ) );
-		}
+		foreach ( $this->safe_results( (array) $result['results'] ) as $item ) { $candidates[] = array( 'key' => isset( $item['key'] ) ? $item['key'] : '', 'title' => isset( $item['title'] ) ? $item['title'] : '', 'entity_type' => isset( $item['entity_type'] ) ? $item['entity_type'] : '', 'domain' => isset( $item['domain'] ) ? $item['domain'] : '', 'source' => isset( $item['source'] ) ? $item['source'] : '', 'url' => isset( $item['url'] ) ? $item['url'] : ( isset( $item['canonical_url'] ) ? $item['canonical_url'] : '' ) ); }
 		return array( 'query' => $q, 'ambiguous' => count( $candidates ) > 1, 'candidates' => $candidates, 'auto_merge' => false );
 	}
 
@@ -111,9 +110,10 @@ trait Future_Knowledge_Trait {
 		$q = $this->query( $params );
 		$as_of = isset( $params['as_of'] ) ? sanitize_text_field( (string) $params['as_of'] ) : '';
 		if ( '' === $q || ! preg_match( '/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?$/', $as_of ) ) { return new \WP_Error( 'file26_historical_query_invalid', 'A query and ISO as_of date/time are required.', array( 'status' => 400 ) ); }
+		$date_part = substr( $as_of, 0, 10 ); $date_bits = array_map( 'intval', explode( '-', $date_part ) );
+		if ( 3 !== count( $date_bits ) || ! checkdate( $date_bits[1], $date_bits[2], $date_bits[0] ) ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date is invalid.', array( 'status' => 400 ) ); }
 		$snapshot = apply_filters( 'sabri_file26_historical_snapshot_search', null, $q, $as_of, array_merge( $params, array( 'eligibility_attestation_required' => true ) ) );
 		if ( ! is_array( $snapshot ) || empty( $snapshot['snapshot_id'] ) || 'owner_revalidated_for_request' !== ( isset( $snapshot['eligibility_attestation'] ) ? $snapshot['eligibility_attestation'] : '' ) ) { return array( 'state' => 'historical_snapshot_unavailable', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
 		return array( 'state' => 'ok', 'query' => $q, 'as_of' => $as_of, 'snapshot_id' => sanitize_text_field( (string) $snapshot['snapshot_id'] ), 'results' => $this->safe_results( isset( $snapshot['results'] ) ? (array) $snapshot['results'] : array() ), 'current_results_substituted' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
-
 }
