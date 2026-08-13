@@ -50,12 +50,17 @@ trait Future_User_Discovery_Trait {
 		$availability_request = array();
 		foreach ( array( 'availability', 'timezone', 'mode' ) as $key ) { if ( ! empty( $params[ $key ] ) ) { $availability_request[ $key ] = sanitize_text_field( (string) $params[ $key ] ); } }
 		if ( isset( $params['radius_km'] ) ) { $availability_request['radius_km'] = max( 1, min( 500, (int) $params['radius_km'] ) ); }
-		$owner_constraints = apply_filters( 'sabri_file26_geo_availability_constraints', null, $entity_type, $filters, $availability_request, $params );
-		$owner_available = is_array( $owner_constraints );
-		if ( $owner_available ) { $filters = array_merge( $filters, $this->sanitize_filters( $owner_constraints ) ); }
+		$owner_constraints = apply_filters( 'sabri_file26_geo_availability_constraints', null, $entity_type, $filters, $availability_request, array( 'authorization_attestation_required' => true ) );
+		$owner_available = is_array( $owner_constraints ) && 'owner_revalidated_for_request' === ( isset( $owner_constraints['authorization_attestation'] ) ? $owner_constraints['authorization_attestation'] : '' ) && isset( $owner_constraints['filters'] ) && is_array( $owner_constraints['filters'] );
+		if ( $owner_available ) {
+			$owner_filters = $this->sanitize_filters( $owner_constraints['filters'] );
+			unset( $owner_filters['entity_type'] );
+			$filters = array_merge( $filters, $owner_filters );
+			$filters['entity_type'] = $entity_type;
+		}
 		$result = $this->base_search( $this->query( $params ), array( 'filters' => $filters, 'limit' => 30 ) );
 		if ( is_wp_error( $result ) ) { return $result; }
-		return array( 'state' => $availability_request && ! $owner_available ? 'owner_availability_provider_unavailable' : 'ok', 'filters' => $filters, 'availability_request' => $availability_request, 'availability_provider_available' => $owner_available, 'availability_claims_suppressed' => $availability_request && ! $owner_available, 'results' => $this->safe_results( (array) $result['results'] ), 'doctor_truth_owner' => 'File 07', 'clinic_and_appointment_truth_owner' => 'File 08', 'availability_truth_computed_by_file26' => false, 'click_time_owner_revalidation_required' => true );
+		return array( 'state' => $availability_request && ! $owner_available ? 'owner_availability_provider_unavailable_or_not_authorized' : 'ok', 'filters' => $filters, 'availability_request' => $availability_request, 'availability_provider_available' => $owner_available, 'availability_claims_suppressed' => $availability_request && ! $owner_available, 'results' => $this->safe_results( (array) $result['results'] ), 'doctor_truth_owner' => 'File 07', 'clinic_and_appointment_truth_owner' => 'File 08', 'availability_truth_computed_by_file26' => false, 'click_time_owner_revalidation_required' => true );
 	}
 
 /** F26-FUT-21 — user-facing search modes plus bounded smart-command parsing. */
