@@ -34,6 +34,7 @@ final class Central_Plan {
 	public function boot() {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ), 30 );
 		add_filter( 'rest_post_dispatch', array( $this, 'augment_rest_response' ), 30, 3 );
+		add_filter( 'rest_post_dispatch', array( $this, 'secure_route_response' ), 40, 3 );
 		add_filter( 'wp_privacy_personal_data_exporters', array( $this, 'register_exporter' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( $this, 'register_eraser' ) );
 		add_action( DB::CRON_RETENTION, array( $this, 'retention' ), 40 );
@@ -73,6 +74,9 @@ final class Central_Plan {
 
 	/** CV-167: exact phrase/author/source/date/fields/excludes and saved-query-compatible search. */
 	public function advanced_search( \WP_REST_Request $request ) {
+		if ( ! $this->security->rate_limit( 'advanced-search|' . $this->security->client_bucket(), 12, 60 ) ) {
+			return new \WP_Error( 'file26_rate_limited', 'Too many advanced-search requests. Please retry shortly.', array( 'status' => 429 ) );
+		}
 		$q = $this->security->sanitize_query( (string) $request->get_param( 'q' ) );
 		$exact = $this->security->sanitize_query( (string) $request->get_param( 'exact' ) );
 		if ( $exact ) {
@@ -92,6 +96,7 @@ final class Central_Plan {
 		}
 		$source = substr( sanitize_text_field( (string) $request->get_param( 'source' ) ), 0, 191 );
 		$extended = array(
+			'exact' => $exact,
 			'fields' => $this->list_param( $request->get_param( 'fields' ), 8 ),
 			'excludes' => $this->list_param( $request->get_param( 'excludes' ), 12 ),
 			'verification' => sanitize_key( (string) $request->get_param( 'verification' ) ),
@@ -110,6 +115,9 @@ final class Central_Plan {
 			$offset = max( 0, min( 10000, (int) $verified['ao'] ) );
 		}
 
+		$default_pages = max( 2, min( 20, (int) apply_filters( 'sabri_file26_advanced_scan_pages', 10 ) ) );
+		$required_pages = (int) ceil( ( $offset + $limit ) / 30 ) + 2;
+		$max_pages = min( 20, max( $default_pages, $required_pages ) );
 		$base_cursor = '';
 		$collected = array();
 		$seen = array();
@@ -117,7 +125,6 @@ final class Central_Plan {
 		$partial = false;
 		$partial_domains = array();
 		$base_has_more = false;
-		$max_pages = max( 2, min( 20, (int) apply_filters( 'sabri_file26_advanced_scan_pages', 10 ) ) );
 		do {
 			$base = $this->search->run(
 				array(
@@ -152,9 +159,13 @@ final class Central_Plan {
 		$page_results = array_slice( $collected, $offset, $limit );
 		$has_more_collected = $total_collected > ( $offset + $limit );
 		$bounded_more = $base_has_more && $pages >= $max_pages;
+		$continuation_limited = $bounded_more && ! $page_results && $offset >= $total_collected;
 		$next_cursor = null;
-		if ( $has_more_collected || $bounded_more ) {
-			$next_cursor = $this->security->sign_cursor( array( 'ao' => $offset + count( $page_results ), 'h' => $context_hash ) );
+		if ( $has_more_collected || ( $bounded_more && ! $continuation_limited && $page_results ) ) {
+			$next_offset = $offset + count( $page_results );
+			if ( $next_offset > $offset ) {
+				$next_cursor = $this->security->sign_cursor( array( 'ao' => $next_offset, 'h' => $context_hash ) );
+			}
 		}
 		$response = array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
@@ -176,6 +187,7 @@ final class Central_Plan {
 				'connector' => $connector,
 				'bounded_source_pages_scanned' => $pages,
 				'bounded_eligible_matches' => $total_collected,
+				'continuation_limited' => $continuation_limited,
 			),
 		);
 		return rest_ensure_response( $this->augment_search_result( $response, array( 'q' => $q, 'locale' => $request->get_param( 'locale' ) ) ) );
@@ -228,6 +240,9 @@ final class Central_Plan {
 				}
 			}
 			$field_haystack = $this->normalizer->normalize( implode( ' ', $field_text ) );
+			if ( $extended['exact'] && false === $this->strpos( $field_haystack, $this->normalizer->normalize( $extended['exact'] ) ) ) {
+				return false;
+			}
 			$matched = false;
 			foreach ( $this->normalizer->tokens( $query ) as $token ) {
 				if ( false !== $this->strpos( $field_haystack, $token ) ) {
@@ -303,6 +318,11 @@ final class Central_Plan {
 		if ( '' === $q ) {
 			return new \WP_Error( 'file26_saved_query_empty', 'A query is required.', array( 'status' => 400 ) );
 		}
+		$clean_filters = $this->sanitize_saved_filters( isset( $params['filters'] ) ? $params['filters'] : array() );
+		$clean_advanced = $this->sanitize_advanced_saved( isset( $params['advanced'] ) ? $params['advanced'] : array() );
+		if ( $this->security->contains_sensitive_query( wp_json_encode( array( $clean_filters, $clean_advanced ) ) ) ) {
+			return new \WP_Error( 'file26_sensitive_saved_query_metadata', 'Sensitive identifiers are not allowed in saved-query filter metadata.', array( 'status' => 400 ) );
+		}
 		$sensitive = $this->security->contains_sensitive_query( $q );
 		$envelope = null;
 		if ( $sensitive ) {
@@ -327,8 +347,8 @@ final class Central_Plan {
 			'name' => substr( sanitize_text_field( isset( $params['name'] ) ? $params['name'] : ( $sensitive ? 'Protected saved query' : $q ) ), 0, 120 ),
 			'q' => $sensitive ? '' : $q,
 			'q_encrypted' => $sensitive ? $this->sanitize_envelope( $envelope ) : null,
-			'filters' => $this->sanitize_saved_filters( isset( $params['filters'] ) ? $params['filters'] : array() ),
-			'advanced' => $this->sanitize_advanced_saved( isset( $params['advanced'] ) ? $params['advanced'] : array() ),
+			'filters' => $clean_filters,
+			'advanced' => $clean_advanced,
 			'sensitive' => (bool) $sensitive,
 			'used_for_personalization' => false,
 			'version' => $existing ? (int) $existing['version'] + 1 : 1,
@@ -355,15 +375,18 @@ final class Central_Plan {
 		);
 	}
 
-	private function public_saved_record( array $record, $user_id ) {
+	private function public_saved_record( array $record, $user_id, $allow_sensitive_decrypt = null ) {
 		$out = $record;
 		if ( ! empty( $record['sensitive'] ) ) {
 			$out['q'] = '';
 			$out['query_protected'] = true;
 			unset( $out['q_encrypted'] );
-			$decrypted = apply_filters( 'sabri_file26_decrypt_saved_query', null, isset( $record['q_encrypted'] ) ? $record['q_encrypted'] : array(), (int) $user_id );
-			if ( is_string( $decrypted ) && '' !== $decrypted ) {
-				$out['q'] = $this->security->sanitize_query( $decrypted );
+			$allow = null === $allow_sensitive_decrypt ? $this->security->require_step_up( 'saved_query_decrypt' ) : (bool) $allow_sensitive_decrypt;
+			if ( $allow ) {
+				$decrypted = apply_filters( 'sabri_file26_decrypt_saved_query', null, isset( $record['q_encrypted'] ) ? $record['q_encrypted'] : array(), (int) $user_id );
+				if ( is_string( $decrypted ) && '' !== $decrypted ) {
+					$out['q'] = $this->security->sanitize_query( $decrypted );
+				}
 			}
 		} else {
 			$out['query_protected'] = false;
@@ -467,7 +490,7 @@ final class Central_Plan {
 		$gaps = get_option( self::OPTION_CONTENT_GAPS, array() );
 		$gaps = is_array( $gaps ) ? array_values( $gaps ) : array();
 		$now = time();
-		$gaps = array_values( array_filter( $gaps, static function ( $gap ) use ( $now ) { return is_array( $gap ) && ! empty( $gap['expires_at'] ) && strtotime( $gap['expires_at'] . ' UTC' ) >= $now; } ) );
+		$gaps = array_values( array_filter( $gaps, function ( $gap ) use ( $now ) { return is_array( $gap ) && ! empty( $gap['expires_at'] ) && $this->parse_timestamp( $gap['expires_at'] ) >= $now; } ) );
 		usort( $gaps, static function ( $a, $b ) { return (int) $a['count'] === (int) $b['count'] ? strcmp( $b['last_seen'], $a['last_seen'] ) : ( (int) $b['count'] <=> (int) $a['count'] ); } );
 		return rest_ensure_response(
 			array(
@@ -512,6 +535,28 @@ final class Central_Plan {
 		return $response;
 	}
 
+	/** Ensure every v1.2 central route has explicit cache and content-type security semantics. */
+	public function secure_route_response( $response, $server, $request ) {
+		if ( ! $request instanceof \WP_REST_Request || is_wp_error( $response ) ) {
+			return $response;
+		}
+		$route = $request->get_route();
+		$central = preg_match( '#^/sabri-search/v1/(?:advanced-search|saved-queries(?:/[a-f0-9-]{36})?|ranking-constitution|content-gap|admin/editorial-radar|admin/central-plan-status)$#', $route );
+		if ( ! $central ) {
+			return $response;
+		}
+		$response = rest_ensure_response( $response );
+		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
+		$response->header( 'X-Content-Type-Options', 'nosniff' );
+		if ( '/sabri-search/v1/ranking-constitution' === $route && ! is_user_logged_in() && 'GET' === $request->get_method() ) {
+			$response->header( 'Cache-Control', 'public, max-age=300, stale-while-revalidate=600' );
+			$response->header( 'ETag', '"' . hash( 'sha256', wp_json_encode( $response->get_data() ) ) . '"' );
+		} else {
+			$response->header( 'Cache-Control', 'private, no-store' );
+		}
+		return $response;
+	}
+
 	public function augment_search_result( $response, array $request = array() ) {
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
 			return $response;
@@ -541,11 +586,12 @@ final class Central_Plan {
 		$risk = 'general';
 		$reason = 'general_discovery';
 		$patterns = array(
-			'emergency' => array( 'suicide', 'kill myself', 'cannot breathe', "can't breathe", 'severe bleeding', 'unconscious', 'chest pain', 'خودکشی', 'جان دینا', 'سانس نہیں', 'سانس بند', 'شدید خون', 'سینے میں شدید درد', 'بے ہوش' ),
+			'emergency' => array( 'suicide', 'kill myself', 'self harm', 'cut myself', 'cannot breathe', "can't breathe", 'severe bleeding', 'unconscious', 'chest pain', 'خودکشی', 'جان دینا', 'خود کو نقصان', 'اپنے آپ کو کاٹ', 'سانس نہیں', 'سانس بند', 'شدید خون', 'سینے میں شدید درد', 'بے ہوش' ),
+			'safety_support' => array( 'domestic violence', 'abuse victim', 'violence at home', 'sexual abuse', 'harassment victim', 'گھریلو تشدد', 'جنسی زیادتی', 'ہراسانی', 'تشدد کا شکار' ),
 			'harmful' => array( 'how to poison', 'how to kill', 'make explosive', 'زہر دے', 'قتل کیسے', 'بم بن' ),
 			'clinical' => array( 'dose', 'dosage', 'prescription', 'potency', 'stop medicine', 'خوراک', 'پوٹینسی', 'نسخہ', 'دوا بند' ),
 		);
-		foreach ( array( 'emergency', 'harmful', 'clinical' ) as $class ) {
+		foreach ( array( 'emergency', 'safety_support', 'harmful', 'clinical' ) as $class ) {
 			foreach ( $patterns[ $class ] as $pattern ) {
 				if ( $pattern && false !== $this->strpos( $normalized, $this->normalizer->normalize( $pattern ) ) ) {
 					$risk = $class;
@@ -559,6 +605,8 @@ final class Central_Plan {
 		$guidance = null;
 		if ( 'emergency' === $risk ) {
 			$guidance = 'If there may be immediate danger or a medical emergency, do not wait for platform search or an appointment. Seek qualified local emergency care now.';
+		} elseif ( 'safety_support' === $risk ) {
+			$guidance = 'If you may be unsafe because of violence, abuse or harassment, seek trusted qualified local support. If there is immediate danger, use local emergency services.';
 		} elseif ( 'harmful' === $risk ) {
 			$guidance = 'Search results are constrained to safety-oriented, lawful information and cannot provide instructions intended to harm a person.';
 		} elseif ( 'clinical' === $risk ) {
@@ -893,7 +941,7 @@ final class Central_Plan {
 		}
 		$data = array();
 		foreach ( $this->load_saved_queries( $user->ID ) as $record ) {
-			$public = $this->public_saved_record( $record, $user->ID );
+			$public = $this->public_saved_record( $record, $user->ID, false );
 			$data[] = array(
 				'group_id' => 'sabri-file26-saved-queries',
 				'group_label' => __( 'Saved search queries', 'sabri-file26' ),
