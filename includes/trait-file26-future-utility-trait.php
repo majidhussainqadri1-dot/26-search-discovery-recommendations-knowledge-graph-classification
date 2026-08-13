@@ -65,6 +65,7 @@ trait Future_Utility_Trait {
 			if ( is_array( $item ) ) {
 				$out[] = $this->safe_result( $item );
 			}
+		}
 		return $out;
 	}
 
