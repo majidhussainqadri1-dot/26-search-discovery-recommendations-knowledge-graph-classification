@@ -46,7 +46,8 @@ final class Search {
 		}
 
 		$audience = $this->security->audience();
-		$public_cache = empty( $audience['authenticated'] ) && empty( $filters['availability'] );
+		$sensitive_query = $this->security->contains_sensitive_query( $query );
+		$public_cache = empty( $audience['authenticated'] ) && empty( $filters['availability'] ) && ! $sensitive_query;
 		$cache_key = 'search:' . hash( 'sha256', wp_json_encode( array(
 			'q' => $query, 'locale' => $locale, 'filters' => $filters, 'offset' => $offset,
 			'limit' => $limit, 'policy' => $policy_version,
@@ -168,6 +169,9 @@ final class Search {
 				}
 				$at = strtotime( $a['freshness_at'] . ' UTC' );
 				$bt = strtotime( $b['freshness_at'] . ' UTC' );
+				if ( $at === $bt ) {
+					return strcmp( $a['canonical_key'], $b['canonical_key'] );
+				}
 				return 'oldest' === $filters['sort'] ? $at <=> $bt : $bt <=> $at;
 			} );
 		}
@@ -375,7 +379,6 @@ final class Search {
 				if ( $topic ) {
 					$facets['topic'][ $topic ] = isset( $facets['topic'][ $topic ] ) ? $facets['topic'][ $topic ] + 1 : 1;
 				}
-			}
 		}
 		foreach ( $facets as &$values ) {
 			arsort( $values );
