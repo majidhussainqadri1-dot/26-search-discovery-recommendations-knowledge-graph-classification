@@ -35,6 +35,9 @@ foreach ( array( 'CV-164', 'CV-165', 'CV-166', 'CV-167', 'CV-168', 'CV-169', 'CV
 f26_central_assert( false !== strpos( $files['central'], "'used_for_personalization' => false" ), 'saved queries cannot silently personalize ranking' );
 f26_central_assert( false !== strpos( $files['central'], 'sabri_file26_encrypt_saved_query' ) && false !== strpos( $files['central'], 'file26_sensitive_save_encryption_unavailable' ), 'sensitive saved queries fail closed without approved encryption' );
 f26_central_assert( false !== strpos( $files['central'], "'q' => \$sensitive ? '' : \$q" ), 'sensitive saved-query plaintext is not persisted' );
+f26_central_assert( false !== strpos( $files['central'], 'file26_sensitive_saved_query_metadata' ), 'sensitive saved-query metadata is rejected rather than persisted in plaintext' );
+f26_central_assert( false !== strpos( $files['central'], "require_step_up( 'saved_query_decrypt' )" ), 'sensitive saved-query decryption requires fresh step-up authorization' );
+f26_central_assert( false !== strpos( $files['central'], "public_saved_record( \$record, \$user->ID, false )" ), 'privacy export does not opportunistically decrypt protected query text' );
 f26_central_assert( false !== strpos( $files['central'], "'identity_stored' => false" ), 'content-gap registry excludes user identity' );
 f26_central_assert( false !== strpos( $files['central'], "'raw_sensitive_query_history_included' => false" ), 'editorial radar excludes raw sensitive history' );
 f26_central_assert( false !== strpos( $files['central'], "'fabricated_result' => false" ), 'zero-result recovery cannot fabricate a result' );
@@ -42,6 +45,7 @@ f26_central_assert( false !== strpos( $files['central'], 'sabri_file26_zero_resu
 f26_central_assert( false !== strpos( $files['central'], "'fabricated_local_details' => false" ), 'search safety cannot fabricate emergency details' );
 f26_central_assert( false !== strpos( $files['central'], 'sabri_file26_verified_emergency_resource' ), 'emergency details require verified provider/filter' );
 f26_central_assert( false !== strpos( $files['central'], "empty( \$resource['verified_at'] )" ) && false !== strpos( $files['central'], 'sabri_file26_emergency_resource_max_age' ), 'emergency resources require current verification evidence' );
+f26_central_assert( false !== strpos( $files['central'], "'self harm'" ) && false !== strpos( $files['central'], "'safety_support'" ) && false !== strpos( $files['central'], 'گھریلو تشدد' ), 'self-harm and abuse-support query classes are covered' );
 f26_central_assert( false !== strpos( $files['central'], "'owner_click_revalidation_required' => true" ), 'owner click-time revalidation remains mandatory' );
 f26_central_assert( false !== strpos( $files['central'], "'rights_revalidation_required' => true" ), 'rights revalidation remains mandatory' );
 f26_central_assert( false !== strpos( $files['central'], "'language_eligibility_checked' => true" ) && false !== strpos( $files['central'], "'deletion_state_checked' => true" ), 'F26-CEN-01 language/deletion evidence is explicit' );
@@ -52,7 +56,10 @@ f26_central_assert( false !== strpos( $files['central'], "'single_free_tier_rank
 f26_central_assert( false !== strpos( $files['central'], "'donation'" ) && false !== strpos( $files['central'], "'founder_favoritism'" ), 'forbidden money/favoritism signals are named' );
 f26_central_assert( false !== strpos( $files['central'], "'connector' => \$connector" ) && false !== strpos( $files['central'], "'source' => \$source" ), 'advanced search separates connector lane from owner-source filtering' );
 f26_central_assert( false !== strpos( $files['central'], "isset( \$meta['visibility'] ) ? \$meta['visibility'] : ''" ), 'advanced access filter fails closed instead of assuming public' );
-f26_central_assert( false !== strpos( $files['central'], 'sabri_file26_advanced_scan_pages' ) && false !== strpos( $files['central'], "'ao' => \$offset" ), 'advanced search uses bounded deterministic pagination context' );
+f26_central_assert( false !== strpos( $files['central'], "\$extended['exact'] && false === \$this->strpos( \$field_haystack" ), 'field-scoped exact phrase must actually occur in selected fields' );
+f26_central_assert( false !== strpos( $files['central'], "'continuation_limited' => \$continuation_limited" ) && false !== strpos( $files['central'], "\$next_offset > \$offset" ), 'advanced-search cursor cannot self-loop after a bounded scan ceiling' );
+f26_central_assert( false !== strpos( $files['central'], 'advanced-search|' ) && false !== strpos( $files['central'], '12, 60' ), 'advanced search has an explicit abuse-rate gate' );
+f26_central_assert( false !== strpos( $files['central'], 'secure_route_response' ) && false !== strpos( $files['central'], "'Cache-Control', 'private, no-store'" ), 'new central REST routes have explicit no-store security semantics' );
 f26_central_assert( false !== strpos( $files['central'], "setting_days( 'saved_query_retention_days'" ) && false !== strpos( $files['central'], "setting_days( 'explicit_gap_retention_days'" ), 'saved-query and explicit-gap retention use governed settings' );
 
 f26_central_assert( false !== strpos( $files['doctor'], "'top_10'" ) && false !== strpos( $files['doctor'], "'top_100'" ) && false !== strpos( $files['doctor'], "'top_1000'" ), 'doctor Top 10/100/1000 tiers remain implemented' );
