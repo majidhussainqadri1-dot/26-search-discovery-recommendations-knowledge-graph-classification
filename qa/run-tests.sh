@@ -5,7 +5,12 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 printf '[1/14] PHP syntax\n'
-while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find "$ROOT" -type f -name '*.php' -print0)
+while IFS= read -r -d '' file; do
+  if ! php -l "$file"; then
+    echo "FAIL: PHP syntax: $file" >&2
+    exit 1
+  fi
+done < <(find "$ROOT" -type f -name '*.php' -print0)
 
 printf '[2/14] JavaScript syntax\n'
 if command -v node >/dev/null 2>&1; then node --check "$ROOT/assets/js/file26.js"; else echo 'SKIP: node unavailable'; fi
