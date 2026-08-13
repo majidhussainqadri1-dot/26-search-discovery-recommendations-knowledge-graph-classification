@@ -118,7 +118,6 @@ final class Doctor_Ranking {
 				'country' => $row['country'],
 				'location' => $row['location'],
 				'locale' => $row['locale'],
-				'author_key' => $row['author_key'],
 				'payload' => $payload,
 				'score' => $this->score( $payload, $policy['weights'] ),
 				'global_rank' => $global_rank,
@@ -219,7 +218,7 @@ final class Doctor_Ranking {
 		$documents = DB::table( 'documents' );
 		$connectors = DB::table( 'connectors' );
 		return (array) $wpdb->get_results(
-			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.author_key,d.topic_ids,d.payload
+			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload
 			 FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active'
 			 WHERE d.entity_type='doctor' AND d.state IN ('published','active','corrected') AND d.visibility='public'
 			 ORDER BY d.canonical_key",
