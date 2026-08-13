@@ -53,6 +53,9 @@ final class REST {
 		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/submit', 'POST', 'submit_term', 'can_curate' );
 		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/approve', 'POST', 'approve_term', 'can_curate' );
 		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/deprecate', 'POST', 'deprecate_term', 'can_curate' );
+		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge-preview', 'POST', 'merge_preview', 'can_curate' );
+		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge', 'POST', 'merge_term', 'can_curate' );
+		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split-preview', 'POST', 'split_preview', 'can_curate' );
 		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split', 'POST', 'split_term', 'can_curate' );
 		$this->route( '/admin/graph/edge', 'POST', 'create_edge', 'can_curate' );
 		$this->route( '/admin/connectors/(?P<slug>[a-z0-9_-]+)/transition', 'POST', 'transition_connector', 'can_operate' );
@@ -79,30 +82,35 @@ final class REST {
 				$filters[ $key ] = $request->get_param( $key );
 			}
 		}
-		return $this->respond( $this->search->run( array(
-			'q' => $request->get_param( 'q' ),
+		$query = $request->get_param( 'q' );
+		$data = $this->search->run( array(
+			'q' => $query,
 			'locale' => $request->get_param( 'locale' ),
 			'cursor' => $request->get_param( 'cursor' ),
 			'limit' => $request->get_param( 'limit' ),
 			'filters' => $filters,
-		) ), 200, true );
+		) );
+		return $this->respond( $data, 200, ! $this->security->contains_sensitive_query( $query ) );
 	}
 
 	public function suggest( \WP_REST_Request $request ) {
+		$query = $request->get_param( 'q' );
 		return $this->respond( array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-			'suggestions' => $this->search->suggest( $request->get_param( 'q' ), $request->get_param( 'locale' ), $request->get_param( 'limit' ) ?: 8 ),
-		), 200, true );
+			'suggestions' => $this->search->suggest( $query, $request->get_param( 'locale' ), $request->get_param( 'limit' ) ?: 8 ),
+		), 200, ! $this->security->contains_sensitive_query( $query ) );
 	}
 
 	public function discover( \WP_REST_Request $request ) {
-		return $this->respond( $this->recommendations->get( array(
+		$session_topics = array_values( array_filter( (array) $request->get_param( 'session_topics' ) ) );
+		$data = $this->recommendations->get( array(
 			'context' => $request->get_param( 'context' ) ?: 'discover',
 			'limit' => $request->get_param( 'limit' ) ?: 12,
 			'cursor' => $request->get_param( 'cursor' ),
 			'locale' => $request->get_param( 'locale' ),
-			'session_topics' => (array) $request->get_param( 'session_topics' ),
-		) ), 200, ! is_user_logged_in() );
+			'session_topics' => $session_topics,
+		) );
+		return $this->respond( $data, 200, ! is_user_logged_in() && empty( $session_topics ) );
 	}
 
 	public function feedback( \WP_REST_Request $request ) {
@@ -124,8 +132,10 @@ final class REST {
 		}
 		if ( 'merged' === $term['status'] && ! empty( $term['redirect_uuid'] ) ) {
 			$redirect = $this->taxonomy->get( $term['redirect_uuid'] );
-			if ( $redirect ) {
+			if ( $redirect && 'active' === $redirect['status'] ) {
 				$term = $redirect;
+			} else {
+				return new \WP_Error( 'file26_topic_not_found', 'Topic redirect is no longer available.', array( 'status' => 404 ) );
 			}
 		}
 		$results = $this->search->run( array(
@@ -195,6 +205,9 @@ final class REST {
 	public function submit_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->submit( $request['term'] ) ); }
 	public function approve_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->approve( $request['term'] ) ); }
 	public function deprecate_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->deprecate( $request['term'], $request->get_param( 'redirect_uuid' ), $request->get_param( 'reason' ) ) ); }
+	public function merge_preview( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->merge_preview( $request['term'], $request->get_param( 'target_uuid' ) ) ); }
+	public function merge_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->merge( $request['term'], $request->get_param( 'target_uuid' ), $request->get_param( 'reason' ) ) ); }
+	public function split_preview( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->split_preview( $request['term'], (array) $request->get_param( 'targets' ) ) ); }
 	public function split_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->split( $request['term'], (array) $request->get_param( 'targets' ), $request->get_param( 'reason' ) ), 201 ); }
 
 	public function create_edge( \WP_REST_Request $request ) {
