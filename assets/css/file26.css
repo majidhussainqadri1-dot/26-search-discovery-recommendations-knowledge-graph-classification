@@ -1,6 +1,6 @@
 :root {
-  --sabri-f26-green: #138a36;
-  --sabri-f26-green-dark: #0b6426;
+  --sabri-f26-green: var(--sabri-color-primary, #087a4e);
+  --sabri-f26-green-dark: var(--sabri-color-primary-dark, #055d3c);
   --sabri-f26-surface: #ffffff;
   --sabri-f26-muted: #f4f7f5;
   --sabri-f26-border: #d4ded7;
