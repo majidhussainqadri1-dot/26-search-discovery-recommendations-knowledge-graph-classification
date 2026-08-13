@@ -4,10 +4,10 @@ namespace Sabri\File26;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * File 26 implementation layer for the 6-Aug-2026 central-plan requirements.
+ * File 26 implementation layer for the 6-Aug-2026 governing requirements.
  *
- * This class deliberately remains a derivative/search owner. It does not create
- * canonical content, doctor, clinical, feed, shell, visual-token or payment truth.
+ * This remains a derivative/search owner. Canonical content, clinical truth,
+ * trends, the global shell and visual tokens remain with their native owners.
  */
 final class Central_Plan {
 	const META_SAVED_QUERIES = 'sabri_file26_saved_queries_v1';
@@ -71,7 +71,7 @@ final class Central_Plan {
 		return $this->security->can_audit() ? true : new \WP_Error( 'file26_forbidden', 'Search audit capability is required.', array( 'status' => 403 ) );
 	}
 
-	/** CV-167: exact phrase/source/date/fields/excludes + saved-query-compatible search. */
+	/** CV-167: exact phrase/author/source/date/fields/excludes and saved-query-compatible search. */
 	public function advanced_search( \WP_REST_Request $request ) {
 		$q = $this->security->sanitize_query( (string) $request->get_param( 'q' ) );
 		$exact = $this->security->sanitize_query( (string) $request->get_param( 'exact' ) );
@@ -86,34 +86,44 @@ final class Central_Plan {
 				$filters[ $key ] = $value;
 			}
 		}
-		$source = sanitize_key( (string) $request->get_param( 'source' ) );
-		if ( $source ) {
-			$filters['connector'] = $source;
+		$connector = sanitize_key( (string) $request->get_param( 'connector' ) );
+		if ( $connector ) {
+			$filters['connector'] = $connector;
 		}
-
+		$source = substr( sanitize_text_field( (string) $request->get_param( 'source' ) ), 0, 191 );
 		$extended = array(
 			'fields' => $this->list_param( $request->get_param( 'fields' ), 8 ),
 			'excludes' => $this->list_param( $request->get_param( 'excludes' ), 12 ),
 			'verification' => sanitize_key( (string) $request->get_param( 'verification' ) ),
 			'format' => sanitize_key( (string) $request->get_param( 'format' ) ),
 			'access' => sanitize_key( (string) $request->get_param( 'access' ) ),
+			'source' => $source,
 		);
 		$limit = max( 1, min( 30, (int) ( $request->get_param( 'limit' ) ?: 20 ) ) );
-		$cursor = (string) $request->get_param( 'cursor' );
+		$context_hash = hash( 'sha256', wp_json_encode( array( 'q' => $q, 'locale' => $request->get_param( 'locale' ), 'filters' => $filters, 'extended' => $extended, 'limit' => $limit ) ) );
+		$offset = 0;
+		if ( $request->get_param( 'cursor' ) ) {
+			$verified = $this->security->verify_cursor( (string) $request->get_param( 'cursor' ) );
+			if ( ! $verified || empty( $verified['h'] ) || ! hash_equals( $context_hash, (string) $verified['h'] ) || ! isset( $verified['ao'] ) ) {
+				return new \WP_Error( 'file26_invalid_advanced_cursor', 'The advanced-search cursor is invalid or expired.', array( 'status' => 400 ) );
+			}
+			$offset = max( 0, min( 10000, (int) $verified['ao'] ) );
+		}
+
+		$base_cursor = '';
 		$collected = array();
 		$seen = array();
 		$pages = 0;
 		$partial = false;
 		$partial_domains = array();
-		$last_cursor = null;
-		$last_response = null;
-
+		$base_has_more = false;
+		$max_pages = max( 2, min( 20, (int) apply_filters( 'sabri_file26_advanced_scan_pages', 10 ) ) );
 		do {
 			$base = $this->search->run(
 				array(
 					'q' => $q,
 					'locale' => $request->get_param( 'locale' ),
-					'cursor' => $cursor,
+					'cursor' => $base_cursor,
 					'limit' => 30,
 					'filters' => $filters,
 				)
@@ -121,45 +131,83 @@ final class Central_Plan {
 			if ( is_wp_error( $base ) ) {
 				return $base;
 			}
-			$last_response = $base;
+			$pages++;
 			$partial = $partial || ! empty( $base['partial'] );
 			$partial_domains = array_merge( $partial_domains, isset( $base['partial_domains'] ) ? (array) $base['partial_domains'] : array() );
-			foreach ( (array) $base['results'] as $item ) {
-				if ( isset( $seen[ $item['key'] ] ) || ! $this->matches_extended( $item, $q, $extended ) ) {
+			$rows = (array) $base['results'];
+			$meta = $this->advanced_metadata( wp_list_pluck( $rows, 'key' ) );
+			foreach ( $rows as $item ) {
+				$key = isset( $item['key'] ) ? (string) $item['key'] : '';
+				if ( '' === $key || isset( $seen[ $key ] ) || ! $this->matches_extended( $item, $q, $extended, isset( $meta[ $key ] ) ? $meta[ $key ] : array() ) ) {
 					continue;
 				}
-				$seen[ $item['key'] ] = true;
+				$seen[ $key ] = true;
 				$collected[] = $item;
-				if ( count( $collected ) >= $limit ) {
-					break 2;
-				}
 			}
-			$last_cursor = isset( $base['next_cursor'] ) ? $base['next_cursor'] : null;
-			$cursor = $last_cursor ? (string) $last_cursor : '';
-			$pages++;
-		} while ( $cursor && $pages < 10 );
+			$base_cursor = ! empty( $base['next_cursor'] ) ? (string) $base['next_cursor'] : '';
+			$base_has_more = (bool) $base_cursor;
+		} while ( $base_cursor && $pages < $max_pages );
 
-		$response = is_array( $last_response ) ? $last_response : array();
-		$response['results'] = array_slice( $collected, 0, $limit );
-		$response['advanced_search'] = array(
-			'exact_phrase' => $exact,
-			'fields' => $extended['fields'],
-			'excludes' => $extended['excludes'],
-			'verification' => $extended['verification'],
-			'format' => $extended['format'],
-			'access' => $extended['access'],
-			'source' => $source,
-			'bounded_source_pages_scanned' => $pages + 1,
+		$total_collected = count( $collected );
+		$page_results = array_slice( $collected, $offset, $limit );
+		$has_more_collected = $total_collected > ( $offset + $limit );
+		$bounded_more = $base_has_more && $pages >= $max_pages;
+		$next_cursor = null;
+		if ( $has_more_collected || $bounded_more ) {
+			$next_cursor = $this->security->sign_cursor( array( 'ao' => $offset + count( $page_results ), 'h' => $context_hash ) );
+		}
+		$response = array(
+			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+			'query' => $q,
+			'query_normalized' => $this->normalizer->normalize( $q ),
+			'policy_version' => $this->ranking->policy_version(),
+			'results' => $page_results,
+			'next_cursor' => $next_cursor,
+			'partial' => $partial || $bounded_more,
+			'partial_domains' => array_values( $this->unique_arrays( $partial_domains ) ),
+			'advanced_search' => array(
+				'exact_phrase' => $exact,
+				'fields' => $extended['fields'],
+				'excludes' => $extended['excludes'],
+				'verification' => $extended['verification'],
+				'format' => $extended['format'],
+				'access' => $extended['access'],
+				'source' => $source,
+				'connector' => $connector,
+				'bounded_source_pages_scanned' => $pages,
+				'bounded_eligible_matches' => $total_collected,
+			),
 		);
-		$response['partial'] = $partial || ( $cursor && $pages >= 10 );
-		$response['partial_domains'] = array_values( $this->unique_arrays( $partial_domains ) );
-		$response['next_cursor'] = $cursor ? $cursor : null;
 		return rest_ensure_response( $this->augment_search_result( $response, array( 'q' => $q, 'locale' => $request->get_param( 'locale' ) ) ) );
 	}
 
-	private function matches_extended( array $item, $query, array $extended ) {
-		$payload = isset( $item['payload'] ) && is_array( $item['payload'] ) ? $item['payload'] : array();
-		$haystack = $this->normalizer->normalize( implode( ' ', array_filter( array( isset( $item['title'] ) ? $item['title'] : '', isset( $item['excerpt'] ) ? $item['excerpt'] : '', isset( $item['author_key'] ) ? $item['author_key'] : '', implode( ' ', isset( $item['topics'] ) ? (array) $item['topics'] : array() ) ) ) ) );
+	private function advanced_metadata( array $keys ) {
+		global $wpdb;
+		$keys = array_values( array_filter( array_unique( $keys ), static function ( $key ) { return is_string( $key ) && preg_match( '/^[a-f0-9]{64}$/', $key ); } ) );
+		if ( ! $keys ) {
+			return array();
+		}
+		$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+		$table = DB::table( 'documents' );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT canonical_key,connector_slug,visibility,state,locale,author_key,topic_ids,normalized_title,normalized_body,payload FROM $table WHERE canonical_key IN ($placeholders)", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$map = array();
+		foreach ( (array) $rows as $row ) {
+			$row['payload_array'] = json_decode( $row['payload'], true );
+			$row['payload_array'] = is_array( $row['payload_array'] ) ? $row['payload_array'] : array();
+			$row['topics_array'] = json_decode( $row['topic_ids'], true );
+			$row['topics_array'] = is_array( $row['topics_array'] ) ? $row['topics_array'] : array();
+			$map[ $row['canonical_key'] ] = $row;
+		}
+		return $map;
+	}
+
+	private function matches_extended( array $item, $query, array $extended, array $meta ) {
+		$payload = isset( $meta['payload_array'] ) && is_array( $meta['payload_array'] ) ? $meta['payload_array'] : ( isset( $item['payload'] ) && is_array( $item['payload'] ) ? $item['payload'] : array() );
+		$topics = isset( $meta['topics_array'] ) ? (array) $meta['topics_array'] : ( isset( $item['topics'] ) ? (array) $item['topics'] : array() );
+		$title = isset( $meta['normalized_title'] ) ? $meta['normalized_title'] : ( isset( $item['title'] ) ? $item['title'] : '' );
+		$body = isset( $meta['normalized_body'] ) ? $meta['normalized_body'] : ( isset( $item['excerpt'] ) ? $item['excerpt'] : '' );
+		$author = isset( $meta['author_key'] ) ? $meta['author_key'] : ( isset( $item['author_key'] ) ? $item['author_key'] : '' );
+		$haystack = $this->normalizer->normalize( implode( ' ', array( $title, $body, $author, implode( ' ', $topics ) ) ) );
 		foreach ( $extended['excludes'] as $excluded ) {
 			$excluded = $this->normalizer->normalize( $excluded );
 			if ( $excluded && false !== $this->strpos( $haystack, $excluded ) ) {
@@ -170,19 +218,18 @@ final class Central_Plan {
 			$field_text = array();
 			foreach ( $extended['fields'] as $field ) {
 				if ( 'title' === $field ) {
-					$field_text[] = isset( $item['title'] ) ? $item['title'] : '';
-				} elseif ( in_array( $field, array( 'excerpt', 'summary' ), true ) ) {
-					$field_text[] = isset( $item['excerpt'] ) ? $item['excerpt'] : '';
+					$field_text[] = $title;
+				} elseif ( in_array( $field, array( 'body', 'excerpt', 'summary' ), true ) ) {
+					$field_text[] = $body;
 				} elseif ( 'author' === $field ) {
-					$field_text[] = isset( $item['author_key'] ) ? $item['author_key'] : '';
+					$field_text[] = $author;
 				} elseif ( in_array( $field, array( 'topic', 'topics' ), true ) ) {
-					$field_text[] = implode( ' ', isset( $item['topics'] ) ? (array) $item['topics'] : array() );
+					$field_text[] = implode( ' ', $topics );
 				}
 			}
 			$field_haystack = $this->normalizer->normalize( implode( ' ', $field_text ) );
-			$tokens = $this->normalizer->tokens( $query );
 			$matched = false;
-			foreach ( $tokens as $token ) {
+			foreach ( $this->normalizer->tokens( $query ) as $token ) {
 				if ( false !== $this->strpos( $field_haystack, $token ) ) {
 					$matched = true;
 					break;
@@ -208,8 +255,28 @@ final class Central_Plan {
 			}
 		}
 		if ( $extended['access'] ) {
-			$access = sanitize_key( isset( $payload['access_mode'] ) ? $payload['access_mode'] : ( isset( $payload['access'] ) ? $payload['access'] : 'public' ) );
-			if ( $access !== $extended['access'] ) {
+			$access = sanitize_key( isset( $payload['access_mode'] ) ? $payload['access_mode'] : ( isset( $payload['access'] ) ? $payload['access'] : ( isset( $meta['visibility'] ) ? $meta['visibility'] : '' ) ) );
+			if ( '' === $access || $access !== $extended['access'] ) {
+				return false;
+			}
+		}
+		if ( $extended['source'] ) {
+			$source_values = array_filter( array(
+				isset( $payload['source'] ) ? $payload['source'] : '',
+				isset( $payload['source_id'] ) ? $payload['source_id'] : '',
+				isset( $payload['source_name'] ) ? $payload['source_name'] : '',
+				isset( $payload['publisher'] ) ? $payload['publisher'] : '',
+				isset( $payload['owner_source'] ) ? $payload['owner_source'] : '',
+			) );
+			$needle = $this->normalizer->normalize( $extended['source'] );
+			$found = false;
+			foreach ( $source_values as $source_value ) {
+				if ( false !== $this->strpos( $this->normalizer->normalize( $source_value ), $needle ) ) {
+					$found = true;
+					break;
+				}
+			}
+			if ( ! $found ) {
 				return false;
 			}
 		}
@@ -218,13 +285,12 @@ final class Central_Plan {
 
 	/** Explicit, account-owned saved queries. Never used as a hidden ranking signal. */
 	public function saved_queries() {
-		return rest_ensure_response(
-			array(
-				'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-				'queries' => array_values( $this->load_saved_queries( get_current_user_id() ) ),
-				'used_for_personalization' => false,
-			)
-		);
+		$user_id = get_current_user_id();
+		$queries = array();
+		foreach ( $this->load_saved_queries( $user_id ) as $record ) {
+			$queries[] = $this->public_saved_record( $record, $user_id );
+		}
+		return rest_ensure_response( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'queries' => $queries, 'used_for_personalization' => false ) );
 	}
 
 	public function save_query( \WP_REST_Request $request ) {
@@ -238,8 +304,15 @@ final class Central_Plan {
 			return new \WP_Error( 'file26_saved_query_empty', 'A query is required.', array( 'status' => 400 ) );
 		}
 		$sensitive = $this->security->contains_sensitive_query( $q );
-		if ( $sensitive && empty( $params['confirm_sensitive'] ) ) {
-			return new \WP_Error( 'file26_sensitive_save_confirmation', 'This query may contain sensitive intent. Explicit confirmation is required before saving it.', array( 'status' => 400 ) );
+		$envelope = null;
+		if ( $sensitive ) {
+			if ( empty( $params['confirm_sensitive'] ) ) {
+				return new \WP_Error( 'file26_sensitive_save_confirmation', 'Explicit confirmation is required before protecting a sensitive saved query.', array( 'status' => 400 ) );
+			}
+			$envelope = apply_filters( 'sabri_file26_encrypt_saved_query', null, $q, $user_id );
+			if ( ! is_array( $envelope ) || empty( $envelope['ciphertext'] ) || empty( $envelope['key_id'] ) || ! empty( $envelope['plaintext'] ) ) {
+				return new \WP_Error( 'file26_sensitive_save_encryption_unavailable', 'Sensitive saved queries require an approved encryption provider and are not stored in plaintext.', array( 'status' => 503 ) );
+			}
 		}
 		$queries = $this->load_saved_queries( $user_id );
 		$id = isset( $params['id'] ) && preg_match( '/^[a-f0-9-]{36}$/', (string) $params['id'] ) ? strtolower( (string) $params['id'] ) : DB::uuid();
@@ -248,11 +321,12 @@ final class Central_Plan {
 			return new \WP_Error( 'file26_saved_query_version_conflict', 'The saved query changed. Reload before updating.', array( 'status' => 409 ) );
 		}
 		$now = DB::now();
-		$retention_days = $sensitive ? 90 : 365;
+		$retention_days = $sensitive ? $this->setting_days( 'sensitive_saved_query_retention_days', 90, 1, 365 ) : $this->setting_days( 'saved_query_retention_days', 365, 7, 1095 );
 		$record = array(
 			'id' => $id,
-			'name' => substr( sanitize_text_field( isset( $params['name'] ) ? $params['name'] : $q ), 0, 120 ),
-			'q' => $q,
+			'name' => substr( sanitize_text_field( isset( $params['name'] ) ? $params['name'] : ( $sensitive ? 'Protected saved query' : $q ) ), 0, 120 ),
+			'q' => $sensitive ? '' : $q,
+			'q_encrypted' => $sensitive ? $this->sanitize_envelope( $envelope ) : null,
 			'filters' => $this->sanitize_saved_filters( isset( $params['filters'] ) ? $params['filters'] : array() ),
 			'advanced' => $this->sanitize_advanced_saved( isset( $params['advanced'] ) ? $params['advanced'] : array() ),
 			'sensitive' => (bool) $sensitive,
@@ -268,8 +342,34 @@ final class Central_Plan {
 			$queries = array_slice( $queries, -50, null, true );
 		}
 		update_user_meta( $user_id, self::META_SAVED_QUERIES, $queries );
-		$this->security->audit( 'saved_query_changed', array( 'object_type' => 'saved_query', 'object_key' => $id, 'metadata' => array( 'sensitive' => (bool) $sensitive ) ) );
-		return rest_ensure_response( $record );
+		$this->security->audit( 'saved_query_changed', array( 'object_type' => 'saved_query', 'object_key' => $id, 'metadata' => array( 'sensitive' => (bool) $sensitive, 'encrypted' => (bool) $sensitive ) ) );
+		return rest_ensure_response( $this->public_saved_record( $record, $user_id ) );
+	}
+
+	private function sanitize_envelope( array $envelope ) {
+		return array(
+			'ciphertext' => substr( sanitize_text_field( $envelope['ciphertext'] ), 0, 12000 ),
+			'key_id' => substr( sanitize_key( $envelope['key_id'] ), 0, 120 ),
+			'version' => substr( sanitize_text_field( isset( $envelope['version'] ) ? $envelope['version'] : '1' ), 0, 30 ),
+			'algorithm' => substr( sanitize_text_field( isset( $envelope['algorithm'] ) ? $envelope['algorithm'] : 'provider-managed' ), 0, 80 ),
+		);
+	}
+
+	private function public_saved_record( array $record, $user_id ) {
+		$out = $record;
+		if ( ! empty( $record['sensitive'] ) ) {
+			$out['q'] = '';
+			$out['query_protected'] = true;
+			unset( $out['q_encrypted'] );
+			$decrypted = apply_filters( 'sabri_file26_decrypt_saved_query', null, isset( $record['q_encrypted'] ) ? $record['q_encrypted'] : array(), (int) $user_id );
+			if ( is_string( $decrypted ) && '' !== $decrypted ) {
+				$out['q'] = $this->security->sanitize_query( $decrypted );
+			}
+		} else {
+			$out['query_protected'] = false;
+			unset( $out['q_encrypted'] );
+		}
+		return $out;
 	}
 
 	public function delete_query( \WP_REST_Request $request ) {
@@ -295,11 +395,7 @@ final class Central_Plan {
 		$doctor = $this->doctor_ranking->policy();
 		return array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
-			'organic_search' => array(
-				'policy_version' => $search['version'],
-				'signals' => $search['weights'],
-				'diversity_limits' => $search['limits'],
-			),
+			'organic_search' => array( 'policy_version' => $search['version'], 'signals' => $search['weights'], 'diversity_limits' => $search['limits'] ),
 			'doctor_ranking' => array(
 				'policy_version' => $doctor['version'],
 				'signals' => $doctor['weights'],
@@ -316,7 +412,7 @@ final class Central_Plan {
 		);
 	}
 
-	/** CV-173/172: explicit, non-sensitive content-gap submission with no user identity stored. */
+	/** CV-173/172: explicit non-sensitive content gap; no submitting identity is stored. */
 	public function submit_content_gap( \WP_REST_Request $request ) {
 		$user_id = get_current_user_id();
 		if ( ! $this->security->rate_limit( 'content-gap|u:' . $user_id, 8, HOUR_IN_SECONDS ) ) {
@@ -336,6 +432,7 @@ final class Central_Plan {
 		$registry = is_array( $registry ) ? $registry : array();
 		$now = DB::now();
 		$current = isset( $registry[ $key ] ) && is_array( $registry[ $key ] ) ? $registry[ $key ] : array();
+		$retention_days = $this->setting_days( 'explicit_gap_retention_days', 90, 7, 365 );
 		$registry[ $key ] = array(
 			'key' => $key,
 			'query' => $normalized,
@@ -343,6 +440,7 @@ final class Central_Plan {
 			'count' => isset( $current['count'] ) ? min( 1000000, (int) $current['count'] + 1 ) : 1,
 			'first_seen' => isset( $current['first_seen'] ) ? $current['first_seen'] : $now,
 			'last_seen' => $now,
+			'expires_at' => gmdate( 'Y-m-d H:i:s', time() + ( $retention_days * DAY_IN_SECONDS ) ),
 			'status' => 'open',
 			'identity_stored' => false,
 			'source' => 'explicit_user_submission',
@@ -353,24 +451,23 @@ final class Central_Plan {
 		}
 		update_option( self::OPTION_CONTENT_GAPS, $registry, false );
 		$this->record_aggregate_metric( 'explicit_content_gap', isset( $params['locale'] ) ? $params['locale'] : determine_locale(), 1, 0 );
-		return rest_ensure_response( array( 'accepted' => true, 'identity_stored' => false, 'retention_days' => 90 ) );
+		return rest_ensure_response( array( 'accepted' => true, 'identity_stored' => false, 'retention_days' => $retention_days ) );
 	}
 
-	/** CV-172: privacy-minimized editorial radar, built only from aggregate File 26 data. */
+	/** CV-172: aggregate search telemetry + explicit gaps only. File 15 remains trend owner. */
 	public function editorial_radar( \WP_REST_Request $request ) {
 		global $wpdb;
 		$days = max( 1, min( 90, (int) ( $request->get_param( 'days' ) ?: 30 ) ) );
 		$from = gmdate( 'Y-m-d', time() - ( ( $days - 1 ) * DAY_IN_SECONDS ) );
 		$table = DB::table( 'metrics' );
 		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT metric_key,locale,SUM(count_value) AS total_count,SUM(sum_value) AS total_value,MAX(metric_date) AS latest_date FROM $table WHERE metric_date >= %s GROUP BY metric_key,locale ORDER BY total_count DESC LIMIT 250",
-				$from
-			),
+			$wpdb->prepare( "SELECT metric_key,locale,SUM(count_value) AS total_count,SUM(sum_value) AS total_value,MAX(metric_date) AS latest_date FROM $table WHERE metric_date >= %s GROUP BY metric_key,locale ORDER BY total_count DESC LIMIT 250", $from ),
 			ARRAY_A
 		);
 		$gaps = get_option( self::OPTION_CONTENT_GAPS, array() );
 		$gaps = is_array( $gaps ) ? array_values( $gaps ) : array();
+		$now = time();
+		$gaps = array_values( array_filter( $gaps, static function ( $gap ) use ( $now ) { return is_array( $gap ) && ! empty( $gap['expires_at'] ) && strtotime( $gap['expires_at'] . ' UTC' ) >= $now; } ) );
 		usort( $gaps, static function ( $a, $b ) { return (int) $a['count'] === (int) $b['count'] ? strcmp( $b['last_seen'], $a['last_seen'] ) : ( (int) $b['count'] <=> (int) $a['count'] ); } );
 		return rest_ensure_response(
 			array(
@@ -401,7 +498,7 @@ final class Central_Plan {
 		);
 	}
 
-	/** Add central-plan safety/recovery/freshness contracts to the ordinary REST search response. */
+	/** Add central-plan safety/recovery/freshness contracts to ordinary REST search. */
 	public function augment_rest_response( $response, $server, $request ) {
 		if ( ! $request instanceof \WP_REST_Request || '/sabri-search/v1/search' !== $request->get_route() || is_wp_error( $response ) ) {
 			return $response;
@@ -411,8 +508,7 @@ final class Central_Plan {
 		if ( ! is_array( $data ) ) {
 			return $response;
 		}
-		$data = $this->augment_search_result( $data, array( 'q' => $request->get_param( 'q' ), 'locale' => $request->get_param( 'locale' ) ) );
-		$response->set_data( $data );
+		$response->set_data( $this->augment_search_result( $data, array( 'q' => $request->get_param( 'q' ), 'locale' => $request->get_param( 'locale' ) ) ) );
 		return $response;
 	}
 
@@ -432,18 +528,14 @@ final class Central_Plan {
 		$response['free_tier'] = array( 'search_paywall' => false, 'ranking_paywall' => false, 'donation_signal' => false );
 		$response['brand_contract'] = array( 'primary_fallback' => '#087A4E', 'visual_owner' => 'File 25', 'shell_owner' => 'File 20' );
 		$response = $this->augment_freshness( $response );
-		if ( empty( $response['results'] ) ) {
-			$response['zero_result_recovery'] = $this->zero_result_recovery( $query, $locale, $safety );
-		} else {
-			$response['zero_result_recovery'] = null;
-		}
+		$response['zero_result_recovery'] = empty( $response['results'] ) ? $this->zero_result_recovery( $query, $locale, $safety ) : null;
 		if ( 'general' !== $safety['risk_class'] ) {
 			$this->record_aggregate_metric( 'search_safety_' . $safety['risk_class'], $locale, 1, 0 );
 		}
 		return $response;
 	}
 
-	/** CV-174: no fabricated emergency contacts; owner-verified resource may be injected by filter. */
+	/** CV-174: verified/current local resources only; never fabricate contact details. */
 	public function safety_for_query( $query, $locale = 'und' ) {
 		$normalized = $this->normalizer->normalize( $query );
 		$risk = 'general';
@@ -463,7 +555,7 @@ final class Central_Plan {
 			}
 		}
 		$resource = apply_filters( 'sabri_file26_verified_emergency_resource', null, $locale, $risk );
-		$resource_verified = is_array( $resource ) && ! empty( $resource['verified'] ) && ! empty( $resource['label'] );
+		$resource = $this->verified_current_resource( $resource );
 		$guidance = null;
 		if ( 'emergency' === $risk ) {
 			$guidance = 'If there may be immediate danger or a medical emergency, do not wait for platform search or an appointment. Seek qualified local emergency care now.';
@@ -477,10 +569,38 @@ final class Central_Plan {
 			'reason_code' => $reason,
 			'educational_only' => true,
 			'guidance' => $guidance,
-			'local_resource' => $resource_verified ? $resource : null,
-			'local_resource_verified' => $resource_verified,
+			'local_resource' => $resource,
+			'local_resource_verified' => (bool) $resource,
 			'fabricated_local_details' => false,
 		);
+	}
+
+	private function verified_current_resource( $resource ) {
+		if ( ! is_array( $resource ) || empty( $resource['verified'] ) || empty( $resource['label'] ) || empty( $resource['verified_at'] ) ) {
+			return null;
+		}
+		$verified_at = $this->parse_timestamp( $resource['verified_at'] );
+		$expires_at = ! empty( $resource['expires_at'] ) ? $this->parse_timestamp( $resource['expires_at'] ) : 0;
+		$max_age = max( DAY_IN_SECONDS, min( 90 * DAY_IN_SECONDS, (int) apply_filters( 'sabri_file26_emergency_resource_max_age', 30 * DAY_IN_SECONDS ) ) );
+		if ( ! $verified_at || $verified_at < time() - $max_age || ( $expires_at && $expires_at < time() ) ) {
+			return null;
+		}
+		$out = array(
+			'label' => substr( sanitize_text_field( $resource['label'] ), 0, 160 ),
+			'verified' => true,
+			'verified_at' => gmdate( 'c', $verified_at ),
+			'expires_at' => $expires_at ? gmdate( 'c', $expires_at ) : null,
+		);
+		if ( ! empty( $resource['url'] ) ) {
+			$url = $this->security->safe_resource_url( $resource['url'], 'emergency_resource' );
+			if ( $url ) {
+				$out['url'] = $url;
+			}
+		}
+		if ( ! empty( $resource['phone'] ) ) {
+			$out['phone'] = substr( preg_replace( '/[^0-9+()\-\s]/', '', (string) $resource['phone'] ), 0, 40 );
+		}
+		return $out;
 	}
 
 	private function zero_result_recovery( $query, $locale, array $safety ) {
@@ -500,15 +620,13 @@ final class Central_Plan {
 			$aliases = DB::table( 'term_aliases' );
 			$like = '%' . $wpdb->esc_like( substr( $normalized, 0, 80 ) ) . '%';
 			$related = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT DISTINCT t.term_uuid,t.preferred_label,t.language FROM $terms t LEFT JOIN $aliases a ON a.term_uuid=t.term_uuid AND a.status='active' WHERE t.status='active' AND (t.preferred_label LIKE %s OR a.alias_normalized LIKE %s) ORDER BY t.preferred_label LIMIT 6",
-					$like,
-					$like
-				),
+				$wpdb->prepare( "SELECT DISTINCT t.term_uuid,t.preferred_label,t.language FROM $terms t LEFT JOIN $aliases a ON a.term_uuid=t.term_uuid AND a.status='active' WHERE t.status='active' AND (t.preferred_label LIKE %s OR a.alias_normalized LIKE %s) ORDER BY t.preferred_label LIMIT 6", $like, $like ),
 				ARRAY_A
 			);
 		}
 		$can_submit = is_user_logged_in() && 'general' === $safety['risk_class'] && ! $this->security->contains_sensitive_query( $query );
+		$help = apply_filters( 'sabri_file26_zero_result_help_destination', null, $locale, $query );
+		$help_url = is_array( $help ) && ! empty( $help['url'] ) ? $this->security->safe_resource_url( $help['url'], 'zero_result_help' ) : '';
 		return array(
 			'spelling_or_transliteration_candidates' => $candidates,
 			'related_topics' => $related,
@@ -517,6 +635,7 @@ final class Central_Plan {
 				'browse_topics' => true,
 				'submit_content_gap' => $can_submit,
 				'ask_expert_destination_owner' => 'File 17/approved support owner',
+				'ask_expert_url' => $help_url ? $help_url : null,
 			),
 			'fabricated_result' => false,
 			'query_retained_for_gap_without_explicit_consent' => false,
@@ -527,38 +646,37 @@ final class Central_Plan {
 	private function augment_freshness( array $response ) {
 		global $wpdb;
 		$results = isset( $response['results'] ) && is_array( $response['results'] ) ? $response['results'] : array();
+		$summary = array( 'known' => 0, 'within_slo' => 0, 'stale' => 0, 'unknown' => 0 );
 		if ( ! $results ) {
-			$response['index_freshness'] = array( 'known' => 0, 'within_slo' => 0, 'stale' => 0, 'unknown' => 0 );
+			$response['index_freshness'] = $summary;
 			return $response;
 		}
-		$keys = array();
-		foreach ( $results as $item ) {
-			if ( ! empty( $item['key'] ) && preg_match( '/^[a-f0-9]{64}$/', $item['key'] ) ) {
-				$keys[] = $item['key'];
+		$keys = array_values( array_filter( wp_list_pluck( $results, 'key' ), static function ( $key ) { return is_string( $key ) && preg_match( '/^[a-f0-9]{64}$/', $key ); } ) );
+		$map = array();
+		if ( $keys ) {
+			$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+			$documents = DB::table( 'documents' );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT canonical_key,connector_slug,entity_type,locale,state,visibility,freshness_at,indexed_at,payload FROM $documents WHERE canonical_key IN ($placeholders)", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			foreach ( (array) $rows as $row ) {
+				$map[ $row['canonical_key'] ] = $row;
 			}
 		}
-		if ( ! $keys ) {
-			return $response;
-		}
-		$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
-		$documents = DB::table( 'documents' );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT canonical_key,connector_slug,entity_type,locale,state,visibility,freshness_at,indexed_at,payload FROM $documents WHERE canonical_key IN ($placeholders)", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$map = array();
-		foreach ( (array) $rows as $row ) {
-			$map[ $row['canonical_key'] ] = $row;
-		}
-		$summary = array( 'known' => 0, 'within_slo' => 0, 'stale' => 0, 'unknown' => 0 );
 		foreach ( $response['results'] as &$item ) {
-			$row = isset( $map[ $item['key'] ] ) ? $map[ $item['key'] ] : null;
+			$key = isset( $item['key'] ) ? (string) $item['key'] : '';
+			$row = isset( $map[ $key ] ) ? $map[ $key ] : null;
 			$status = 'unknown';
 			$lag = null;
 			$source_updated = null;
+			$indexed_at = null;
 			if ( $row ) {
 				$payload = json_decode( $row['payload'], true );
 				$payload = is_array( $payload ) ? $payload : array();
 				$source_updated = ! empty( $payload['source_updated_at'] ) ? $payload['source_updated_at'] : null;
-				if ( $source_updated && strtotime( $source_updated . ' UTC' ) && strtotime( $row['indexed_at'] . ' UTC' ) ) {
-					$lag = max( 0, strtotime( $row['indexed_at'] . ' UTC' ) - strtotime( $source_updated . ' UTC' ) );
+				$source_ts = $this->parse_timestamp( $source_updated );
+				$index_ts = $this->parse_timestamp( $row['indexed_at'] );
+				$indexed_at = $row['indexed_at'];
+				if ( $source_ts && $index_ts ) {
+					$lag = max( 0, $index_ts - $source_ts );
 					$default_slo = in_array( $row['entity_type'], array( 'news', 'post', 'reel' ), true ) ? 900 : 3600;
 					$slo = (int) apply_filters( 'sabri_file26_index_freshness_slo_seconds', $default_slo, $row['entity_type'], $row['connector_slug'] );
 					$status = $lag <= max( 60, $slo ) ? 'within_slo' : 'stale';
@@ -569,19 +687,47 @@ final class Central_Plan {
 				}
 				$item['integrity'] = array(
 					'index_eligibility_checked' => true,
+					'language_eligibility_checked' => true,
+					'deletion_state_checked' => true,
 					'canonical_owner_reference_preserved' => true,
 					'owner_click_revalidation_required' => true,
 					'rights_revalidation_required' => true,
-					'indexed_at' => $row['indexed_at'],
+					'indexed_visibility' => $row['visibility'],
+					'indexed_state' => $row['state'],
+					'indexed_locale' => $row['locale'],
+					'indexed_at' => $indexed_at,
 					'source_updated_at' => $source_updated,
 					'index_sync_lag_seconds' => $lag,
 					'freshness_status' => $status,
+					'freshness_badge' => 'stale' === $status ? 'stale_index_owner_recheck_required' : $status,
+				);
+			} else {
+				$summary['unknown']++;
+				$item['integrity'] = array(
+					'index_eligibility_checked' => false,
+					'language_eligibility_checked' => false,
+					'deletion_state_checked' => false,
+					'canonical_owner_reference_preserved' => true,
+					'owner_click_revalidation_required' => true,
+					'rights_revalidation_required' => true,
+					'freshness_status' => 'unknown',
+					'freshness_badge' => 'unknown_freshness_owner_recheck_required',
 				);
 			}
 		}
 		unset( $item );
 		$response['index_freshness'] = $summary;
 		return $response;
+	}
+
+	private function parse_timestamp( $value ) {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return 0;
+		}
+		$value = trim( $value );
+		$has_zone = (bool) preg_match( '/(?:Z|[+\-]\d{2}:?\d{2})$/i', $value );
+		$ts = strtotime( $has_zone ? $value : $value . ' UTC' );
+		return $ts ? (int) $ts : 0;
 	}
 
 	private function record_aggregate_metric( $metric, $locale, $count, $sum ) {
@@ -603,7 +749,7 @@ final class Central_Plan {
 		$now = time();
 		$changed = false;
 		foreach ( $value as $id => $record ) {
-			if ( ! is_array( $record ) || empty( $record['expires_at'] ) || strtotime( $record['expires_at'] . ' UTC' ) < $now ) {
+			if ( ! is_array( $record ) || empty( $record['expires_at'] ) || $this->parse_timestamp( $record['expires_at'] ) < $now ) {
 				unset( $value[ $id ] );
 				$changed = true;
 			}
@@ -642,7 +788,8 @@ final class Central_Plan {
 			'verification' => sanitize_key( isset( $advanced['verification'] ) ? $advanced['verification'] : '' ),
 			'format' => sanitize_key( isset( $advanced['format'] ) ? $advanced['format'] : '' ),
 			'access' => sanitize_key( isset( $advanced['access'] ) ? $advanced['access'] : '' ),
-			'source' => sanitize_key( isset( $advanced['source'] ) ? $advanced['source'] : '' ),
+			'source' => substr( sanitize_text_field( isset( $advanced['source'] ) ? $advanced['source'] : '' ), 0, 191 ),
+			'connector' => sanitize_key( isset( $advanced['connector'] ) ? $advanced['connector'] : '' ),
 		);
 	}
 
@@ -681,6 +828,10 @@ final class Central_Plan {
 		return strpos( (string) $haystack, (string) $needle );
 	}
 
+	private function setting_days( $key, $default, $min, $max ) {
+		return max( (int) $min, min( (int) $max, (int) DB::setting( $key, $default ) ) );
+	}
+
 	private function migrate_settings() {
 		$current = get_option( DB::OPTION_SETTINGS, array() );
 		$current = is_array( $current ) ? $current : array();
@@ -712,10 +863,10 @@ final class Central_Plan {
 	public function retention() {
 		$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
 		$registry = is_array( $registry ) ? $registry : array();
-		$cutoff = time() - ( 90 * DAY_IN_SECONDS );
+		$now = time();
 		$changed = false;
 		foreach ( $registry as $key => $record ) {
-			if ( ! is_array( $record ) || empty( $record['last_seen'] ) || strtotime( $record['last_seen'] . ' UTC' ) < $cutoff ) {
+			if ( ! is_array( $record ) || empty( $record['expires_at'] ) || $this->parse_timestamp( $record['expires_at'] ) < $now ) {
 				unset( $registry[ $key ] );
 				$changed = true;
 			}
@@ -742,15 +893,16 @@ final class Central_Plan {
 		}
 		$data = array();
 		foreach ( $this->load_saved_queries( $user->ID ) as $record ) {
+			$public = $this->public_saved_record( $record, $user->ID );
 			$data[] = array(
 				'group_id' => 'sabri-file26-saved-queries',
 				'group_label' => __( 'Saved search queries', 'sabri-file26' ),
 				'item_id' => 'saved-query-' . $record['id'],
 				'data' => array(
-					array( 'name' => __( 'Name', 'sabri-file26' ), 'value' => $record['name'] ),
-					array( 'name' => __( 'Query', 'sabri-file26' ), 'value' => $record['q'] ),
-					array( 'name' => __( 'Filters', 'sabri-file26' ), 'value' => wp_json_encode( $record['filters'] ) ),
-					array( 'name' => __( 'Updated', 'sabri-file26' ), 'value' => $record['updated_at'] ),
+					array( 'name' => __( 'Name', 'sabri-file26' ), 'value' => $public['name'] ),
+					array( 'name' => __( 'Query', 'sabri-file26' ), 'value' => ! empty( $public['q'] ) ? $public['q'] : '[protected sensitive query]' ),
+					array( 'name' => __( 'Filters', 'sabri-file26' ), 'value' => wp_json_encode( $public['filters'] ) ),
+					array( 'name' => __( 'Updated', 'sabri-file26' ), 'value' => $public['updated_at'] ),
 				),
 			);
 		}
