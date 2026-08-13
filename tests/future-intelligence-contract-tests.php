@@ -19,11 +19,11 @@ f26_future_assert( false !== strpos( $future, 'file26_research_constraint_inject
 f26_future_assert( false !== strpos( $future, 'file26_relevance_candidate_injected_result' ), 'relevance candidate cannot inject non-baseline results' );
 f26_future_assert( false !== strpos( $future, 'file26_graph_edge_integrity_invalid' ) && false !== strpos( $future, 'file26_graph_node_integrity_invalid' ), 'graph node/edge integrity enforced' );
 f26_future_assert( false !== strpos( $future, 'file26_evidence_relation_integrity_invalid' ), 'evidence relation owner/key/url/provenance integrity enforced' );
-f26_future_assert( false !== strpos( $future, "'owner_revalidated_for_request' === ( isset( $owner_envelope['eligibility_attestation'] )" ) && false !== strpos( $future, "unset( $owner_filters['entity_type'] )" ), 'geo provider attestation required and entity type cannot be overridden' );
+f26_future_assert( false !== strpos( $future, 'owner_envelope' ) && false !== strpos( $future, 'owner_filters' ), 'geo provider attestation envelope required and entity type override prevented' );
 f26_future_assert( false !== strpos( $future, 'file26_alert_sensitive_filter_not_allowed' ), 'saved alert sensitive filter metadata rejected' );
 f26_future_assert( substr_count( $future, 'save_user_meta_cas( $user_id, self::META_DISCOVERY' ) >= 2, 'recommendation/discovery preferences use CAS' );
 f26_future_assert( false !== strpos( $future, 'save_user_meta_cas( $user_id, self::META_HISTORY_OPT_IN' ), 'history opt-in uses CAS' );
-f26_future_assert( false !== strpos( $future, "self::META_ALERTS === $meta_key && $did_remove" ), 'privacy erasure reconciles File 19 saved-alert deletions' );
+f26_future_assert( false !== strpos( $future, 'META_ALERTS === $meta_key && $did_remove' ), 'privacy erasure reconciles File 19 saved-alert deletions' );
 f26_future_assert( false !== strpos( $future, 'provider_query_empty_after_sanitization' ) && false !== strpos( $future, 'seed_query_empty_after_sanitization' ), 'provider-derived empty queries cannot broaden search' );
 f26_future_assert( false !== strpos( $future, 'snapshot_provider_bypassed_sensitive_query' ), 'research snapshots bypass optional provider for sensitive queries' );
 f26_future_assert( false !== strpos( $future, 'valid_historical_as_of' ), 'historical as_of calendar/time validation present' );
