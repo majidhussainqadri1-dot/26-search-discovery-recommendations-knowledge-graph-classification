@@ -10,7 +10,7 @@ $checks = array(
 	array( false !== strpos( $compact, "'state'=>'active'" ), 'approved transition writes active state' ),
 	array( false !== strpos( $source, 'public function remove_edge' ), 'edge removal has governed transition' ),
 	array( false !== strpos( $source, '$visible_keys' ), 'final visible node set is rebuilt before response' ),
-	array( false !== strpos( $compact, "isset($visible_keys[$edge['source_key']],$visible_keys[$edge['target_key']])" ), 'edges to revoked nodes are removed from response' ),
+	array( false !== strpos( $compact, 'isset($visible_keys[$edge[\'source_key\']],$visible_keys[$edge[\'target_key\']])' ), 'edges to revoked nodes are removed from response' ),
 	array( false !== strpos( $compact, 'hash_equals($source,$target)' ), 'self-edge rejected' ),
 );
 $failures = 0;
