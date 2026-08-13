@@ -17,6 +17,16 @@ trait Future_Infra_Trait {
 
 	public function enqueue_assets() {
 		wp_enqueue_script( 'sabri-file26-future', SABRI_FILE26_URL . 'assets/js/file26-future.js', array(), SABRI_FILE26_VERSION, true );
+		wp_localize_script(
+			'sabri-file26-future',
+			'SabriFile26FutureConfig',
+			array(
+				'restUrl' => esc_url_raw( rest_url( self::REST_NAMESPACE . '/' ) ),
+				'nonce' => wp_create_nonce( 'wp_rest' ),
+				'loggedIn' => is_user_logged_in(),
+				'contract' => self::CONTRACT,
+			)
+		);
 	}
 
 	public function assurance_manifest( $manifests ) {
@@ -67,14 +77,30 @@ trait Future_Infra_Trait {
 	public function privacy_export( $email_address, $page = 1 ) {
 		$user = get_user_by( 'email', $email_address );
 		if ( ! $user ) { return array( 'data' => array(), 'done' => true ); }
-		$data = array();
-		foreach ( array( self::META_TRAILS => 'Research trails', self::META_ALERTS => 'Saved search alerts', self::META_HISTORY => 'Opt-in server search history', self::META_DISCOVERY => 'Discovery controls' ) as $meta_key => $label ) {
-			$value = get_user_meta( $user->ID, $meta_key, true );
-			if ( ! empty( $value ) ) {
-				$data[] = array( 'group_id' => 'sabri-file26-future', 'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'item_id' => $meta_key, 'data' => array( array( 'name' => $label, 'value' => wp_json_encode( $value ) ) ) );
-			}
+		$groups = array(
+			self::META_TRAILS => 'Research trails',
+			self::META_ALERTS => 'Saved search alerts',
+			self::META_HISTORY => 'Opt-in server search history',
+			self::META_DISCOVERY => 'Discovery controls',
+		);
+		$page = max( 1, (int) $page );
+		$keys = array_keys( $groups );
+		$index = $page - 1;
+		if ( ! isset( $keys[ $index ] ) ) {
+			return array( 'data' => array(), 'done' => true );
 		}
-		return array( 'data' => $data, 'done' => true );
+		$meta_key = $keys[ $index ];
+		$value = get_user_meta( $user->ID, $meta_key, true );
+		$data = array();
+		if ( ! empty( $value ) ) {
+			$data[] = array(
+				'group_id' => 'sabri-file26-future',
+				'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ),
+				'item_id' => $meta_key,
+				'data' => array( array( 'name' => $groups[ $meta_key ], 'value' => wp_json_encode( $value ) ) ),
+			);
+		}
+		return array( 'data' => $data, 'done' => $page >= count( $keys ) );
 	}
 
 	public function privacy_erase( $email_address, $page = 1 ) {
