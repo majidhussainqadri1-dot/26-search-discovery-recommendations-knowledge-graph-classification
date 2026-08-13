@@ -26,6 +26,9 @@ trait Future_Multimodal_Trait {
 			return array( 'state' => 'provider_unavailable_or_not_authorized', 'asset' => $reference, 'results' => array(), 'diagnosis_performed' => false );
 		}
 		$q = $this->security->sanitize_query( (string) $adapter['query_text'] );
+		if ( '' === $q ) {
+			return array( 'state' => 'provider_returned_empty_query', 'asset' => $reference, 'results' => array(), 'diagnosis_performed' => false, 'authorization_attestation' => 'owner_authorized' );
+		}
 		$result = $this->base_search( $q, array( 'limit' => 20, 'filters' => isset( $adapter['filters'] ) && is_array( $adapter['filters'] ) ? $this->sanitize_filters( $adapter['filters'] ) : array() ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return array( 'state' => 'ok', 'asset' => $reference, 'derived_query' => $q, 'results' => $this->safe_results( (array) $result['results'] ), 'diagnosis_performed' => false, 'authorization_attestation' => 'owner_authorized' );
@@ -56,6 +59,7 @@ trait Future_Multimodal_Trait {
 		$params = $this->params( $request );
 		$q = $this->query( $params );
 		$kind = isset( $params['kind'] ) ? sanitize_key( (string) $params['kind'] ) : '';
+		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
 		$provided = apply_filters( 'sabri_file26_segment_search_provider', null, $q, $kind, array_merge( $params, array( 'eligibility_attestation_required' => true ) ) );
 		if ( ! is_array( $provided ) || 'owner_revalidated_for_request' !== ( isset( $provided['eligibility_attestation'] ) ? $provided['eligibility_attestation'] : '' ) || ! isset( $provided['segments'] ) || ! is_array( $provided['segments'] ) ) {
 			return array( 'query' => $q, 'kind' => $kind, 'state' => 'owner_segment_provider_unavailable_or_not_authorized', 'segments' => array(), 'invented_position' => false );
@@ -71,7 +75,9 @@ trait Future_Multimodal_Trait {
 				if ( isset( $segment[ $key ] ) && '' !== $segment[ $key ] ) { $position[ $key ] = substr( sanitize_text_field( (string) $segment[ $key ] ), 0, 120 ); }
 			}
 			if ( ! $position ) { continue; }
-			$valid[] = array( 'owner' => sanitize_key( (string) $segment['owner'] ), 'object_id' => sanitize_text_field( (string) $segment['object_id'] ), 'canonical_url' => esc_url_raw( (string) $segment['canonical_url'] ), 'title' => isset( $segment['title'] ) ? sanitize_text_field( (string) $segment['title'] ) : '', 'excerpt' => isset( $segment['excerpt'] ) ? wp_strip_all_tags( (string) $segment['excerpt'] ) : '', 'position' => $position, 'provenance' => substr( sanitize_text_field( (string) $segment['provenance'] ), 0, 300 ) );
+			$canonical_url = esc_url_raw( (string) $segment['canonical_url'] );
+			if ( '' === $canonical_url ) { continue; }
+			$valid[] = array( 'owner' => sanitize_key( (string) $segment['owner'] ), 'object_id' => sanitize_text_field( (string) $segment['object_id'] ), 'canonical_url' => $canonical_url, 'title' => isset( $segment['title'] ) ? sanitize_text_field( (string) $segment['title'] ) : '', 'excerpt' => isset( $segment['excerpt'] ) ? wp_strip_all_tags( (string) $segment['excerpt'] ) : '', 'position' => $position, 'provenance' => substr( sanitize_text_field( (string) $segment['provenance'] ), 0, 300 ) );
 		}
 		return array( 'query' => $q, 'kind' => $kind, 'state' => $valid ? 'ok' : 'no_match', 'segments' => $valid, 'invented_position' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
@@ -85,8 +91,10 @@ trait Future_Multimodal_Trait {
 		if ( ! is_array( $seed ) || 'owner_revalidated_for_request' !== ( isset( $seed['eligibility_attestation'] ) ? $seed['eligibility_attestation'] : '' ) || empty( $seed['query'] ) ) {
 			return array( 'state' => 'seed_provider_unavailable_or_not_authorized', 'canonical_key' => $key, 'results' => array() );
 		}
+		$seed_query = $this->security->sanitize_query( (string) $seed['query'] );
+		if ( '' === $seed_query ) { return array( 'state' => 'seed_provider_returned_empty_query', 'canonical_key' => $key, 'results' => array() ); }
 		$filters = isset( $seed['filters'] ) && is_array( $seed['filters'] ) ? $this->sanitize_filters( $seed['filters'] ) : array();
-		$result = $this->base_search( $seed['query'], array( 'filters' => $filters, 'limit' => 24 ) );
+		$result = $this->base_search( $seed_query, array( 'filters' => $filters, 'limit' => 24 ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		$items = array_values( array_filter( (array) $result['results'], static function ( $item ) use ( $key ) { return empty( $item['key'] ) || $key !== $item['key']; } ) );
 		return array( 'state' => 'ok', 'canonical_key' => $key, 'seed_provenance' => isset( $seed['provenance'] ) ? sanitize_text_field( (string) $seed['provenance'] ) : '', 'results' => $this->safe_results( $items ), 'eligibility_attestation' => 'owner_revalidated_for_request' );

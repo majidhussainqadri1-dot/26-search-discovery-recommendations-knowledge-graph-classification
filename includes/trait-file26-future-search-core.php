@@ -19,7 +19,7 @@ trait Future_Search_Core_Trait {
 		$clinical = $this->autonomous_clinical_intent( $q );
 		$answer = null;
 		$provider_state = 'not_called';
-		if ( ! $clinical && $sources ) {
+		if ( ! $clinical && ! $this->sensitive_query( $q ) && $sources ) {
 			$candidate = apply_filters( 'sabri_file26_grounded_answer_provider', null, $q, $sources, array( 'no_autonomous_diagnosis' => true, 'no_autonomous_prescription' => true ) );
 			if ( is_array( $candidate ) && ! empty( $candidate['answer'] ) && isset( $candidate['safety_attestation'] ) && 'grounded_non_prescriptive' === $candidate['safety_attestation'] ) {
 				$allowed_keys = array();
@@ -48,6 +48,7 @@ trait Future_Search_Core_Trait {
 			'answer_provider_state' => $provider_state,
 			'safety' => array(
 				'autonomous_clinical_intent' => $clinical,
+				'sensitive_query' => $this->sensitive_query( $q ),
 				'autonomous_diagnosis' => false,
 				'autonomous_prescription' => false,
 				'note' => $clinical ? 'Clinical-treatment intent is limited to source discovery; no generated diagnosis, dose or potency is returned.' : 'Answer content must remain grounded in returned source keys.',
@@ -79,6 +80,10 @@ trait Future_Search_Core_Trait {
 		$executed = array();
 		if ( ! empty( $params['execute'] ) ) {
 			foreach ( $plan as $step ) {
+				if ( '' === $step['query'] && empty( $step['filters'] ) ) {
+					$executed[] = array( 'query' => '', 'state' => 'skipped_empty' );
+					continue;
+				}
 				$r = $this->base_search( $step['query'], array( 'filters' => $step['filters'], 'limit' => 8, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' ) );
 				$executed[] = is_wp_error( $r ) ? array( 'query' => $step['query'], 'state' => 'failed', 'code' => $r->get_error_code() ) : array( 'query' => $step['query'], 'state' => 'ok', 'results' => $this->safe_results( (array) $r['results'] ) );
 			}
@@ -96,14 +101,20 @@ trait Future_Search_Core_Trait {
 		foreach ( $this->normalizer->expansions( $q ) as $expansion ) {
 			$variants[] = array( 'query' => $expansion, 'locale' => $locale, 'source' => 'file26_normalizer' );
 		}
-		$provided = apply_filters( 'sabri_file26_cross_language_variants', array(), $q, $locale );
+		$provided = array();
+		if ( ! $this->sensitive_query( $q ) ) {
+			$provided = apply_filters( 'sabri_file26_cross_language_variants', array(), $q, $locale );
+		}
 		foreach ( array_slice( (array) $provided, 0, 8 ) as $variant ) {
 			if ( is_array( $variant ) && ! empty( $variant['query'] ) ) {
-				$variants[] = array( 'query' => $this->security->sanitize_query( (string) $variant['query'] ), 'locale' => isset( $variant['locale'] ) ? sanitize_text_field( (string) $variant['locale'] ) : '', 'source' => 'approved_cross_language_provider' );
+				$sanitized_variant = $this->security->sanitize_query( (string) $variant['query'] );
+				if ( '' === $sanitized_variant ) { continue; }
+				$variants[] = array( 'query' => $sanitized_variant, 'locale' => isset( $variant['locale'] ) ? sanitize_text_field( (string) $variant['locale'] ) : '', 'source' => 'approved_cross_language_provider' );
 			}
 		}
 		$unique_variants = array();
 		foreach ( $variants as $variant ) {
+			if ( '' === $variant['query'] ) { continue; }
 			$variant_key = hash( 'sha256', $this->normalizer->normalize( $variant['query'] ) . '|' . $variant['locale'] );
 			if ( ! isset( $unique_variants[ $variant_key ] ) ) { $unique_variants[ $variant_key ] = $variant; }
 		}
@@ -125,17 +136,21 @@ trait Future_Search_Core_Trait {
 			}
 		}
 		usort( $merged, static function ( $a, $b ) { $as = isset( $a['score'] ) ? (float) $a['score'] : 0; $bs = isset( $b['score'] ) ? (float) $b['score'] : 0; return $as === $bs ? 0 : ( $as > $bs ? -1 : 1 ); } );
-		return array( 'query' => $q, 'variant_count' => count( $variants ), 'variant_states' => $states, 'results' => $this->safe_results( array_slice( $merged, 0, 30 ) ), 'translation_claim' => false, 'semantic_cross_language_provider_available' => ! empty( $provided ) );
+		return array( 'query' => $q, 'variant_count' => count( $variants ), 'variant_states' => $states, 'results' => $this->safe_results( array_slice( $merged, 0, 30 ) ), 'translation_claim' => false, 'semantic_cross_language_provider_available' => ! empty( $provided ), 'sensitive_provider_bypass' => $this->sensitive_query( $q ) );
 	}
 
 /** F26-FUT-04 — second-stage semantic reranking with immutable safety/eligibility guardrails. */
 	public function semantic_rerank( \WP_REST_Request $request ) {
 		$params = $this->params( $request );
 		$q = $this->query( $params );
-		$result = $this->base_search( $q, array( 'limit' => 30, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '', 'filters' => isset( $params['filters'] ) && is_array( $params['filters'] ) ? $params['filters'] : array() ) );
+		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
+		$result = $this->base_search( $q, array( 'limit' => 30, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '', 'filters' => isset( $params['filters'] ) && is_array( $params['filters'] ) ? $this->sanitize_filters( $params['filters'] ) : array() ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		$candidates = $this->safe_results( (array) $result['results'] );
-		$scores = apply_filters( 'sabri_file26_semantic_reranker', array(), $q, $candidates, array( 'safety_gates_immutable' => true, 'visibility_gates_immutable' => true, 'financial_signals_prohibited' => true ) );
+		$scores = array();
+		if ( ! $this->sensitive_query( $q ) && ! $this->autonomous_clinical_intent( $q ) ) {
+			$scores = apply_filters( 'sabri_file26_semantic_reranker', array(), $q, $candidates, array( 'safety_gates_immutable' => true, 'visibility_gates_immutable' => true, 'financial_signals_prohibited' => true ) );
+		}
 		$provider = false;
 		if ( is_array( $scores ) && $scores ) {
 			$provider = true;
@@ -150,7 +165,7 @@ trait Future_Search_Core_Trait {
 				return $as === $bs ? 0 : ( $as > $bs ? -1 : 1 );
 			} );
 		}
-		return array( 'query' => $q, 'provider_available' => $provider, 'results' => array_slice( $candidates, 0, 20 ), 'guardrails' => array( 'visibility' => 'immutable', 'safety' => 'immutable', 'paid_or_donor_signal' => 'prohibited' ) );
+		return array( 'query' => $q, 'provider_available' => $provider, 'provider_bypassed_for_sensitive_or_clinical' => $this->sensitive_query( $q ) || $this->autonomous_clinical_intent( $q ), 'results' => array_slice( $candidates, 0, 20 ), 'guardrails' => array( 'visibility' => 'immutable', 'safety' => 'immutable', 'paid_or_donor_signal' => 'prohibited' ) );
 	}
 
 }

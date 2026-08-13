@@ -35,33 +35,12 @@ for ( $i = 1; $i <= 24; $i++ ) {
 $slugs = array(
 	'conversational-grounded-search','query-planner','cross-language-search','semantic-rerank','multimodal-search','voice-search','segment-search','find-similar','research-search','result-clusters','graph-path','evidence-map','disambiguate','historical-search','research-trails','saved-search-alerts','search-history','recommendation-transparency','discovery-breadth','geo-availability','search-modes','private-search-vault','external-evidence','relevance-lab'
 );
-foreach ( $slugs as $slug ) {
-	f26_future_assert( false !== strpos( $future, "'$slug' => array(" ), "route manifest contains $slug" );
-}
+foreach ( $slugs as $slug ) { f26_future_assert( false !== strpos( $future, "'$slug' => array(" ), "route manifest contains $slug" ); }
 
 $hooks = array(
-	'sabri_file26_grounded_answer_provider',
-	'sabri_file26_cross_language_variants',
-	'sabri_file26_semantic_reranker',
-	'sabri_file26_multimodal_query_adapter',
-	'sabri_file26_voice_transcription_adapter',
-	'sabri_file26_segment_search_provider',
-	'sabri_file26_similarity_seed',
-	'sabri_file26_research_snapshot_provider',
-	'sabri_file26_graph_path_provider',
-	'sabri_file26_evidence_map_provider',
-	'sabri_file26_historical_snapshot_search',
-	'sabri_file26_saved_search_alert_changed',
-	'sabri_file26_geo_availability_constraints',
-	'sabri_file26_private_vault_provider',
-	'sabri_file26_external_evidence_connector_approved',
-	'sabri_file26_external_evidence_provider',
-	'sabri_file26_relevance_lab_candidate',
-	'sabri_file26_future_step_up_verified'
+	'sabri_file26_grounded_answer_provider','sabri_file26_cross_language_variants','sabri_file26_semantic_reranker','sabri_file26_multimodal_query_adapter','sabri_file26_voice_transcription_adapter','sabri_file26_segment_search_provider','sabri_file26_similarity_seed','sabri_file26_research_snapshot_provider','sabri_file26_graph_path_provider','sabri_file26_evidence_map_provider','sabri_file26_historical_snapshot_search','sabri_file26_saved_search_alert_changed','sabri_file26_geo_availability_constraints','sabri_file26_private_vault_provider','sabri_file26_external_evidence_connector_approved','sabri_file26_external_evidence_provider','sabri_file26_relevance_lab_candidate','sabri_file26_future_step_up_verified'
 );
-foreach ( $hooks as $hook ) {
-	f26_future_assert( false !== strpos( $future, $hook ), "provider/integration contract $hook present" );
-}
+foreach ( $hooks as $hook ) { f26_future_assert( false !== strpos( $future, $hook ), "provider/integration contract $hook present" ); }
 
 f26_future_assert( false !== strpos( $future, "'autonomous_diagnosis' => false" ), 'conversational search forbids autonomous diagnosis' );
 f26_future_assert( false !== strpos( $future, "'autonomous_prescription' => false" ), 'conversational search forbids autonomous prescription' );
@@ -88,11 +67,10 @@ f26_future_assert( false !== strpos( $future, "'result_schema'] = 'sabri.file26.
 f26_future_assert( false !== strpos( $future, "future_capability_count'] = 24" ), 'File 24 assurance advertises 24 future capabilities' );
 
 $forbidden = array( 'donation' . '_score', 'payment' . '_score', 'paid_rank' . '_score', 'founder_favoritism' . '_score', 'sponsor' . '_score' );
-foreach ( $forbidden as $signal ) {
-	f26_future_assert( false === strpos( $future, $signal ), "forbidden organic ranking signal absent: $signal" );
-}
+foreach ( $forbidden as $signal ) { f26_future_assert( false === strpos( $future, $signal ), "forbidden organic ranking signal absent: $signal" ); }
 
 f26_future_assert( 0 === preg_match( '/(?:SELECT|UPDATE|DELETE|INSERT)\s+.*(?:clinical_|message_body|payment_card|smc_)/i', $future ), 'no direct sensitive foreign-table access' );
 f26_future_assert( false !== strpos( $doc, 'Specified' ) && false !== strpos( $doc, 'Coded' ) && false !== strpos( $doc, 'Staging-Accepted' ) && false !== strpos( $doc, 'Live-Deployed' ), 'status/evidence ladder preserved' );
 
 echo "PASS: $checks Future Search Intelligence contract assertions\n";
+require __DIR__ . '/review-forty-round-contract-tests.php';
