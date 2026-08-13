@@ -30,7 +30,7 @@ final class Graph {
 		$source = preg_replace( '/[^a-f0-9]/', '', strtolower( isset( $input['source_key'] ) ? $input['source_key'] : '' ) );
 		$target = preg_replace( '/[^a-f0-9]/', '', strtolower( isset( $input['target_key'] ) ? $input['target_key'] : '' ) );
 		$type = sanitize_key( isset( $input['edge_type'] ) ? $input['edge_type'] : '' );
-		if ( strlen( $source ) !== 64 || strlen( $target ) !== 64 || ! in_array( $type, $this->allowed_edges, true ) ) {
+		if ( strlen( $source ) !== 64 || strlen( $target ) !== 64 || ! in_array( $type, $this->allowed_edges, true ) || hash_equals( $source, $target ) ) {
 			return new \WP_Error( 'file26_invalid_edge', 'Invalid graph edge.' );
 		}
 		if ( ! $this->public_node_exists( $source ) || ! $this->public_node_exists( $target ) ) {
@@ -76,6 +76,55 @@ final class Graph {
 		$this->security->audit( 'knowledge_edge_created', array( 'object_type' => 'knowledge_edge', 'object_key' => $uuid, 'metadata' => array( 'edge_type' => $type, 'source_key' => $source, 'target_key' => $target ) ) );
 		do_action( 'sabri_file26_event', 'KnowledgeEdgeCreated', array( 'edge_uuid' => $uuid, 'edge_type' => $type ) );
 		return $uuid;
+	}
+
+	public function approve_edge( $edge_uuid, $expected_version = 1 ) {
+		global $wpdb;
+		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'graph_edge_approve' ) ) {
+			return new \WP_Error( 'file26_step_up_required', 'Fresh graph approval authorization is required.', array( 'status' => 403 ) );
+		}
+		$edge_uuid = sanitize_text_field( $edge_uuid );
+		$edge = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'edges' ) . ' WHERE edge_uuid=%s', $edge_uuid ), ARRAY_A );
+		if ( ! $edge || 'draft' !== $edge['state'] || (int) $edge['version'] !== (int) $expected_version ) {
+			return new \WP_Error( 'file26_edge_conflict', 'Graph edge is missing or changed concurrently.', array( 'status' => 409 ) );
+		}
+		if ( ! $this->public_node_exists( $edge['source_key'] ) || ! $this->public_node_exists( $edge['target_key'] ) || empty( json_decode( $edge['provenance'], true ) ) ) {
+			return new \WP_Error( 'file26_edge_endpoint_stale', 'Graph endpoints or provenance are no longer eligible for activation.', array( 'status' => 409 ) );
+		}
+		$approved = (bool) apply_filters( 'sabri_file26_graph_edge_owner_approved', 'File 26' === $edge['owner_file'], $edge, get_current_user_id() );
+		if ( ! $approved ) {
+			return new \WP_Error( 'file26_graph_owner_approval_required', 'The source-domain owner must approve this graph edge.', array( 'status' => 403 ) );
+		}
+		$updated = $wpdb->update(
+			DB::table( 'edges' ),
+			array( 'state' => 'active', 'version' => (int) $edge['version'] + 1, 'updated_at' => DB::now() ),
+			array( 'edge_uuid' => $edge_uuid, 'state' => 'draft', 'version' => (int) $edge['version'] ),
+			array( '%s', '%d', '%s' ), array( '%s', '%s', '%d' )
+		);
+		if ( 1 !== $updated ) {
+			return new \WP_Error( 'file26_edge_conflict', 'Graph edge changed concurrently.', array( 'status' => 409 ) );
+		}
+		$this->security->audit( 'knowledge_edge_approved', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'metadata' => array( 'version' => (int) $edge['version'] + 1 ) ) );
+		do_action( 'sabri_file26_event', 'KnowledgeEdgeApproved', array( 'edge_uuid' => $edge_uuid, 'version' => (int) $edge['version'] + 1 ) );
+		return true;
+	}
+
+	public function remove_edge( $edge_uuid, $expected_version, $reason = '' ) {
+		global $wpdb;
+		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'graph_edge_remove' ) ) {
+			return new \WP_Error( 'file26_step_up_required', 'Fresh graph removal authorization is required.', array( 'status' => 403 ) );
+		}
+		$edge_uuid = sanitize_text_field( $edge_uuid );
+		$updated = $wpdb->query( $wpdb->prepare(
+			'UPDATE ' . DB::table( 'edges' ) . " SET state='removed',version=version+1,updated_at=%s WHERE edge_uuid=%s AND version=%d AND state IN ('draft','active')",
+			DB::now(), $edge_uuid, (int) $expected_version
+		) );
+		if ( 1 !== (int) $updated ) {
+			return new \WP_Error( 'file26_edge_conflict', 'Graph edge is missing or changed concurrently.', array( 'status' => 409 ) );
+		}
+		$this->security->audit( 'knowledge_edge_removed', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'reason' => sanitize_text_field( $reason ) ) );
+		do_action( 'sabri_file26_event', 'KnowledgeEdgeRemoved', array( 'edge_uuid' => $edge_uuid ) );
+		return true;
 	}
 
 	public function query( $start_key, $depth = 1, $degree = 10, array $allowed_types = array() ) {
@@ -131,6 +180,17 @@ final class Graph {
 			);
 			$nodes = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
+		// Final fail-closed recheck: a node can be revoked after traversal but before response assembly.
+		$visible_keys = array();
+		foreach ( (array) $nodes as $node ) {
+			$visible_keys[ $node['node_key'] ] = true;
+		}
+		if ( ! isset( $visible_keys[ $start_key ] ) ) {
+			return new \WP_Error( 'file26_graph_node_not_found', 'Graph node is no longer public.', array( 'status' => 404 ) );
+		}
+		$edges = array_values( array_filter( $edges, static function ( $edge ) use ( $visible_keys ) {
+			return isset( $visible_keys[ $edge['source_key'] ], $visible_keys[ $edge['target_key'] ] );
+		} ) );
 		return array(
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 			'start_key' => $start_key,
@@ -139,7 +199,6 @@ final class Graph {
 			'edges' => $edges,
 		);
 	}
-
 
 	private function sanitize_provenance( array $value, $depth = 0 ) {
 		if ( $depth > 3 || count( $value ) > 50 ) {

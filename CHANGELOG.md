@@ -12,7 +12,10 @@
 - Added truthful per-result index freshness evidence; unknown source-update time remains unknown instead of false-green.
 - Added F26-CEN-01/F26-CEN-02 integrity contracts, single-free-tier rank parity and File 20/File 25 ownership declarations.
 - Updated Sabri Green fallback to `#087A4E` without creating a second visual-token owner.
-- Pinned GitHub Actions dependencies and expanded deterministic QA/package gates for v1.2.0.
+- Completed an additional independent 20-round corrective review. It hardened index/tombstone concurrency, connector checkpoints, sensitive-query caching, personalization revocation, taxonomy/graph governance, real dual approval, classification CAS/domain review, privacy export/erasure, doctor ranking/appeals, migration-before-runtime, worker recovery, deletion reconciliation and autocomplete accessibility.
+- Expanded the QA gate so every review-round regression executes both from source and from the clean deterministic package.
+- Updated official GitHub Actions to immutable current Node 24 releases for checkout, setup-node and artifact upload.
+- Preserved release truth: repository QA/package evidence remains separate from Hostinger staging, deployed version, deployed DB/schema, migration state and live operational verification.
 
 ## 1.1.0 — 2026-08-05
 

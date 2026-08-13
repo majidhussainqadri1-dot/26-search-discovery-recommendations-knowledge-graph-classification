@@ -68,9 +68,9 @@ f26_central_assert( false !== strpos( $files['plugin'], "'primary_accent_fallbac
 f26_central_assert( false !== strpos( $files['plugin'], "'visual_owner' => 'File 25'" ), 'File 26 does not claim visual ownership' );
 f26_central_assert( false !== strpos( $files['plugin'], "'shell_owner'" ) || false !== strpos( $files['central'], "'shell_owner' => 'File 20'" ), 'File 20 shell ownership retained' );
 
-f26_central_assert( false !== strpos( $files['workflow'], 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' ), 'checkout action pinned' );
-f26_central_assert( false !== strpos( $files['workflow'], 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' ), 'setup-node action pinned' );
-f26_central_assert( false !== strpos( $files['workflow'], 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' ), 'upload-artifact action pinned' );
+f26_central_assert( false !== strpos( $files['workflow'], 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' ), 'checkout action pinned to approved immutable Node 24 release' );
+f26_central_assert( false !== strpos( $files['workflow'], 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' ), 'setup-node action pinned to approved immutable Node 24 release' );
+f26_central_assert( false !== strpos( $files['workflow'], 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' ), 'upload-artifact action pinned to approved immutable Node 24 release' );
 
 if ( $failures ) {
 	fwrite( STDERR, "$failures of $assertions central-plan assertions failed.\n" );

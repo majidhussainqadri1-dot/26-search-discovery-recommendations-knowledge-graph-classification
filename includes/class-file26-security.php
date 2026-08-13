@@ -16,19 +16,20 @@ final class Security {
 
 	public function audience() {
 		$authenticated = is_user_logged_in();
+		$current_user_id = get_current_user_id();
 		$default = array(
 			'contract_version' => null,
-			'user_id' => get_current_user_id(),
+			'user_id' => $current_user_id,
 			'authenticated' => $authenticated,
 			'suspended' => false,
 			'is_minor' => false,
 			'guardian_verified' => false,
 			'entitlements' => array(),
 			'consents' => array(),
-			'roles' => is_user_logged_in() ? wp_get_current_user()->roles : array(),
+			'roles' => $authenticated ? wp_get_current_user()->roles : array(),
 			'valid' => ! $authenticated,
 		);
-		$claims = apply_filters( 'sabri_file26_membership_assertions', $default, get_current_user_id() );
+		$claims = apply_filters( 'sabri_file26_membership_assertions', $default, $current_user_id );
 		if ( ! is_array( $claims ) ) {
 			$claims = $default;
 			$claims['valid'] = false;
@@ -39,7 +40,12 @@ final class Security {
 		} else {
 			$claims['valid'] = true;
 		}
-		return array_merge( $default, $claims );
+		$audience = array_merge( $default, $claims );
+		// The membership adapter may add assertions, but it cannot change the authenticated subject of this request.
+		$audience['user_id'] = $current_user_id;
+		$audience['authenticated'] = $authenticated;
+		$audience['roles'] = $authenticated ? wp_get_current_user()->roles : array();
+		return $audience;
 	}
 
 	public function can_view_visibility( $visibility, array $audience, array $payload = array() ) {
@@ -65,26 +71,37 @@ final class Security {
 
 	/** Configuration authority only; it is not an operational super-capability. */
 	public function can_manage() {
-		return current_user_can( 'manage_sabri_search' );
+		return $this->current_membership_valid() && current_user_can( 'manage_sabri_search' );
 	}
 
 	public function can_operate() {
-		return current_user_can( 'operate_sabri_search' );
+		return $this->current_membership_valid() && current_user_can( 'operate_sabri_search' );
 	}
 
 	public function can_curate() {
-		return current_user_can( 'curate_sabri_taxonomy' );
+		return $this->current_membership_valid() && current_user_can( 'curate_sabri_taxonomy' );
 	}
 
 	public function can_approve_ranking() {
-		return current_user_can( 'approve_sabri_ranking' );
+		return $this->current_membership_valid() && current_user_can( 'approve_sabri_ranking' );
 	}
 
 	public function can_audit() {
-		return current_user_can( 'audit_sabri_search' );
+		return $this->current_membership_valid() && current_user_can( 'audit_sabri_search' );
+	}
+
+	private function current_membership_valid() {
+		if ( ! is_user_logged_in() ) {
+			return false;
+		}
+		$audience = $this->audience();
+		return ! empty( $audience['authenticated'] ) && ! empty( $audience['valid'] ) && empty( $audience['suspended'] ) && (int) $audience['user_id'] === (int) get_current_user_id();
 	}
 
 	public function require_step_up( $purpose ) {
+		if ( ! $this->current_membership_valid() ) {
+			return false;
+		}
 		return (bool) apply_filters(
 			'sabri_file26_step_up_authorized',
 			false,
@@ -123,16 +140,26 @@ final class Security {
 	}
 
 	public function safe_url( $url ) {
-		$url = esc_url_raw( (string) $url );
+		$url = esc_url_raw( (string) $url, array( 'http', 'https' ) );
 		if ( ! $url ) {
 			return '';
 		}
 		$home = wp_parse_url( home_url( '/' ) );
 		$target = wp_parse_url( $url );
 		if ( empty( $target['host'] ) ) {
-			return esc_url_raw( home_url( '/' . ltrim( $url, '/' ) ) );
+			return esc_url_raw( home_url( '/' . ltrim( $url, '/' ) ), array( 'http', 'https' ) );
 		}
-		if ( empty( $home['host'] ) || strtolower( $target['host'] ) !== strtolower( $home['host'] ) ) {
+		$home_scheme = isset( $home['scheme'] ) ? strtolower( $home['scheme'] ) : '';
+		$target_scheme = isset( $target['scheme'] ) ? strtolower( $target['scheme'] ) : '';
+		$home_port = isset( $home['port'] ) ? (int) $home['port'] : ( 'https' === $home_scheme ? 443 : 80 );
+		$target_port = isset( $target['port'] ) ? (int) $target['port'] : ( 'https' === $target_scheme ? 443 : 80 );
+		if (
+			empty( $home['host'] ) ||
+			strtolower( $target['host'] ) !== strtolower( $home['host'] ) ||
+			$target_scheme !== $home_scheme ||
+			$target_port !== $home_port ||
+			isset( $target['user'] ) || isset( $target['pass'] )
+		) {
 			return '';
 		}
 		return $url;
@@ -200,9 +227,15 @@ final class Security {
 			ON DUPLICATE KEY UPDATE count_value = count_value + 1, expires_at = VALUES(expires_at)",
 			$bucket, $window, $expires
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT count_value FROM $table WHERE bucket_key=%s AND window_start=%d", $bucket, $window ) );
-		return $count <= $limit;
+		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $written ) {
+			return false;
+		}
+		$count = $wpdb->get_var( $wpdb->prepare( "SELECT count_value FROM $table WHERE bucket_key=%s AND window_start=%d", $bucket, $window ) );
+		if ( null === $count ) {
+			return false;
+		}
+		return (int) $count <= $limit;
 	}
 
 	public function client_bucket() {

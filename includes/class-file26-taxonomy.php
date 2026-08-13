@@ -45,7 +45,9 @@ final class Taxonomy {
 			return new \WP_Error( 'file26_term_conflict', 'The taxonomy term conflicts with an existing active identifier.' );
 		}
 		foreach ( isset( $input['aliases'] ) ? (array) $input['aliases'] : array() as $alias ) {
-			$this->add_alias( $uuid, $alias, $language );
+			if ( ! $this->add_alias( $uuid, $alias, $language ) ) {
+				return new \WP_Error( 'file26_alias_write_failed', 'A taxonomy alias could not be stored.' );
+			}
 		}
 		$this->security->audit( 'taxonomy_term_created', array( 'object_type' => 'taxonomy_term', 'object_key' => $uuid ) );
 		return $this->get( $uuid );
@@ -82,6 +84,29 @@ final class Taxonomy {
 		return $this->get( $uuid );
 	}
 
+	public function merge_preview( $source_uuid, $target_uuid ) {
+		global $wpdb;
+		if ( ! $this->security->can_curate() ) {
+			return new \WP_Error( 'file26_forbidden', 'Taxonomy capability is required.', array( 'status' => 403 ) );
+		}
+		$source = $this->get( $source_uuid );
+		$target = $this->get( $target_uuid );
+		if ( ! $source || ! $target || $source['term_uuid'] === $target['term_uuid'] ) {
+			return new \WP_Error( 'file26_invalid_merge', 'Invalid taxonomy merge.' );
+		}
+		return array(
+			'source_uuid' => $source['term_uuid'],
+			'target_uuid' => $target['term_uuid'],
+			'source_status' => $source['status'],
+			'target_status' => $target['status'],
+			'source_owner' => $source['owner_file'],
+			'target_owner' => $target['owner_file'],
+			'impacted_classifications' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . DB::table( 'classifications' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ) ),
+			'impacted_aliases' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . DB::table( 'term_aliases' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ) ),
+			'rollback_mapping' => array( 'source_uuid' => $source['term_uuid'], 'previous_status' => $source['status'], 'previous_redirect_uuid' => $source['redirect_uuid'] ),
+		);
+	}
+
 	public function merge( $source_uuid, $target_uuid, $reason = '' ) {
 		global $wpdb;
 		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'taxonomy_merge' ) ) {
@@ -89,49 +114,70 @@ final class Taxonomy {
 		}
 		$source = $this->get( $source_uuid );
 		$target = $this->get( $target_uuid );
-		if ( ! $source || ! $target || $source_uuid === $target_uuid ) {
+		if ( ! $source || ! $target || $source['term_uuid'] === $target['term_uuid'] ) {
 			return new \WP_Error( 'file26_invalid_merge', 'Invalid taxonomy merge.' );
+		}
+		if ( ! in_array( $source['status'], array( 'active', 'corrected' ), true ) || 'active' !== $target['status'] ) {
+			return new \WP_Error( 'file26_invalid_merge_state', 'Merge requires a current source and an active canonical target.', array( 'status' => 409 ) );
+		}
+		$preview = $this->merge_preview( $source['term_uuid'], $target['term_uuid'] );
+		if ( is_wp_error( $preview ) ) {
+			return $preview;
+		}
+		if ( ! $this->domain_owner_approved( 'merge', array( $source, $target ), $preview ) ) {
+			return new \WP_Error( 'file26_domain_owner_approval_required', 'Affected domain-owner approval is required for this taxonomy merge.', array( 'status' => 403 ) );
 		}
 		$wpdb->query( 'START TRANSACTION' );
 		try {
+			$current_target = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'terms' ) . ' WHERE term_uuid=%s FOR UPDATE', $target['term_uuid'] ), ARRAY_A );
+			if ( ! $current_target || 'active' !== $current_target['status'] || (int) $current_target['version'] !== (int) $target['version'] ) {
+				throw new \RuntimeException( 'Target term changed concurrently.' );
+			}
 			$term_updated = $wpdb->update(
 				DB::table( 'terms' ),
-				array( 'status' => 'merged', 'redirect_uuid' => $target_uuid, 'version' => (int) $source['version'] + 1, 'updated_at' => DB::now() ),
-				array( 'term_uuid' => $source_uuid, 'version' => (int) $source['version'] )
+				array( 'status' => 'merged', 'redirect_uuid' => $target['term_uuid'], 'version' => (int) $source['version'] + 1, 'updated_at' => DB::now() ),
+				array( 'term_uuid' => $source['term_uuid'], 'version' => (int) $source['version'] )
 			);
 			if ( 1 !== $term_updated ) { throw new \RuntimeException( 'Concurrent term update.' ); }
-			$assignments = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'classifications' ) . ' WHERE term_uuid=%s', $source_uuid ), ARRAY_A );
+			$assignments = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'classifications' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ), ARRAY_A );
 			foreach ( $assignments as $assignment ) {
 				$sql = $wpdb->prepare(
 					'INSERT INTO ' . DB::table( 'classifications' ) . ' (object_key,term_uuid,confidence,method,method_version,reviewer_id,status,provenance,version,created_at,updated_at) VALUES (%s,%s,%f,%s,%s,%d,%s,%s,%d,%s,%s) ON DUPLICATE KEY UPDATE confidence=GREATEST(confidence,VALUES(confidence)),status=IF(status=\'approved\',status,VALUES(status)),provenance=VALUES(provenance),version=version+1,updated_at=VALUES(updated_at)',
-					$assignment['object_key'], $target_uuid, (float) $assignment['confidence'], $assignment['method'], $assignment['method_version'], (int) $assignment['reviewer_id'], $assignment['status'], $assignment['provenance'], (int) $assignment['version'] + 1, $assignment['created_at'], DB::now()
+					$assignment['object_key'], $target['term_uuid'], (float) $assignment['confidence'], $assignment['method'], $assignment['method_version'], (int) $assignment['reviewer_id'], $assignment['status'], $assignment['provenance'], (int) $assignment['version'] + 1, $assignment['created_at'], DB::now()
 				);
 				if ( false === $wpdb->query( $sql ) ) { throw new \RuntimeException( 'Classification merge failed.' ); }
 			}
-			$wpdb->delete( DB::table( 'classifications' ), array( 'term_uuid' => $source_uuid ), array( '%s' ) );
+			if ( false === $wpdb->delete( DB::table( 'classifications' ), array( 'term_uuid' => $source['term_uuid'] ), array( '%s' ) ) ) {
+				throw new \RuntimeException( 'Source classification cleanup failed.' );
+			}
 			$aliases = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT alias_label,language FROM ' . DB::table( 'term_aliases' ) . ' WHERE term_uuid=%s', $source_uuid ),
+				$wpdb->prepare( 'SELECT alias_label,language FROM ' . DB::table( 'term_aliases' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ),
 				ARRAY_A
 			);
 			foreach ( $aliases as $alias ) {
-				$this->add_alias( $target_uuid, $alias['alias_label'], $alias['language'] );
+				if ( ! $this->add_alias( $target['term_uuid'], $alias['alias_label'], $alias['language'] ) ) {
+					throw new \RuntimeException( 'Alias merge failed.' );
+				}
 			}
-			$this->add_alias( $target_uuid, $source['preferred_label'], $source['language'] );
+			if ( ! $this->add_alias( $target['term_uuid'], $source['preferred_label'], $source['language'] ) ) {
+				throw new \RuntimeException( 'Source label redirect alias failed.' );
+			}
 			$wpdb->query( 'COMMIT' );
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
-			return new \WP_Error( 'file26_merge_failed', 'Taxonomy merge failed.' );
+			return new \WP_Error( 'file26_merge_failed', 'Taxonomy merge failed or changed concurrently.' );
 		}
 		$this->security->audit(
 			'taxonomy_terms_merged',
 			array(
 				'object_type' => 'taxonomy_term',
-				'object_key' => $source_uuid,
+				'object_key' => $source['term_uuid'],
 				'reason' => $reason,
-				'metadata' => array( 'target_uuid' => $target_uuid ),
+				'metadata' => array( 'target_uuid' => $target['term_uuid'], 'rollback_mapping' => $preview['rollback_mapping'], 'impacted_classifications' => $preview['impacted_classifications'] ),
 			)
 		);
-		do_action( 'sabri_file26_event', 'TaxonomyTermsMerged', array( 'source_uuid' => $source_uuid, 'target_uuid' => $target_uuid ) );
+		do_action( 'sabri_file26_taxonomy_reindex_required', array( 'action' => 'merge', 'source_uuid' => $source['term_uuid'], 'target_uuids' => array( $target['term_uuid'] ) ) );
+		do_action( 'sabri_file26_event', 'TaxonomyTermsMerged', array( 'source_uuid' => $source['term_uuid'], 'target_uuid' => $target['term_uuid'], 'rollback_mapping' => $preview['rollback_mapping'] ) );
 		return true;
 	}
 
@@ -147,11 +193,37 @@ final class Taxonomy {
 		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'taxonomy_deprecate' ) ) { return new \WP_Error( 'file26_forbidden', 'Fresh taxonomy authorization is required.', array( 'status' => 403 ) ); }
 		$term = $this->get( $uuid );
 		$redirect = $redirect_uuid ? $this->get( $redirect_uuid ) : null;
-		if ( ! $term || ( $redirect_uuid && ! $redirect ) || $uuid === $redirect_uuid ) { return new \WP_Error( 'file26_invalid_deprecation', 'Invalid term or redirect target.' ); }
+		if ( ! $term || ( $redirect_uuid && ! $redirect ) || $term['term_uuid'] === $redirect_uuid ) { return new \WP_Error( 'file26_invalid_deprecation', 'Invalid term or redirect target.' ); }
+		if ( ! in_array( $term['status'], array( 'active', 'corrected' ), true ) || ( $redirect && 'active' !== $redirect['status'] ) ) {
+			return new \WP_Error( 'file26_invalid_deprecation_state', 'Deprecation requires a current term and an active redirect target.', array( 'status' => 409 ) );
+		}
+		if ( ! $this->domain_owner_approved( 'deprecate', $redirect ? array( $term, $redirect ) : array( $term ), array( 'redirect_uuid' => $redirect ? $redirect['term_uuid'] : null ) ) ) {
+			return new \WP_Error( 'file26_domain_owner_approval_required', 'Affected domain-owner approval is required for taxonomy deprecation.', array( 'status' => 403 ) );
+		}
 		$updated = $wpdb->update( DB::table( 'terms' ), array( 'status' => $redirect ? 'merged' : 'deprecated', 'redirect_uuid' => $redirect ? $redirect['term_uuid'] : null, 'version' => (int) $term['version'] + 1, 'updated_at' => DB::now() ), array( 'term_uuid' => $term['term_uuid'], 'version' => (int) $term['version'] ) );
 		if ( 1 !== $updated ) { return new \WP_Error( 'file26_term_conflict', 'Term changed concurrently.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'taxonomy_term_deprecated', array( 'object_type' => 'taxonomy_term', 'object_key' => $term['term_uuid'], 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'redirect_uuid' => $redirect ? $redirect['term_uuid'] : null ) ) );
+		do_action( 'sabri_file26_taxonomy_reindex_required', array( 'action' => 'deprecate', 'source_uuid' => $term['term_uuid'], 'target_uuids' => $redirect ? array( $redirect['term_uuid'] ) : array() ) );
 		return true;
+	}
+
+	public function split_preview( $source_uuid, array $targets ) {
+		global $wpdb;
+		if ( ! $this->security->can_curate() ) {
+			return new \WP_Error( 'file26_forbidden', 'Taxonomy capability is required.', array( 'status' => 403 ) );
+		}
+		$source = $this->get( $source_uuid );
+		if ( ! $source || count( $targets ) < 2 || count( $targets ) > 10 ) {
+			return new \WP_Error( 'file26_invalid_split', 'A valid source and two to ten target terms are required.' );
+		}
+		return array(
+			'source_uuid' => $source['term_uuid'],
+			'source_status' => $source['status'],
+			'source_owner' => $source['owner_file'],
+			'target_count' => count( $targets ),
+			'impacted_classifications' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . DB::table( 'classifications' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ) ),
+			'rollback_mapping' => array( 'source_uuid' => $source['term_uuid'], 'previous_status' => $source['status'], 'previous_redirect_uuid' => $source['redirect_uuid'] ),
+		);
 	}
 
 	public function split( $source_uuid, array $targets, $reason = '' ) {
@@ -159,30 +231,42 @@ final class Taxonomy {
 		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'taxonomy_split' ) ) { return new \WP_Error( 'file26_forbidden', 'Fresh taxonomy authorization is required.', array( 'status' => 403 ) ); }
 		$source = $this->get( $source_uuid );
 		if ( ! $source || count( $targets ) < 2 || count( $targets ) > 10 ) { return new \WP_Error( 'file26_invalid_split', 'A valid source and two to ten target terms are required.' ); }
+		if ( ! in_array( $source['status'], array( 'active', 'corrected' ), true ) ) {
+			return new \WP_Error( 'file26_invalid_split_state', 'Only a current active concept can be split.', array( 'status' => 409 ) );
+		}
+		$preview = $this->split_preview( $source['term_uuid'], $targets );
+		if ( is_wp_error( $preview ) ) { return $preview; }
+		if ( ! $this->domain_owner_approved( 'split', array( $source ), $preview ) ) {
+			return new \WP_Error( 'file26_domain_owner_approval_required', 'Affected domain-owner approval is required for this taxonomy split.', array( 'status' => 403 ) );
+		}
 		$created = array();
-		foreach ( $targets as $target ) {
-			$target = is_array( $target ) ? $target : array( 'preferred_label' => $target );
-			$target['language'] = isset( $target['language'] ) ? $target['language'] : $source['language'];
-			$target['owner_file'] = isset( $target['owner_file'] ) ? $target['owner_file'] : $source['owner_file'];
-			$result = $this->create( $target );
-			if ( is_wp_error( $result ) ) {
-				foreach ( $created as $term ) { $wpdb->delete( DB::table( 'term_aliases' ), array( 'term_uuid' => $term['term_uuid'] ), array( '%s' ) ); $wpdb->delete( DB::table( 'terms' ), array( 'term_uuid' => $term['term_uuid'], 'status' => 'draft' ), array( '%s', '%s' ) ); }
-				return $result;
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$current_source = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'terms' ) . ' WHERE term_uuid=%s FOR UPDATE', $source['term_uuid'] ), ARRAY_A );
+			if ( ! $current_source || (int) $current_source['version'] !== (int) $source['version'] || ! in_array( $current_source['status'], array( 'active', 'corrected' ), true ) ) {
+				throw new \RuntimeException( 'Source term changed concurrently.' );
 			}
-			$created[] = $result;
+			foreach ( $targets as $target ) {
+				$target = is_array( $target ) ? $target : array( 'preferred_label' => $target );
+				$target['language'] = isset( $target['language'] ) ? $target['language'] : $source['language'];
+				$target['owner_file'] = isset( $target['owner_file'] ) ? $target['owner_file'] : $source['owner_file'];
+				$result = $this->create( $target );
+				if ( is_wp_error( $result ) ) { throw new \RuntimeException( 'Split target creation failed.' ); }
+				$created[] = $result;
+			}
+			$ids = array_column( $created, 'term_uuid' );
+			$updated = $wpdb->update( DB::table( 'terms' ), array( 'status' => 'split', 'redirect_uuid' => $ids[0], 'related_json' => wp_json_encode( array( 'split_targets' => $ids ) ), 'version' => (int) $source['version'] + 1, 'updated_at' => DB::now() ), array( 'term_uuid' => $source['term_uuid'], 'version' => (int) $source['version'] ) );
+			if ( 1 !== $updated ) { throw new \RuntimeException( 'Source term changed concurrently.' ); }
+			$wpdb->query( 'COMMIT' );
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_split_failed', 'Taxonomy split failed or changed concurrently.', array( 'status' => 409 ) );
 		}
 		$ids = array_column( $created, 'term_uuid' );
-		$updated = $wpdb->update( DB::table( 'terms' ), array( 'status' => 'split', 'redirect_uuid' => $ids[0], 'related_json' => wp_json_encode( array( 'split_targets' => $ids ) ), 'version' => (int) $source['version'] + 1, 'updated_at' => DB::now() ), array( 'term_uuid' => $source['term_uuid'], 'version' => (int) $source['version'] ) );
-		if ( 1 !== $updated ) {
-			foreach ( $created as $created_term ) {
-				$wpdb->delete( DB::table( 'term_aliases' ), array( 'term_uuid' => $created_term['term_uuid'] ), array( '%s' ) );
-				$wpdb->delete( DB::table( 'terms' ), array( 'term_uuid' => $created_term['term_uuid'], 'status' => 'draft' ), array( '%s', '%s' ) );
-			}
-			return new \WP_Error( 'file26_term_conflict', 'Source term changed concurrently.', array( 'status' => 409 ) );
-		}
-		$this->security->audit( 'taxonomy_term_split', array( 'object_type' => 'taxonomy_term', 'object_key' => $source['term_uuid'], 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'targets' => $ids ) ) );
-		do_action( 'sabri_file26_event', 'TaxonomyTermSplit', array( 'source_uuid' => $source['term_uuid'], 'target_uuids' => $ids ) );
-		return array( 'source_uuid' => $source['term_uuid'], 'targets' => $created );
+		$this->security->audit( 'taxonomy_term_split', array( 'object_type' => 'taxonomy_term', 'object_key' => $source['term_uuid'], 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'targets' => $ids, 'rollback_mapping' => $preview['rollback_mapping'], 'impacted_classifications' => $preview['impacted_classifications'] ) ) );
+		do_action( 'sabri_file26_taxonomy_reindex_required', array( 'action' => 'split', 'source_uuid' => $source['term_uuid'], 'target_uuids' => $ids ) );
+		do_action( 'sabri_file26_event', 'TaxonomyTermSplit', array( 'source_uuid' => $source['term_uuid'], 'target_uuids' => $ids, 'rollback_mapping' => $preview['rollback_mapping'] ) );
+		return array( 'source_uuid' => $source['term_uuid'], 'targets' => $created, 'preview' => $preview );
 	}
 
 	public function get( $uuid_or_slug ) {
@@ -320,6 +404,21 @@ final class Taxonomy {
 			DB::now()
 		);
 		return false !== $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	private function domain_owner_approved( $action, array $terms, array $preview ) {
+		$owners = array();
+		foreach ( $terms as $term ) {
+			if ( is_array( $term ) && ! empty( $term['owner_file'] ) ) {
+				$owners[] = sanitize_text_field( $term['owner_file'] );
+			}
+		}
+		$owners = array_values( array_unique( array_filter( $owners ) ) );
+		$external = array_filter( $owners, static function ( $owner ) {
+			return ! in_array( strtolower( trim( $owner ) ), array( 'file 26', '26', 'file26' ), true );
+		} );
+		$default = empty( $external );
+		return (bool) apply_filters( 'sabri_file26_taxonomy_domain_owner_approved', $default, sanitize_key( $action ), $owners, $preview, get_current_user_id() );
 	}
 
 	private function would_cycle( $uuid, $parent_uuid ) {

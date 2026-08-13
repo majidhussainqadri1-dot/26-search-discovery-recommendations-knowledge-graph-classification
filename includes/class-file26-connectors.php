@@ -43,6 +43,16 @@ final class Connectors {
 		$manifest['privacy_classes'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['privacy_classes'] ) ) ) );
 		$manifest['visibility_fields'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['visibility_fields'] ) ) ) );
 		$manifest['deletion_semantics'] = sanitize_key( $manifest['deletion_semantics'] );
+		if (
+			'' === $manifest['owner_file'] ||
+			'' === $manifest['contract_version'] ||
+			empty( $manifest['entity_types'] ) ||
+			empty( $manifest['privacy_classes'] ) ||
+			empty( $manifest['visibility_fields'] ) ||
+			'' === $manifest['deletion_semantics']
+		) {
+			return new \WP_Error( 'file26_invalid_manifest_after_normalization', 'Connector manifest becomes empty or invalid after normalization.' );
+		}
 		$manifest['status'] = isset( $manifest['status'] ) ? sanitize_key( $manifest['status'] ) : 'proposed';
 		$allowed_status = array( 'proposed', 'contract_tested', 'shadow', 'approved', 'active', 'degraded', 'suspended', 'retired' );
 		if ( ! in_array( $manifest['status'], $allowed_status, true ) ) {
@@ -78,7 +88,11 @@ final class Connectors {
 		$sql = $wpdb->prepare(
 			"INSERT INTO $table (slug,owner_file,contract_version,status,manifest,last_event_version,health_state,last_health,created_at,updated_at)
 			 VALUES (%s,%s,%s,%s,%s,0,'unknown',NULL,%s,%s)
-			 ON DUPLICATE KEY UPDATE owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),last_event_version=0,health_state='unknown',last_health=NULL,updated_at=VALUES(updated_at)",
+			 ON DUPLICATE KEY UPDATE
+			 last_event_version=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),last_event_version,0),
+			 health_state=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),health_state,'unknown'),
+			 last_health=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),last_health,NULL),
+			 owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),updated_at=VALUES(updated_at)",
 			$manifest['slug'], $manifest['owner_file'], $manifest['contract_version'], $manifest['status'], wp_json_encode( $manifest ), $now, $now
 		);
 		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared

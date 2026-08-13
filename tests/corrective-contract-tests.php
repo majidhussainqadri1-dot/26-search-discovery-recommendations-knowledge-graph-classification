@@ -38,7 +38,14 @@ corrective_assert( false !== strpos( $search, "fc.status IN ('approved','correct
 corrective_assert( false !== strpos( $search, 'apply_graph_relationship_scores' ) && false !== strpos( $search, "state='active' AND visibility='public'" ), 'Only active public graph edges contribute a bounded relationship signal.' );
 corrective_assert( false !== strpos( $search, "'health' => 'scan_limit'" ), 'Bounded corpus scans disclose truthful partial state.' );
 corrective_assert( false !== strpos( $governance, 'restored_policy_uuid' ) && false === strpos( $governance, "'activated' => false" ), 'Ranking rollback restores the previous policy without disabling File 26.' );
-corrective_assert( false !== strpos( $governance, 'second_approver_id' ) && false !== strpos( $governance, 'distinct authorized second approver' ), 'High-risk ranking rollback requires a distinct second approver.' );
+corrective_assert(
+	false !== strpos( $governance, 'second_approve_ranking_rollback' ) &&
+	false !== strpos( $governance, 'ranking_policy_rollback_second_approved' ) &&
+	false !== strpos( $governance, "'file26_rb_'" ) &&
+	false !== strpos( $governance, "user_can( \$second, 'approve_sabri_ranking' )" ) &&
+	false !== strpos( $governance, 'A separately recorded distinct authorized second rollback approval is required.' ),
+	'High-risk ranking rollback requires a distinct, separately recorded, still-authorized second approver.'
+);
 corrective_assert( false === strpos( $security, "current_user_can( 'manage_sabri_search' ) ||" ), 'Configuration authority is not an operational super-capability.' );
 corrective_assert( false === strpos( $security, 'WP_CLI' ) && false !== strpos( $security, "'sabri_file26_step_up_authorized'" ), 'High-risk step-up has no silent CLI bypass.' );
 foreach ( array( 'sabri_search_operator', 'sabri_taxonomy_curator', 'sabri_ranking_approver', 'sabri_search_auditor' ) as $role ) {
