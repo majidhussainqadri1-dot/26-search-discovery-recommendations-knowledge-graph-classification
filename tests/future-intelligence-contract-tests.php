@@ -27,4 +27,12 @@ f26_future_assert( false !== strpos( $future, 'META_ALERTS === $meta_key && $did
 f26_future_assert( false !== strpos( $future, 'provider_query_empty_after_sanitization' ) && false !== strpos( $future, 'seed_query_empty_after_sanitization' ), 'provider-derived empty queries cannot broaden search' );
 f26_future_assert( false !== strpos( $future, 'snapshot_provider_bypassed_sensitive_query' ), 'research snapshots bypass optional provider for sensitive queries' );
 f26_future_assert( false !== strpos( $future, 'valid_historical_as_of' ), 'historical as_of calendar/time validation present' );
+// Round 2 regression locks: strict booleans, minimized provider context and query-only semantic reranking.
+f26_future_assert( false !== strpos( $future, 'file26_execute_flag_invalid' ), 'query planner execute flag uses strict boolean semantics' );
+f26_future_assert( false !== strpos( $future, 'file26_less_personalization_flag_invalid' ), 'less_personalization uses strict boolean semantics' );
+f26_future_assert( false !== strpos( $future, 'file26_alert_enabled_flag_invalid' ), 'saved alert enabled uses strict boolean semantics' );
+f26_future_assert( false !== strpos( $future, 'explicit true opt-in' ), 'search history accepts only explicit true sync opt-in' );
+f26_future_assert( substr_count( $future, '$provider_context = array(' ) >= 2, 'segment and historical providers receive minimized contexts' );
+f26_future_assert( false !== strpos( $future, "'purpose' => 'geo_availability_discovery'" ), 'geo provider receives bounded purpose context instead of raw params' );
+f26_future_assert( false !== strpos( $future, 'file26_semantic_query_required' ), 'semantic reranking requires a real query' );
 echo "PASS: $checks Future Search Intelligence contract assertions\n";
