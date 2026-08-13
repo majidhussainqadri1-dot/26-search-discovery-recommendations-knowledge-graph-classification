@@ -649,6 +649,7 @@ final class Central_Plan {
 					$reason = 'matched_' . $class . '_safety_policy';
 					break 2;
 				}
+			}
 		}
 		$resource = apply_filters( 'sabri_file26_verified_emergency_resource', null, $locale, $risk );
 		$resource = $this->verified_current_resource( $resource );
