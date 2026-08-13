@@ -34,8 +34,22 @@ trait Future_Utility_Trait {
 		return $this->central_plan->augment_search_result( $result, $request );
 	}
 
+	private function advanced_search_data( array $params ) {
+		$request = new \WP_REST_Request( 'GET', '/' . self::REST_NAMESPACE . '/advanced-search' );
+		foreach ( array( 'q', 'exact', 'entity_type', 'country', 'location', 'availability', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to', 'connector', 'source', 'verification', 'format', 'access', 'locale', 'limit', 'cursor' ) as $key ) {
+			if ( isset( $params[ $key ] ) && '' !== $params[ $key ] ) {
+				$request->set_param( $key, $params[ $key ] );
+			}
+		}
+		$response = $this->central_plan->advanced_search( $request );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		return is_object( $response ) && method_exists( $response, 'get_data' ) ? $response->get_data() : (array) $response;
+	}
+
 	private function safe_result( array $item ) {
-		$allowed = array( 'key', 'title', 'excerpt', 'url', 'canonical_url', 'entity_type', 'domain', 'connector', 'locale', 'topics', 'score', 'why_this', 'explanation_codes', 'freshness', 'integrity', 'source', 'author', 'published_at', 'updated_at', 'format', 'verification', 'status' );
+		$allowed = array( 'key', 'title', 'excerpt', 'url', 'canonical_url', 'entity_type', 'domain', 'connector', 'locale', 'topics', 'score', 'why_this', 'explanation_codes', 'freshness', 'integrity', 'source', 'author', 'published_at', 'updated_at', 'format', 'verification', 'status', 'evidence_level', 'edition' );
 		$out = array();
 		foreach ( $allowed as $key ) {
 			if ( array_key_exists( $key, $item ) ) {
@@ -51,7 +65,6 @@ trait Future_Utility_Trait {
 			if ( is_array( $item ) ) {
 				$out[] = $this->safe_result( $item );
 			}
-		}
 		return $out;
 	}
 
@@ -133,6 +146,23 @@ trait Future_Utility_Trait {
 			if ( is_scalar( $value ) ) { $out[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 191 ); }
 		}
 		return $out;
+	}
+
+	private function save_user_meta_cas( $user_id, $meta_key, $old_raw, $new_value ) {
+		$user_id = (int) $user_id;
+		$meta_key = (string) $meta_key;
+		if ( ! metadata_exists( 'user', $user_id, $meta_key ) ) {
+			return add_user_meta( $user_id, $meta_key, $new_value, true ) ? true : new \WP_Error( 'file26_future_write_conflict', 'The account data changed concurrently. Reload and retry.', array( 'status' => 409 ) );
+		}
+		$updated = update_user_meta( $user_id, $meta_key, $new_value, $old_raw );
+		if ( false !== $updated ) {
+			return true;
+		}
+		$current = get_user_meta( $user_id, $meta_key, true );
+		if ( $current === $new_value ) {
+			return true;
+		}
+		return new \WP_Error( 'file26_future_write_conflict', 'The account data changed concurrently. Reload and retry.', array( 'status' => 409 ) );
 	}
 
 	private function parse_smart_query( $query ) {
