@@ -20,8 +20,9 @@ function f26_central_assert( $condition, $message ) {
 	}
 }
 
-f26_central_assert( false !== strpos( $files['bootstrap'], 'Version: 1.2.0' ), 'runtime version 1.2.0' );
-f26_central_assert( false !== strpos( $files['bootstrap'], "SABRI_FILE26_CONTRACT_VERSION', '1.2'" ), 'contract version 1.2' );
+// v1.3 supersedes the v1.2 runtime/contract identity while retaining this entire central-plan regression suite.
+f26_central_assert( false !== strpos( $files['bootstrap'], 'Version: 1.3.0' ), 'runtime version 1.3.0 retains central-plan implementation' );
+f26_central_assert( false !== strpos( $files['bootstrap'], "SABRI_FILE26_CONTRACT_VERSION', '1.3'" ), 'contract version 1.3 retains central-plan implementation' );
 f26_central_assert( false !== strpos( $files['bootstrap'], 'class-file26-central-plan.php' ), 'central-plan implementation loaded' );
 f26_central_assert( false !== strpos( $files['bootstrap'], 'augment_search_result' ), 'non-REST search wrapper receives central contracts' );
 
