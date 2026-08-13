@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 — 2026-08-13
+
+- Added the complete **Future Search & Knowledge Intelligence Superset 24** as versioned derivative/orchestration contracts (`F26-FUT-01` through `F26-FUT-24`).
+- Preserved the independently merged v1.2 20-round corrective hardening as the integration baseline rather than replacing or bypassing it.
+- Added grounded conversational search with returned-source citation validation and non-prescriptive provider attestation.
+- Added bounded query planning, cross-language variants, second-stage semantic reranking and deterministic result clustering.
+- Added owner-reference multimodal/voice discovery, owner-proven segment search, find-similar and scholarly research/snapshot contracts.
+- Added provenance-rich graph path, evidence/contradiction map, entity disambiguation and actual-snapshot-only historical search.
+- Added account-owned research trails, File-19-delegated alerts and local-first search history with explicit opt-in server sync.
+- Added recommendation transparency, effective less-personalization, discovery breadth and File 07/08-owned geo/availability revalidation.
+- Added search modes/smart commands, step-up isolated Private Search Vault, approved separated external-evidence connectors and a read-only relevance laboratory.
+- Added Future privacy export/erasure, conservative no-store REST semantics and dedicated Future-24 regression gates while retaining all 20-round review-round tests.
+- Runtime `1.3.0`, contract `1.3`; DB schema remains `1.0.0` because this batch adds no File 26 SQL table.
+
 ## 1.2.0 — 2026-08-13
 
 - Reconciled repository coding against the newly supplied three-central-plan governing document and the newly supplied File 26 reviewed master plan.
