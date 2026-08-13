@@ -139,10 +139,11 @@ final class Recommendations {
 
 	public function record_feedback( array $request ) {
 		global $wpdb;
-		$user_id = get_current_user_id();
-		if ( ! $user_id ) {
-			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		$access = $this->require_preference_access();
+		if ( is_wp_error( $access ) ) {
+			return $access;
 		}
+		$user_id = (int) $access['user_id'];
 		if ( ! $this->security->rate_limit( 'feedback|u:' . $user_id, 60, 60 ) ) {
 			return new \WP_Error( 'file26_rate_limited', 'Too many feedback requests.', array( 'status' => 429 ) );
 		}
@@ -219,28 +220,40 @@ final class Recommendations {
 
 	public function set_consent( $consent ) {
 		global $wpdb;
-		$user_id = get_current_user_id();
-		if ( ! $user_id ) {
-			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		$access = $this->require_preference_access();
+		if ( is_wp_error( $access ) ) {
+			return $access;
 		}
+		$user_id = (int) $access['user_id'];
 		$consent = (bool) $consent;
+		$empty = wp_json_encode( array() );
 		$sql = $wpdb->prepare(
 			'INSERT INTO ' . DB::table( 'profiles' ) . "
 			(user_id,consent,opted_out,interests_json,negatives_json,version,updated_at)
 			VALUES (%d,%d,%d,%s,%s,1,%s)
-			ON DUPLICATE KEY UPDATE consent=VALUES(consent),opted_out=VALUES(opted_out),version=version+1,updated_at=VALUES(updated_at)",
-			$user_id, $consent ? 1 : 0, $consent ? 0 : 1, wp_json_encode( array() ), wp_json_encode( array() ), DB::now()
+			ON DUPLICATE KEY UPDATE consent=VALUES(consent),opted_out=VALUES(opted_out),interests_json=IF(VALUES(consent)=0,VALUES(interests_json),interests_json),negatives_json=IF(VALUES(consent)=0,VALUES(negatives_json),negatives_json),version=version+1,updated_at=VALUES(updated_at)",
+			$user_id, $consent ? 1 : 0, $consent ? 0 : 1, $empty, $empty, DB::now()
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $written ) {
+			return new \WP_Error( 'file26_consent_write_failed', 'Recommendation consent could not be updated.', array( 'status' => 500 ) );
+		}
+		if ( ! $consent ) {
+			$wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) );
+		}
 		$this->security->audit( 'recommendation_consent_updated', array( 'object_type' => 'user', 'object_key' => (string) $user_id, 'metadata' => array( 'consent' => $consent ) ) );
 		return array( 'consent' => $consent, 'opted_out' => ! $consent, 'personalization_enabled' => $consent && DB::setting( 'personalization_enabled', false ) );
 	}
 
 	public function set_interests( array $interests ) {
 		global $wpdb;
-		$user_id = get_current_user_id();
-		$profile = $user_id ? $this->profile( $user_id ) : null;
-		if ( ! $user_id || ! $profile || empty( $profile['consent'] ) || ! DB::setting( 'personalization_enabled', false ) ) {
+		$access = $this->require_preference_access();
+		if ( is_wp_error( $access ) ) {
+			return $access;
+		}
+		$user_id = (int) $access['user_id'];
+		$profile = $this->profile( $user_id );
+		if ( ! $profile || empty( $profile['consent'] ) || ! DB::setting( 'personalization_enabled', false ) ) {
 			return new \WP_Error( 'file26_personalization_consent_required', 'Explicit personalization consent is required.', array( 'status' => 403 ) );
 		}
 		$interests = $this->sanitize_topics( $interests, 50 );
@@ -259,12 +272,24 @@ final class Recommendations {
 
 	public function reset() {
 		global $wpdb;
-		$user_id = get_current_user_id();
-		if ( ! $user_id ) {
-			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		$access = $this->require_preference_access();
+		if ( is_wp_error( $access ) ) {
+			return $access;
 		}
-		$wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) );
-		$wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user_id ), array( '%d' ) );
+		$user_id = (int) $access['user_id'];
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			if ( false === $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) {
+				throw new \RuntimeException( 'Feedback reset failed.' );
+			}
+			if ( false === $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) {
+				throw new \RuntimeException( 'Profile reset failed.' );
+			}
+			$wpdb->query( 'COMMIT' );
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_profile_reset_failed', 'Recommendation profile could not be reset.', array( 'status' => 500 ) );
+		}
 		$this->security->audit( 'recommendation_profile_reset', array( 'object_type' => 'user', 'object_key' => (string) $user_id ) );
 		return array( 'reset' => true, 'personalized' => false );
 	}
@@ -276,11 +301,14 @@ final class Recommendations {
 		}
 		global $wpdb;
 		$user_id = get_current_user_id();
-		$wpdb->insert( DB::table( 'profiles' ), array(
+		$inserted = $wpdb->insert( DB::table( 'profiles' ), array(
 			'user_id' => $user_id, 'consent' => 0, 'opted_out' => 1,
 			'interests_json' => wp_json_encode( array() ), 'negatives_json' => wp_json_encode( array() ),
 			'version' => 1, 'updated_at' => DB::now(),
 		) );
+		if ( false === $inserted ) {
+			return new \WP_Error( 'file26_opt_out_record_failed', 'Opt-out state could not be persisted.', array( 'status' => 500 ) );
+		}
 		$this->security->audit( 'recommendation_opted_out', array( 'object_type' => 'user', 'object_key' => (string) $user_id ) );
 		return array( 'opted_out' => true, 'personalized' => false );
 	}
@@ -288,6 +316,21 @@ final class Recommendations {
 	public function profile( $user_id ) {
 		global $wpdb;
 		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'profiles' ) . ' WHERE user_id=%d', (int) $user_id ), ARRAY_A );
+	}
+
+	private function require_preference_access() {
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		}
+		$audience = $this->security->audience();
+		if ( empty( $audience['valid'] ) || ! empty( $audience['suspended'] ) ) {
+			return new \WP_Error( 'file26_membership_invalid', 'Current membership assertions do not permit this preference action.', array( 'status' => 403 ) );
+		}
+		if ( ! empty( $audience['is_minor'] ) && empty( $audience['guardian_verified'] ) ) {
+			return new \WP_Error( 'file26_guardian_required', 'Verified guardian authorization is required for this preference action.', array( 'status' => 403 ) );
+		}
+		return array( 'user_id' => (int) $user_id, 'audience' => $audience );
 	}
 
 	private function sanitize_topics( array $topics, $limit ) {
