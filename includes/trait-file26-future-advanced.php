@@ -29,7 +29,7 @@ trait Future_Advanced_Trait {
 		foreach ( array_slice( $provided['results'], 0, 20 ) as $item ) {
 			if ( ! is_array( $item ) || empty( $item['source_name'] ) || empty( $item['source_url'] ) || empty( $item['retrieved_at'] ) || empty( $item['rights_status'] ) || empty( $item['provenance'] ) ) { continue; }
 			$url = esc_url_raw( (string) $item['source_url'], array( 'https' ) ); if ( '' === $url ) { continue; }
-			$retrieved_at = sanitize_text_field( (string) $item['retrieved_at'] ); if ( false === strtotime( $retrieved_at ) ) { continue; }
+			$retrieved_at = sanitize_text_field( (string) $item['retrieved_at'] ); if ( ! $this->valid_provider_timestamp( $retrieved_at ) ) { continue; }
 			$out[] = array( 'external' => true, 'connector' => $connector, 'title' => isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '', 'excerpt' => isset( $item['excerpt'] ) ? wp_strip_all_tags( (string) $item['excerpt'] ) : '', 'source_name' => sanitize_text_field( (string) $item['source_name'] ), 'source_url' => $url, 'retrieved_at' => $retrieved_at, 'rights_status' => sanitize_key( (string) $item['rights_status'] ), 'provenance' => sanitize_text_field( (string) $item['provenance'] ) );
 		}
 		return array( 'state' => 'ok', 'connector' => $connector, 'results' => $out, 'merged_into_organic_ranking' => false, 'canonical_platform_truth' => false, 'external_source_label_required' => true, 'explicit_user_consent' => true, 'eligibility_attestation' => 'approved_external_public' );
@@ -43,14 +43,8 @@ trait Future_Advanced_Trait {
 		$baseline_results = $this->safe_results( (array) $baseline['results'] );
 		$baseline_by_key = array(); foreach ( $baseline_results as $item ) { if ( ! empty( $item['key'] ) ) { $baseline_by_key[ (string) $item['key'] ] = $item; } }
 		$provided = apply_filters( 'sabri_file26_relevance_lab_candidate', $baseline_results, $q, $baseline_results, array( 'read_only' => true, 'production_write' => false, 'eligible_keys_only' => true ) );
-		$candidate = array();
-		foreach ( is_array( $provided ) ? $provided : $baseline_results as $item ) {
-			$key = is_array( $item ) && ! empty( $item['key'] ) ? (string) $item['key'] : '';
-			if ( '' === $key || ! isset( $baseline_by_key[ $key ] ) ) { return new \WP_Error( 'file26_relevance_candidate_injected_result', 'Relevance-lab candidates may only select or reorder baseline eligible result keys.', array( 'status' => 409 ) ); }
-			if ( ! isset( $candidate[ $key ] ) ) { $candidate[ $key ] = $baseline_by_key[ $key ]; }
-		}
-		$candidate = array_values( $candidate ); $base_keys = array_values( array_filter( array_column( $baseline_results, 'key' ) ) ); $candidate_keys = array_values( array_filter( array_column( $candidate, 'key' ) ) );
-		$intersection = count( array_intersect( array_slice( $base_keys, 0, 10 ), array_slice( $candidate_keys, 0, 10 ) ) ); $overlap_denominator = max( 1, min( 10, count( $base_keys ) ) );
+		$candidate = array(); foreach ( is_array( $provided ) ? $provided : $baseline_results as $item ) { $key = is_array( $item ) && ! empty( $item['key'] ) ? (string) $item['key'] : ''; if ( '' === $key || ! isset( $baseline_by_key[ $key ] ) ) { return new \WP_Error( 'file26_relevance_candidate_injected_result', 'Relevance-lab candidates may only select or reorder baseline eligible result keys.', array( 'status' => 409 ) ); } if ( ! isset( $candidate[ $key ] ) ) { $candidate[ $key ] = $baseline_by_key[ $key ]; } }
+		$candidate = array_values( $candidate ); $base_keys = array_values( array_filter( array_column( $baseline_results, 'key' ) ) ); $candidate_keys = array_values( array_filter( array_column( $candidate, 'key' ) ) ); $intersection = count( array_intersect( array_slice( $base_keys, 0, 10 ), array_slice( $candidate_keys, 0, 10 ) ) ); $overlap_denominator = max( 1, min( 10, count( $base_keys ) ) );
 		return array( 'query' => $q, 'production_mutation' => false, 'baseline' => array_slice( $baseline_results, 0, 10 ), 'candidate' => array_slice( $candidate, 0, 10 ), 'metrics' => array( 'top10_overlap' => $intersection, 'top10_overlap_ratio' => $intersection / $overlap_denominator, 'baseline_source_concentration' => $this->source_concentration( array_slice( $baseline_results, 0, 10 ) ), 'candidate_source_concentration' => $this->source_concentration( array_slice( $candidate, 0, 10 ) ) ), 'release_gate' => 'Candidate requires separate approval, staging evidence and rollbackable versioned release.' );
 	}
 }
