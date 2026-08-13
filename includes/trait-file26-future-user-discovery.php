@@ -7,7 +7,14 @@ trait Future_User_Discovery_Trait {
 /** F26-FUT-18 — transparent recommendation controls and sample explanations. */
 	public function recommendation_transparency( \WP_REST_Request $request ) {
 		$user_id = get_current_user_id(); $stored = get_user_meta( $user_id, self::META_DISCOVERY, true ); $controls = is_array( $stored ) ? $stored : array( 'breadth' => 'standard', 'less_personalization' => false );
-		if ( 'POST' === strtoupper( $request->get_method() ) ) { $params = $this->params( $request ); if ( array_key_exists( 'less_personalization', $params ) ) { $parsed = filter_var( $params['less_personalization'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE ); if ( null === $parsed ) { return new \WP_Error( 'file26_less_personalization_flag_invalid', 'less_personalization must be a boolean value.', array( 'status' => 400 ) ); } $controls['less_personalization'] = $parsed; } if ( isset( $params['breadth'] ) && in_array( sanitize_key( (string) $params['breadth'] ), array( 'standard', 'diverse', 'broad' ), true ) ) { $controls['breadth'] = sanitize_key( (string) $params['breadth'] ); } if ( ! empty( $params['reset'] ) ) { $controls = array( 'breadth' => 'standard', 'less_personalization' => false ); } $saved = $this->save_user_meta_cas( $user_id, self::META_DISCOVERY, $stored, $controls ); if ( is_wp_error( $saved ) ) { return $saved; } }
+		if ( 'POST' === strtoupper( $request->get_method() ) ) {
+			$params = $this->params( $request );
+			if ( array_key_exists( 'less_personalization', $params ) ) { $parsed = filter_var( $params['less_personalization'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE ); if ( null === $parsed ) { return new \WP_Error( 'file26_less_personalization_flag_invalid', 'less_personalization must be a boolean value.', array( 'status' => 400 ) ); } $controls['less_personalization'] = $parsed; }
+			if ( isset( $params['breadth'] ) && in_array( sanitize_key( (string) $params['breadth'] ), array( 'standard', 'diverse', 'broad' ), true ) ) { $controls['breadth'] = sanitize_key( (string) $params['breadth'] ); }
+			$reset = false; if ( array_key_exists( 'reset', $params ) ) { $reset_value = filter_var( $params['reset'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE ); if ( null === $reset_value ) { return new \WP_Error( 'file26_recommendation_reset_flag_invalid', 'reset must be a boolean value.', array( 'status' => 400 ) ); } $reset = $reset_value; }
+			if ( $reset ) { $controls = array( 'breadth' => 'standard', 'less_personalization' => false ); }
+			$saved = $this->save_user_meta_cas( $user_id, self::META_DISCOVERY, $stored, $controls ); if ( is_wp_error( $saved ) ) { return $saved; }
+		}
 		$sample = $this->recommendation_sample( $controls, 6 ); return array( 'controls' => $controls, 'native_recommendation_controls' => isset( $sample['controls'] ) ? $sample['controls'] : array(), 'sample' => isset( $sample['results'] ) ? $sample['results'] : array(), 'why_this_available' => empty( $controls['less_personalization'] ), 'paid_or_donor_signal' => false, 'less_personalization_effective' => ! empty( $controls['less_personalization'] ) );
 	}
 
