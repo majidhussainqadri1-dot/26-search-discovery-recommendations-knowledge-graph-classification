@@ -1,51 +1,83 @@
-# File 26 v1.0.0 — Local QA Report
+# File 26 v1.2.0 — Repository QA Report
 
-Date: 2026-08-05 (Asia/Karachi)
-Status: **Local source/package QA complete — Hostinger staging acceptance pending**
+Date: 2026-08-13 (Asia/Karachi)
+Status target: **Coded + Packaged + Automated-QA Green repository candidate; staging/live remain separate**
 
-## Environment
+## Governing baseline
 
-- PHP CLI: 8.4.16
-- Node.js: 22.16.0
-- Python: 3.13.5
-- Package target: WordPress plugin `sabri-file26-search-discovery` v1.0.0
+- Newly supplied Three Central Plans Consolidated Governing Master Plan 2026.
+- Newly supplied File 26 Four-Round Reviewed and Corrected Master Plan.
+- Existing File26-FR-001 through File26-FR-036 requirements.
+- New central-plan requirements CV-164 through CV-175 and F26-CEN-01/F26-CEN-02, with CV-170/CV-171 implemented strictly as consumer/owner-boundary contracts rather than duplicate source-of-truth systems.
 
-## Automated evidence
+## Runtime/source identity
 
-- PHP syntax: PASS for every PHP file.
-- JavaScript syntax: PASS.
-- Pure normalization/security/ranking assertions: **13/13 PASS**.
-- Architecture/policy/traceability assertions: **69/69 PASS**.
-- File26-FR-001 through File26-FR-036 traceability: PASS.
-- Fifteen owned table/domain declarations: PASS.
-- File 20, File 24 and File 25 integration contracts: PASS.
-- Dangerous execution primitive scan: PASS.
-- Forbidden commission/donation/payment/favoritism ranking scan: PASS.
-- Direct sensitive foreign-table access scan: PASS.
-- Deterministic double build: PASS, byte-identical.
-- ZIP single-root/path-traversal/integrity checks: PASS.
-- Clean-extract test rerun: PASS.
-- Plugin/readme/version/source-manifest parity: PASS.
+- Plugin/runtime version: `1.2.0`
+- Schema version: `1.0.0`
+- Contract version: `1.2`
+- Corrective branch: `codex/file-26-new-governing-plans-complete-1.2.0`
+- Draft PR: `#4`
 
-## Package evidence
+The schema stays at 1.0.0 because this completion adds no new File 26 SQL table; the new saved-query and explicit-gap records use governed WordPress user-meta/options storage and existing aggregate-metrics tables.
 
-The deterministic ZIP and its current SHA-256 are written to:
+## Two required post-coding review/fix cycles
 
-- `release/26-sabri-file26-search-discovery-1.0.0.zip`
-- `release/CHECKSUMS.sha256`
+### Round 1
 
-The packaged source includes `MANIFEST.sha256` for internal file verification.
+A complete review was finished before corrections began. It found and corrected public doctor-ranking internal-reference leakage, advanced pagination defects, source/connector conflation, unsafe access-filter fallback, plaintext sensitive saved-query storage, stale emergency-resource verification, incomplete freshness/integrity evidence, hardcoded retention and missing governed zero-result help destinations.
+
+Evidence record: `docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md`.
+
+### Fresh adversarial Round 2
+
+The second independent review targeted resource exhaustion, deep cursors, stale/cached authorization, sensitive secondary metadata, protected-query decryption, exact-field semantics and self-harm/violence safety paths. It corrected bounded-cursor self-loop risk, missing explicit cache/no-store semantics, sensitive saved-filter persistence, missing decryption step-up, weak field-scoped exact matching, missing advanced-search abuse budget and incomplete self-harm/abuse-support classification.
+
+Evidence record: `docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md`.
+
+## Automated QA gate
+
+The workflow runs the following full gate on both PHP 7.4 and PHP 8.3:
+
+1. every PHP file syntax check;
+2. JavaScript syntax check;
+3. pure normalization/ranking behavioral assertions;
+4. architecture/policy/File26-FR-001–036 traceability assertions;
+5. corrective architecture/security/owner-contract assertions;
+6. new central-governing-plan assertions;
+7. dangerous execution primitive scan;
+8. forbidden money/favoritism ranking and sensitive foreign-table scans;
+9. required release-evidence files;
+10. runtime/readme/contract/brand parity;
+11. deterministic byte-identical double package build;
+12. ZIP single-root/path-safety/integrity check;
+13. clean-extract test rerun and source/package manifest parity.
+
+A pre-report exact branch-head run on `22c9e4da758cf71514c21987a174b52f36f79773` completed successfully in GitHub Actions run `31674972548`: PHP 7.4 and 8.3 both passed; 22 behavioral, 75 architecture/traceability, 48 corrective and 59 new central-plan assertions passed per PHP version, with all package/security gates green. Because this report itself is a repository change, the release decision must use the subsequent final-head CI run rather than treating that pre-report SHA/package checksum as the immutable final artifact.
+
+## Security / privacy evidence carried by v1.2
+
+- active production connector lane only for public/member retrieval;
+- owner/state/visibility revalidation and tombstones;
+- no payment/donation/follower/Founder favoritism ranking inputs;
+- no sponsored/paid organic search path;
+- explicit recommendation consent and reset/opt-out controls;
+- sensitive saved queries fail closed without an approved encryption provider;
+- sensitive saved-query metadata is rejected and decryption requires fresh step-up;
+- raw sensitive query history is unavailable to editorial radar;
+- emergency-resource details require current owner verification and safe destination validation;
+- unknown freshness stays unknown and never broadens access;
+- File 20 remains shell owner, File 25 visual owner, File 15 trend owner, and canonical domain modules retain write authority.
 
 ## Honest completion status
 
-| Status | Result |
+| Status | Repository result |
 |---|---|
-| Specified | Complete |
-| Coded | Complete within approved File 26 source scope |
-| Packaged | Complete, deterministic local artifact |
-| Automated QA | Green in the local tested scope |
-| Hostinger staging accepted | Pending |
-| Live deployed | Pending |
-| Operational | Pending |
+| Specified | Complete against the two newly supplied governing plans |
+| Coded | Complete in the v1.2 corrective candidate scope |
+| Packaged | Deterministic package generated by CI when the full gate passes |
+| Automated-QA Green | Determined only from the exact final branch-head run after this report commit |
+| Hostinger staging accepted | Pending / not claimed |
+| Live deployed | Pending / not claimed |
+| Operational | Pending / not claimed |
 
-No live/production claim is made by this report.
+No live/production claim is made by this report. Exact deployed code, deployed database/schema version and migration state must be verified independently before any live diagnosis or “resolved” claim.

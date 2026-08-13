@@ -14,8 +14,10 @@ final class REST {
 	private $security;
 	private $connectors;
 	private $governance;
+	private $doctor_ranking;
+	private $doctor_appeals;
 
-	public function __construct( Search $search, Recommendations $recommendations, Taxonomy $taxonomy, Graph $graph, Indexer $indexer, Health $health, Security $security, Connectors $connectors, Governance $governance ) {
+	public function __construct( Search $search, Recommendations $recommendations, Taxonomy $taxonomy, Graph $graph, Indexer $indexer, Health $health, Security $security, Connectors $connectors, Governance $governance, Doctor_Ranking $doctor_ranking, Doctor_Appeals $doctor_appeals ) {
 		$this->search = $search;
 		$this->recommendations = $recommendations;
 		$this->taxonomy = $taxonomy;
@@ -25,6 +27,8 @@ final class REST {
 		$this->security = $security;
 		$this->connectors = $connectors;
 		$this->governance = $governance;
+		$this->doctor_ranking = $doctor_ranking;
+		$this->doctor_appeals = $doctor_appeals;
 	}
 
 	public function register() {
@@ -38,6 +42,10 @@ final class REST {
 		$this->route( '/personalization/opt-out', 'POST', 'opt_out', 'logged_in' );
 		$this->route( '/topics/(?P<term>[a-zA-Z0-9\-_]+)', 'GET', 'topic', '__return_true' );
 		$this->route( '/graph/(?P<key>[a-f0-9]{64})', 'GET', 'graph', '__return_true' );
+		$this->route( '/doctors/ranking', 'GET', 'doctor_ranking', '__return_true' );
+		$this->route( '/doctors/ranking/appeals', 'POST', 'submit_doctor_appeal', 'logged_in' );
+		$this->route( '/doctors/ranking/appeals/mine', 'GET', 'own_doctor_appeals', 'logged_in' );
+		$this->route( '/admin/doctors/ranking/appeals/(?P<appeal>[a-f0-9-]{36})/review', 'POST', 'review_doctor_appeal', 'can_approve_ranking' );
 		$this->route( '/health', 'GET', 'health', 'can_audit' );
 		$this->route( '/admin/reindex', 'POST', 'reindex', 'can_operate' );
 		$this->route( '/admin/reconcile', 'POST', 'reconcile', 'can_operate' );
@@ -66,7 +74,7 @@ final class REST {
 
 	public function search( \WP_REST_Request $request ) {
 		$filters = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'date_from', 'date_to' ) as $key ) {
+		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to' ) as $key ) {
 			if ( null !== $request->get_param( $key ) ) {
 				$filters[ $key ] = $request->get_param( $key );
 			}
@@ -92,6 +100,8 @@ final class REST {
 			'context' => $request->get_param( 'context' ) ?: 'discover',
 			'limit' => $request->get_param( 'limit' ) ?: 12,
 			'cursor' => $request->get_param( 'cursor' ),
+			'locale' => $request->get_param( 'locale' ),
+			'session_topics' => (array) $request->get_param( 'session_topics' ),
 		) ), 200, ! is_user_logged_in() );
 	}
 
@@ -114,18 +124,63 @@ final class REST {
 		}
 		if ( 'merged' === $term['status'] && ! empty( $term['redirect_uuid'] ) ) {
 			$redirect = $this->taxonomy->get( $term['redirect_uuid'] );
-			if ( $redirect ) { $term = $redirect; }
+			if ( $redirect ) {
+				$term = $redirect;
+			}
 		}
-		$results = $this->search->run( array( 'q' => $term['preferred_label'], 'locale' => $term['language'], 'limit' => 20 ) );
+		$results = $this->search->run( array(
+			'q' => '',
+			'locale' => $term['language'],
+			'limit' => 20,
+			'filters' => array( 'topic' => $term['term_uuid'] ),
+		) );
 		return $this->respond( array(
 			'term' => $term,
 			'related' => is_wp_error( $results ) ? array() : $results['results'],
+			'partial' => is_wp_error( $results ) ? true : $results['partial'],
+			'partial_domains' => is_wp_error( $results ) ? array( array( 'health' => 'search_unavailable' ) ) : $results['partial_domains'],
 			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
 		), 200, true );
 	}
 
 	public function graph( \WP_REST_Request $request ) {
 		return $this->respond( $this->graph->query( $request['key'], $request->get_param( 'depth' ) ?: 1, $request->get_param( 'degree' ) ?: 10, (array) $request->get_param( 'types' ) ), 200, true );
+	}
+
+	public function doctor_ranking( \WP_REST_Request $request ) {
+		return $this->respond( $this->doctor_ranking->directory( array(
+			'context' => $request->get_param( 'context' ) ?: 'global',
+			'value' => $request->get_param( 'value' ),
+			'tier' => $request->get_param( 'tier' ) ?: 'all_verified',
+			'limit' => $request->get_param( 'limit' ) ?: 20,
+			'cursor' => $request->get_param( 'cursor' ),
+		) ), 200, true );
+	}
+
+	public function submit_doctor_appeal( \WP_REST_Request $request ) {
+		$params = (array) $request->get_json_params();
+		return $this->respond( $this->doctor_appeals->submit(
+			isset( $params['doctor_key'] ) ? $params['doctor_key'] : '',
+			isset( $params['reason'] ) ? $params['reason'] : '',
+			isset( $params['evidence'] ) && is_array( $params['evidence'] ) ? $params['evidence'] : array()
+		), 201 );
+	}
+
+	public function own_doctor_appeals() {
+		return $this->respond( array(
+			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+			'appeals' => $this->doctor_appeals->own(),
+		) );
+	}
+
+	public function review_doctor_appeal( \WP_REST_Request $request ) {
+		$params = (array) $request->get_json_params();
+		return $this->respond( $this->doctor_appeals->review(
+			$request['appeal'],
+			isset( $params['decision'] ) ? $params['decision'] : '',
+			isset( $params['reason'] ) ? $params['reason'] : '',
+			isset( $params['expected_version'] ) ? $params['expected_version'] : 0
+		) );
 	}
 
 	public function health() { return $this->respond( $this->health->snapshot() ); }
@@ -154,8 +209,18 @@ final class REST {
 		return is_wp_error( $uuid ) ? $uuid : $this->respond( array( 'policy_uuid' => $uuid ), 201 );
 	}
 
-	public function activate_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->activate_ranking_policy( $request['policy'], $request->get_param( 'second_approver_id' ), $request->get_param( 'reason' ) ) ); }
-	public function rollback_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->rollback_ranking_policy( $request['policy'], $request->get_param( 'reason' ) ) ); }
+	public function activate_ranking( \WP_REST_Request $request ) {
+		return $this->respond( $this->governance->activate_ranking_policy( $request['policy'], $request->get_param( 'second_approver_id' ), $request->get_param( 'reason' ) ) );
+	}
+
+	public function rollback_ranking( \WP_REST_Request $request ) {
+		return $this->respond( $this->governance->rollback_ranking_policy(
+			$request['policy'],
+			$request->get_param( 'reason' ),
+			$request->get_param( 'second_approver_id' )
+		) );
+	}
+
 	public function review_classification( \WP_REST_Request $request ) { return $this->respond( $this->governance->review_classification( $request->get_param( 'object_key' ), $request->get_param( 'term_uuid' ), $request->get_param( 'decision' ), $request->get_param( 'reason' ) ) ); }
 	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
 	public function reports() { return $this->respond( $this->governance->reports() ); }
@@ -167,7 +232,9 @@ final class REST {
 	public function can_audit() { return $this->security->can_audit(); }
 
 	private function respond( $data, $status = 200, $public_cache = false ) {
-		if ( is_wp_error( $data ) ) { return $data; }
+		if ( is_wp_error( $data ) ) {
+			return $data;
+		}
 		$response = new \WP_REST_Response( $data, $status );
 		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
 		$response->header( 'X-Content-Type-Options', 'nosniff' );

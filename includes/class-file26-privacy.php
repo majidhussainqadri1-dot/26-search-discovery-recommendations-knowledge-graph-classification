@@ -11,7 +11,7 @@ final class Privacy {
 
 	public function exporters( $exporters ) {
 		$exporters['sabri-file26'] = array(
-			'exporter_friendly_name' => __( 'Sabri Search and Recommendation Controls', 'sabri-file26' ),
+			'exporter_friendly_name' => __( 'Sabri Search, Recommendations and Ranking Appeals', 'sabri-file26' ),
 			'callback' => array( $this, 'export' ),
 		);
 		return $exporters;
@@ -19,7 +19,7 @@ final class Privacy {
 
 	public function erasers( $erasers ) {
 		$erasers['sabri-file26'] = array(
-			'eraser_friendly_name' => __( 'Sabri Search and Recommendation Controls', 'sabri-file26' ),
+			'eraser_friendly_name' => __( 'Sabri Search, Recommendations and Ranking Appeals', 'sabri-file26' ),
 			'callback' => array( $this, 'erase' ),
 		);
 		return $erasers;
@@ -38,6 +38,13 @@ final class Privacy {
 		$feedback = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT item_key,feedback_type,scope_key,active,created_at,updated_at FROM ' . DB::table( 'feedback' ) . ' WHERE user_id=%d ORDER BY id ASC LIMIT 1000',
+				$user->ID
+			),
+			ARRAY_A
+		);
+		$appeals = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT appeal_uuid,doctor_key,reason_text,evidence_json,status,decision_reason,policy_version,rank_snapshot,submitted_at,updated_at,decided_at FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d ORDER BY id ASC LIMIT 1000',
 				$user->ID
 			),
 			ARRAY_A
@@ -70,6 +77,25 @@ final class Privacy {
 				),
 			);
 		}
+		foreach ( $appeals as $row ) {
+			$data[] = array(
+				'group_id' => 'sabri-file26-ranking-appeals',
+				'group_label' => __( 'Doctor Ranking Appeals', 'sabri-file26' ),
+				'item_id' => 'ranking-appeal-' . $row['appeal_uuid'],
+				'data' => array(
+					array( 'name' => __( 'Appeal ID', 'sabri-file26' ), 'value' => $row['appeal_uuid'] ),
+					array( 'name' => __( 'Doctor reference', 'sabri-file26' ), 'value' => $row['doctor_key'] ),
+					array( 'name' => __( 'Reason', 'sabri-file26' ), 'value' => $row['reason_text'] ),
+					array( 'name' => __( 'Evidence', 'sabri-file26' ), 'value' => $row['evidence_json'] ),
+					array( 'name' => __( 'Status', 'sabri-file26' ), 'value' => $row['status'] ),
+					array( 'name' => __( 'Decision reason', 'sabri-file26' ), 'value' => $row['decision_reason'] ),
+					array( 'name' => __( 'Policy version', 'sabri-file26' ), 'value' => $row['policy_version'] ),
+					array( 'name' => __( 'Rank snapshot', 'sabri-file26' ), 'value' => $row['rank_snapshot'] ),
+					array( 'name' => __( 'Submitted', 'sabri-file26' ), 'value' => $row['submitted_at'] ),
+					array( 'name' => __( 'Decided', 'sabri-file26' ), 'value' => $row['decided_at'] ),
+				),
+			);
+		}
 		return array( 'data' => $data, 'done' => true );
 	}
 
@@ -86,10 +112,29 @@ final class Privacy {
 		}
 		$removed_feedback = $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user->ID ), array( '%d' ) );
 		$removed_profile = $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user->ID ), array( '%d' ) );
+		$appeal_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d', $user->ID ) );
+		$retained = false;
+		if ( $appeal_count ) {
+			$redacted = '[redacted after verified data-erasure request]';
+			$wpdb->query(
+				$wpdb->prepare(
+					'UPDATE ' . Doctor_Appeals::table() . " SET appellant_user_id=0,reason_text=%s,evidence_json='[]',decision_reason=CASE WHEN decision_reason IS NULL THEN NULL ELSE %s END,status=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN 'withdrawn' ELSE status END,version=version+1,updated_at=%s WHERE appellant_user_id=%d",
+					$redacted,
+					$redacted,
+					DB::now(),
+					$user->ID
+				)
+			);
+			$retained = true;
+		}
+		$messages = array( __( 'File 26 recommendation controls and feedback were erased.', 'sabri-file26' ) );
+		if ( $retained ) {
+			$messages[] = __( 'Ranking appeal text and identity were redacted; a minimal policy, status and fairness record was retained for audit integrity.', 'sabri-file26' );
+		}
 		return array(
-			'items_removed' => (bool) ( $removed_feedback || $removed_profile ),
-			'items_retained' => false,
-			'messages' => array( __( 'File 26 recommendation controls and feedback were erased.', 'sabri-file26' ) ),
+			'items_removed' => (bool) ( $removed_feedback || $removed_profile || $appeal_count ),
+			'items_retained' => $retained,
+			'messages' => $messages,
 			'done' => true,
 		);
 	}
