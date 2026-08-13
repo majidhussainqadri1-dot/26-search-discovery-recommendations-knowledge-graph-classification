@@ -3,7 +3,7 @@
 
   const KEY = 'sabri_file26_local_search_history_v1';
   const MAX = 50;
-  const cfg = window.SabriFile26 || {};
+  const cfg = window.SabriFile26FutureConfig || {};
 
   function cleanQuery(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
@@ -32,9 +32,12 @@
   }
 
   async function api(path, options) {
-    const response = await fetch(String(cfg.restUrl || '') + path, Object.assign({
+    if (!cfg.restUrl || !cfg.nonce || !cfg.loggedIn) {
+      throw new Error('Authenticated File 26 Future REST configuration is unavailable.');
+    }
+    const response = await fetch(String(cfg.restUrl) + path, Object.assign({
       credentials: 'same-origin',
-      headers: {'Accept': 'application/json', 'X-WP-Nonce': cfg.nonce || ''}
+      headers: {'Accept': 'application/json', 'X-WP-Nonce': cfg.nonce}
     }, options || {}));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message || 'Request failed');
@@ -75,7 +78,7 @@
         if (!q) continue;
         await api('future/search-history', {
           method: 'POST',
-          headers: {'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce || ''},
+          headers: {'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce},
           body: JSON.stringify({sync_opt_in: true, q: q})
         });
         accepted.push(q);
