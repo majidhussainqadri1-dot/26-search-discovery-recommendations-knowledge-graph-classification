@@ -1,6 +1,5 @@
 <?php
 namespace Sabri\File26;
-
 defined( 'ABSPATH' ) || exit;
 
 trait Future_User_Data_Trait {
@@ -41,20 +40,39 @@ trait Future_User_Data_Trait {
 		$user_id = get_current_user_id(); $method = strtoupper( $request->get_method() ); $opted_in = (bool) get_user_meta( $user_id, self::META_HISTORY_OPT_IN, true ); $stored = get_user_meta( $user_id, self::META_HISTORY, true ); $history = is_array( $stored ) ? $stored : array();
 		if ( 'GET' === $method ) { return array( 'policy' => 'local_first', 'server_sync_opt_in' => $opted_in, 'server_history' => $opted_in ? array_values( $history ) : array(), 'default_network_sync' => false ); }
 		if ( 'DELETE' === $method ) {
-			$had_history = metadata_exists( 'user', $user_id, self::META_HISTORY );
-			if ( $had_history && ! delete_user_meta( $user_id, self::META_HISTORY ) ) { return new \WP_Error( 'file26_history_clear_failed', 'Server search history could not be cleared.', array( 'status' => 500 ) ); }
 			$params = $this->params( $request );
 			if ( ! empty( $params['disable_sync'] ) ) {
 				$had_opt_in = metadata_exists( 'user', $user_id, self::META_HISTORY_OPT_IN );
-				if ( $had_opt_in && ! delete_user_meta( $user_id, self::META_HISTORY_OPT_IN ) ) { return new \WP_Error( 'file26_history_opt_in_clear_failed', 'Server history opt-in could not be cleared.', array( 'status' => 500 ) ); }
+				if ( $had_opt_in ) {
+					delete_user_meta( $user_id, self::META_HISTORY_OPT_IN );
+					if ( metadata_exists( 'user', $user_id, self::META_HISTORY_OPT_IN ) ) { return new \WP_Error( 'file26_history_opt_in_clear_failed', 'Server history opt-in could not be cleared.', array( 'status' => 500 ) ); }
+				}
+			}
+			$had_history = metadata_exists( 'user', $user_id, self::META_HISTORY );
+			if ( $had_history ) {
+				delete_user_meta( $user_id, self::META_HISTORY );
+				if ( metadata_exists( 'user', $user_id, self::META_HISTORY ) ) { return new \WP_Error( 'file26_history_clear_failed', 'Server search history could not be cleared.', array( 'status' => 500 ) ); }
 			}
 			return array( 'cleared' => true, 'server_sync_opt_in' => (bool) get_user_meta( $user_id, self::META_HISTORY_OPT_IN, true ) );
 		}
-		$params = $this->params( $request ); if ( empty( $params['sync_opt_in'] ) ) { return new \WP_Error( 'file26_history_explicit_opt_in_required', 'Server history sync requires explicit opt-in.', array( 'status' => 400 ) ); }
-		$q = $this->query( $params ); $sensitive = '' !== $q && $this->sensitive_query( $q );
-		if ( '' !== $q && ! $sensitive ) { $query_hash = hash_hmac( 'sha256', $q, wp_salt( 'nonce' ) ); $deduped = array(); foreach ( $history as $old ) { if ( is_array( $old ) && ! empty( $old['query_hash'] ) && $query_hash !== $old['query_hash'] ) { $deduped[] = $old; } } $deduped[] = array( 'query' => $q, 'query_hash' => $query_hash, 'searched_at' => gmdate( 'c' ) ); $history = array_slice( $deduped, -50 ); $saved = $this->save_user_meta_cas( $user_id, self::META_HISTORY, $stored, $history ); if ( is_wp_error( $saved ) ) { return $saved; } }
+
+		$params = $this->params( $request );
+		if ( empty( $params['sync_opt_in'] ) ) { return new \WP_Error( 'file26_history_explicit_opt_in_required', 'Server history sync requires explicit opt-in.', array( 'status' => 400 ) ); }
+
+		// Persist and verify the explicit opt-in before any server-side history data is stored.
 		$opt_in_written = update_user_meta( $user_id, self::META_HISTORY_OPT_IN, 1 );
-		if ( false === $opt_in_written ) { return new \WP_Error( 'file26_history_opt_in_write_failed', 'Server history opt-in could not be stored.', array( 'status' => 500 ) ); }
+		if ( false === $opt_in_written && 1 !== (int) get_user_meta( $user_id, self::META_HISTORY_OPT_IN, true ) ) { return new \WP_Error( 'file26_history_opt_in_write_failed', 'Server history opt-in could not be stored.', array( 'status' => 500 ) ); }
+
+		$q = $this->query( $params ); $sensitive = '' !== $q && $this->sensitive_query( $q );
+		if ( '' !== $q && ! $sensitive ) {
+			$query_hash = hash_hmac( 'sha256', $q, wp_salt( 'nonce' ) );
+			$deduped = array();
+			foreach ( $history as $old ) { if ( is_array( $old ) && ! empty( $old['query_hash'] ) && $query_hash !== $old['query_hash'] ) { $deduped[] = $old; } }
+			$deduped[] = array( 'query' => $q, 'query_hash' => $query_hash, 'searched_at' => gmdate( 'c' ) );
+			$history = array_slice( $deduped, -50 );
+			$saved = $this->save_user_meta_cas( $user_id, self::META_HISTORY, $stored, $history );
+			if ( is_wp_error( $saved ) ) { return $saved; }
+		}
 		return array( 'saved' => '' !== $q && ! $sensitive, 'sensitive_query_not_synced' => $sensitive, 'server_sync_opt_in' => true, 'default_network_sync' => false );
 	}
 }
