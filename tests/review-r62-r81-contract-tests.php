@@ -6,6 +6,7 @@ $connectors = file_get_contents( $root . '/includes/class-file26-connectors.php'
 $security = file_get_contents( $root . '/includes/class-file26-security.php' );
 $recommendations = file_get_contents( $root . '/includes/class-file26-recommendations.php' );
 $taxonomy = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
+$graph = file_get_contents( $root . '/includes/class-file26-graph.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -27,5 +28,8 @@ f26_r62_81_assert( false !== strpos( $recommendations, 'file26_profile_reset_tra
 f26_r62_81_assert( false !== strpos( $recommendations, 'file26_opt_out_transaction_unavailable' ), 'R66: opt-out fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $taxonomy, 'file26_merge_transaction_unavailable' ), 'R67: taxonomy merge fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $taxonomy, 'file26_split_transaction_unavailable' ), 'R67: taxonomy split fails closed if transaction start fails' );
+f26_r62_81_assert( false !== strpos( $graph, 'file26_graph_source_owner_unverified' ) && false !== strpos( $graph, 'source_owner_file' ), 'R68: graph source owner is derived and server-side verified' );
+f26_r62_81_assert( false !== strpos( $graph, "sabri_file26_allowed_evidence_url', false" ), 'R68: external graph evidence URLs are default-deny' );
+f26_r62_81_assert( false !== strpos( $graph, 'file26_graph_source_owner_changed' ), 'R68: graph activation revalidates source owner before approval' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
