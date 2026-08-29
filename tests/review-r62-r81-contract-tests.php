@@ -14,6 +14,7 @@ $appeals = file_get_contents( $root . '/includes/class-file26-doctor-appeals.php
 $doctor_ranking = file_get_contents( $root . '/includes/class-file26-doctor-ranking.php' );
 $privacy = file_get_contents( $root . '/includes/class-file26-privacy.php' );
 $central_plan = file_get_contents( $root . '/includes/class-file26-central-plan.php' );
+$future_user_data = file_get_contents( $root . '/includes/trait-file26-future-user-data.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -57,5 +58,9 @@ f26_r62_81_assert( false !== strpos( $central_plan, 'expected version was omitte
 f26_r62_81_assert( false !== strpos( $central_plan, 'Explicit boolean confirmation is required' ) && false !== strpos( $central_plan, 'strict_bool' ), 'R75: sensitive saved-query confirmation uses strict boolean parsing' );
 f26_r62_81_assert( false !== strpos( $central_plan, 'Explicit boolean submission consent is required' ), 'R75: content-gap submission requires strict boolean consent' );
 f26_r62_81_assert( false !== strpos( $central_plan, 'acquire_content_gap_lock' ) && false !== strpos( $central_plan, 'content_gap_retention_lock_failed' ), 'R75: content-gap submit/retention share a serialized registry lock' );
+f26_r62_81_assert( false !== strpos( $future_user_data, 'file26_alert_enabled_invalid' ) && false !== strpos( $future_user_data, 'future_strict_bool' ), 'R76: saved-alert enabled state uses strict boolean parsing' );
+f26_r62_81_assert( false !== strpos( $future_user_data, 'explicit boolean opt-in' ) && false !== strpos( $future_user_data, 'file26_history_disable_sync_invalid' ), 'R76: history opt-in and disable-sync controls use explicit booleans' );
+f26_r62_81_assert( false !== strpos( $future_user_data, 'true === $this->future_strict_bool( get_user_meta' ), 'R76: persisted history opt-in cannot be misread through PHP truthiness' );
+f26_r62_81_assert( false !== strpos( $future_user_data, 'acquire_future_history_lock' ) && false !== strpos( $future_user_data, 'release_future_history_lock' ), 'R76: server-history save and clear mutations are serialized per user' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
