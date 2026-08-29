@@ -26,7 +26,7 @@ final class Connectors {
 		$manifest['contract_version'] = sanitize_text_field( $manifest['contract_version'] );
 		$manifest['entity_types'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['entity_types'] ) ) ) );
 		$manifest['privacy_classes'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['privacy_classes'] ) ) ) );
-		$manifest['visibility_fields'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['visibility_fields'] ) ) );
+		$manifest['visibility_fields'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $manifest['visibility_fields'] ) ) ) );
 		$manifest['deletion_semantics'] = sanitize_key( $manifest['deletion_semantics'] );
 		if ( '' === $manifest['owner_file'] || '' === $manifest['contract_version'] || empty( $manifest['entity_types'] ) || empty( $manifest['privacy_classes'] ) || empty( $manifest['visibility_fields'] ) || '' === $manifest['deletion_semantics'] ) { return new \WP_Error( 'file26_invalid_manifest_after_normalization', 'Connector manifest becomes empty or invalid after normalization.' ); }
 		$manifest['status'] = isset( $manifest['status'] ) ? sanitize_key( $manifest['status'] ) : 'proposed';
