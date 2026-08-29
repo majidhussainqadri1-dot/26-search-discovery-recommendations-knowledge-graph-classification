@@ -392,10 +392,12 @@ final class Search {
 				if ( $topic ) {
 					$facets['topic'][ $topic ] = isset( $facets['topic'][ $topic ] ) ? $facets['topic'][ $topic ] + 1 : 1;
 				}
+			}
 		}
 		foreach ( $facets as &$values ) {
 			arsort( $values );
 		}
+		unset( $values );
 		return $facets;
 	}
 
