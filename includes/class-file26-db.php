@@ -6,13 +6,12 @@ defined( 'ABSPATH' ) || exit;
 final class DB {
 	const OPTION_SCHEMA='sabri_file26_schema_version'; const OPTION_SETTINGS='sabri_file26_settings'; const CRON_QUEUE='sabri_file26_process_queue'; const CRON_RECONCILE='sabri_file26_reconcile'; const CRON_RETENTION='sabri_file26_retention'; const CRON_DOCTOR_RANKING='sabri_file26_doctor_ranking';
 	public static function table($name){global $wpdb;$allowed=array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits');if(!in_array($name,$allowed,true)){throw new \InvalidArgumentException('Unknown File 26 table.');}return $wpdb->prefix.'f26_'.$name;}
-	public static function activate(){if(!self::install_schema()){return false;}if(!self::install_defaults()){return false;}self::install_capabilities();if(!self::schedule()){return false;}flush_rewrite_rules(false);return true;}
+	public static function activate(){if(!self::install_schema()){return false;}if(!self::install_defaults()){return false;}if(!self::schedule()){return false;}flush_rewrite_rules(false);return true;}
 	public static function deactivate(){wp_clear_scheduled_hook(self::CRON_QUEUE);wp_clear_scheduled_hook(self::CRON_RECONCILE);wp_clear_scheduled_hook(self::CRON_RETENTION);wp_clear_scheduled_hook(self::CRON_DOCTOR_RANKING);flush_rewrite_rules(false);}
 	private static function install_defaults(){
 		$defaults=array('activated'=>false,'public_search_enabled'=>true,'personalization_enabled'=>false,'telemetry_enabled'=>true,'query_text_sampling'=>false,'max_query_length'=>200,'results_per_page'=>20,'max_results_per_page'=>30,'candidate_limit'=>200,'graph_max_depth'=>2,'graph_max_degree'=>20,'tombstone_retention_days'=>180,'feedback_retention_days'=>365,'audit_retention_days'=>760,'primary_color'=>'#087A4E','policy_version'=>'organic-1.0','doctor_ranking_policy_version'=>'doctor-global-1.0','doctor_ranking_last_run'=>'','unsafe_auto_synonyms'=>array(),'synonyms'=>array(),'transliteration_aliases'=>array());
 		$current=get_option(self::OPTION_SETTINGS,array());$merged=array_merge($defaults,is_array($current)?$current:array());$saved=update_option(self::OPTION_SETTINGS,$merged,false);if(!$saved&&get_option(self::OPTION_SETTINGS,array())!==$merged){return false;}return true;
 	}
-	private static function install_capabilities(){$role=get_role('administrator');if(!$role){return;}foreach(array('manage_sabri_search','operate_sabri_search','curate_sabri_taxonomy','approve_sabri_ranking','audit_sabri_search') as $cap){$role->add_cap($cap);}}
 	public static function schedule(){
 		$ok=true;
 		if(!wp_next_scheduled(self::CRON_QUEUE)){$ok=wp_schedule_event(time()+300,'hourly',self::CRON_QUEUE)!==false&&$ok;}
