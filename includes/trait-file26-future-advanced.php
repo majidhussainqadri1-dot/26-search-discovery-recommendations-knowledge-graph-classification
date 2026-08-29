@@ -1,6 +1,5 @@
 <?php
 namespace Sabri\File26;
-
 defined( 'ABSPATH' ) || exit;
 
 trait Future_Advanced_Trait {
@@ -41,7 +40,11 @@ trait Future_Advanced_Trait {
 		$out = array();
 		foreach ( array_slice( $provided['results'], 0, 20 ) as $item ) {
 			if ( ! is_array( $item ) || empty( $item['source_name'] ) || empty( $item['source_url'] ) || empty( $item['retrieved_at'] ) || empty( $item['rights_status'] ) || empty( $item['provenance'] ) ) { continue; }
-			$url = esc_url_raw( (string) $item['source_url'], array( 'https' ) ); if ( '' === $url ) { continue; }
+			$url = esc_url_raw( (string) $item['source_url'], array( 'https' ) );
+			$parts = $url ? wp_parse_url( $url ) : false;
+			if ( ! $parts || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) { continue; }
+			$host = strtolower( (string) $parts['host'] );
+			if ( 'localhost' === $host || substr( $host, -6 ) === '.local' || ( filter_var( $host, FILTER_VALIDATE_IP ) && ! filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) ) { continue; }
 			$out[] = array(
 				'external' => true, 'connector' => $connector,
 				'title' => $this->bounded_future_text( isset( $item['title'] ) ? $item['title'] : '', 240 ),
@@ -61,9 +64,33 @@ trait Future_Advanced_Trait {
 		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A benchmark query is required.', array( 'status' => 400 ) ); }
 		$baseline = $this->base_search( $q, array( 'limit' => 20, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' ) ); if ( is_wp_error( $baseline ) ) { return $baseline; }
 		$baseline_results = $this->safe_results( (array) $baseline['results'] );
-		$candidate = apply_filters( 'sabri_file26_relevance_lab_candidate', $baseline_results, $q, $baseline_results, array( 'read_only' => true, 'production_write' => false ) ); $candidate = is_array( $candidate ) ? $this->safe_results( $candidate ) : $baseline_results;
-		$base_keys = array_values( array_filter( array_column( $baseline_results, 'key' ) ) ); $candidate_keys = array_values( array_filter( array_column( $candidate, 'key' ) ) );
-		$intersection = count( array_intersect( array_slice( $base_keys, 0, 10 ), array_slice( $candidate_keys, 0, 10 ) ) ); $overlap_denominator = max( 1, min( 10, count( $base_keys ) ) );
-		return array( 'query' => $q, 'production_mutation' => false, 'baseline' => array_slice( $baseline_results, 0, 10 ), 'candidate' => array_slice( $candidate, 0, 10 ), 'metrics' => array( 'top10_overlap' => $intersection, 'top10_overlap_ratio' => $intersection / $overlap_denominator, 'baseline_source_concentration' => $this->source_concentration( array_slice( $baseline_results, 0, 10 ) ), 'candidate_source_concentration' => $this->source_concentration( array_slice( $candidate, 0, 10 ) ) ), 'release_gate' => 'Candidate requires separate approval, staging evidence and rollbackable versioned release.' );
+		$provider_bypassed = $this->sensitive_query( $q ) || $this->autonomous_clinical_intent( $q );
+		if ( $provider_bypassed ) {
+			$candidate = $baseline_results;
+		} else {
+			$candidate = apply_filters( 'sabri_file26_relevance_lab_candidate', $baseline_results, $q, $baseline_results, array( 'read_only' => true, 'production_write' => false ) );
+			$candidate = is_array( $candidate ) ? $this->safe_results( $candidate ) : $baseline_results;
+		}
+		$base_keys = array_values( array_filter( array_column( $baseline_results, 'key' ) ) );
+		$eligible = array_fill_keys( $base_keys, true );
+		$candidate = array_values( array_filter( $candidate, static function ( $item ) use ( $eligible ) { return is_array( $item ) && ! empty( $item['key'] ) && isset( $eligible[ (string) $item['key'] ] ); } ) );
+		$candidate_keys = array_values( array_filter( array_column( $candidate, 'key' ) ) );
+		$intersection = count( array_intersect( array_slice( $base_keys, 0, 10 ), array_slice( $candidate_keys, 0, 10 ) ) );
+		$overlap_denominator = max( 1, min( 10, count( $base_keys ) ) );
+		return array(
+			'query' => $q,
+			'production_mutation' => false,
+			'candidate_provider_bypassed_for_sensitive_or_clinical' => $provider_bypassed,
+			'candidate_scope' => 'eligible_baseline_keys_only',
+			'baseline' => array_slice( $baseline_results, 0, 10 ),
+			'candidate' => array_slice( $candidate, 0, 10 ),
+			'metrics' => array(
+				'top10_overlap' => $intersection,
+				'top10_overlap_ratio' => $intersection / $overlap_denominator,
+				'baseline_source_concentration' => $this->source_concentration( array_slice( $baseline_results, 0, 10 ) ),
+				'candidate_source_concentration' => $this->source_concentration( array_slice( $candidate, 0, 10 ) ),
+			),
+			'release_gate' => 'Candidate requires separate approval, staging evidence and rollbackable versioned release.',
+		);
 	}
 }
