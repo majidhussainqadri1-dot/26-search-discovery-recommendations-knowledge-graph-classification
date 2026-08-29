@@ -4,6 +4,7 @@ $root = dirname( __DIR__ );
 $files = array(
     'bootstrap' => file_get_contents( $root . '/file-26-search-discovery.php' ),
     'db' => file_get_contents( $root . '/includes/class-file26-db.php' ),
+    'security' => file_get_contents( $root . '/includes/class-file26-security.php' ),
     'rest' => file_get_contents( $root . '/includes/class-file26-rest.php' ),
     'owner' => file_get_contents( $root . '/includes/class-file26-owner-contracts.php' ),
     'roles' => file_get_contents( $root . '/includes/class-file26-roles.php' ),
@@ -18,10 +19,7 @@ $failures = 0;
 function f26_second40_assert( $condition, $message ) {
     global $checks, $failures;
     $checks++;
-    if ( ! $condition ) {
-        $failures++;
-        fwrite( STDERR, "FAIL: $message\n" );
-    }
+    if ( ! $condition ) { $failures++; fwrite( STDERR, "FAIL: $message\n" ); }
 }
 
 f26_second40_assert( false !== strpos( $files['db'], "'primary_color'=>'#087A4E'" ), 'Sabri Green remains the DB default accent' );
@@ -37,6 +35,11 @@ f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\Fil
 f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\File26\\Roles::install( true ) )" ), 'activation verifies role model result' );
 f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\File26\\Doctor_Appeals::install_schema() )" ), 'activation verifies appeal schema result' );
 f26_second40_assert( false !== strpos( $files['bootstrap'], "deactivate_plugins" ) && false !== strpos( $files['bootstrap'], "wp_die" ), 'failed activation is explicitly aborted' );
+
+f26_second40_assert( false !== strpos( $files['security'], "strlen($cursor)>8192" ) && false !== strpos( $files['security'], "strlen($decoded)>4096" ), 'cursor verification is length bounded before and after decoding' );
+f26_second40_assert( false !== strpos( $files['security'], "false===$json||strlen($json)>4096" ), 'cursor signing fails closed on invalid or oversized JSON' );
+f26_second40_assert( false !== strpos( $files['security'], "query_text" ) && false !== strpos( $files['security'], "search_query" ), 'audit metadata blocks common query-key aliases' );
+f26_second40_assert( false !== strpos( $files['security'], "if($this->contains_sensitive_query($text)){continue;}" ), 'audit metadata redacts sensitive scalar values regardless of key name' );
 
 f26_second40_assert( false !== strpos( $files['rest'], "file26_membership_invalid" ), 'protected REST routes require current membership assertions' );
 f26_second40_assert( false !== strpos( $files['rest'], "is_wp_error($appeals)?$appeals" ), 'own-appeals read errors are not hidden inside success envelopes' );
@@ -66,8 +69,5 @@ f26_second40_assert( false !== strpos( $files['builder'], "FIXED_FILE_MODE = 0o6
 f26_second40_assert( false !== strpos( $files['builder'], "if path.is_symlink():" ), 'package builder rejects symlink input' );
 f26_second40_assert( false !== strpos( $files['workflow'], "'review/**'" ), 'review branches receive exact-head GitHub Actions runs' );
 
-if ( $failures ) {
-    fwrite( STDERR, "$failures of $checks second-cycle assertions failed.\n" );
-    exit( 1 );
-}
+if ( $failures ) { fwrite( STDERR, "$failures of $checks second-cycle assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks second-cycle review regression assertions\n";
