@@ -148,7 +148,7 @@ final class Recommendations {
 		if ( ! $idempotency_raw ) { return new \WP_Error( 'file26_idempotency_required', 'An idempotency key is required.', array( 'status' => 400 ) ); }
 		$idempotency = hash( 'sha256', $user_id . '|' . $idempotency_raw );
 
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_feedback_transaction_unavailable', 'Recommendation feedback transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			if ( 'undo' === $type ) {
 				$undo_raw = isset( $request['undo_idempotency_key'] ) ? sanitize_text_field( $request['undo_idempotency_key'] ) : '';
@@ -240,7 +240,7 @@ final class Recommendations {
 		$user_id = (int) $access['user_id'];
 		$consent = (bool) $consent;
 		$empty = wp_json_encode( array() );
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_consent_transaction_unavailable', 'Recommendation consent transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			$sql = $wpdb->prepare(
 				'INSERT INTO ' . DB::table( 'profiles' ) . "
@@ -279,7 +279,7 @@ final class Recommendations {
 		$access = $this->require_preference_access();
 		if ( is_wp_error( $access ) ) { return $access; }
 		$user_id = (int) $access['user_id'];
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_profile_reset_transaction_unavailable', 'Recommendation profile reset transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			if ( false === $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) { throw new \RuntimeException( 'Feedback reset failed.' ); }
 			if ( false === $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) { throw new \RuntimeException( 'Profile reset failed.' ); }
@@ -297,7 +297,7 @@ final class Recommendations {
 		$access = $this->require_preference_access();
 		if ( is_wp_error( $access ) ) { return $access; }
 		$user_id = (int) $access['user_id'];
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_opt_out_transaction_unavailable', 'Recommendation opt-out transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			if ( false === $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) { throw new \RuntimeException( 'Feedback opt-out purge failed.' ); }
 			if ( false === $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) { throw new \RuntimeException( 'Profile opt-out reset failed.' ); }
