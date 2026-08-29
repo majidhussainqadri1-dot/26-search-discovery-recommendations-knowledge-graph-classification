@@ -17,11 +17,29 @@ final class Doctor_Ranking {
 		$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock_name ) );
 		if ( '1' !== (string) $locked ) { return new \WP_Error( 'file26_ranking_busy', 'Doctor ranking recompute is already running.', array( 'status' => 409 ) ); }
 		try {
-			$policy = $this->policy(); $rows = $this->eligible_rows(); $scored = array();
-			foreach ( $rows as $row ) { $payload = json_decode( $row['payload'], true ); if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) ) { continue; } $scored[] = array( 'key' => $row['canonical_key'], 'payload' => $payload, 'score' => $this->score( $payload, $policy['weights'] ) ); }
-			$this->sort_scored( $scored ); $table = DB::table( 'documents' );
-			$wpdb->query( 'START TRANSACTION' );
+			$policy = $this->policy();
+			$rows = $this->eligible_rows();
+			if ( is_wp_error( $rows ) ) { return $rows; }
+			$scored = array();
+			foreach ( $rows as $row ) {
+				$payload = json_decode( $row['payload'], true );
+				if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) ) { continue; }
+				$scored[] = array( 'key' => $row['canonical_key'], 'payload' => $payload, 'score' => $this->score( $payload, $policy['weights'] ) );
+			}
+			$this->sort_scored( $scored );
+			$table = DB::table( 'documents' );
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_doctor_ranking_transaction_unavailable', 'Doctor ranking transaction could not be started safely.', array( 'status' => 500 ) ); }
 			try {
+				// First remove stale ranking metadata from the entire currently visible File 07 doctor projection cohort.
+				foreach ( $rows as $row ) {
+					$payload = json_decode( $row['payload'], true );
+					if ( ! is_array( $payload ) ) { $payload = array(); }
+					$had_rank = array_key_exists( 'global_doctor_rank', $payload ) || array_key_exists( 'doctor_rank_score', $payload ) || array_key_exists( 'doctor_rank_policy_version', $payload );
+					if ( ! $had_rank ) { continue; }
+					unset( $payload['global_doctor_rank'], $payload['doctor_rank_score'], $payload['doctor_rank_policy_version'] );
+					$cleared = $wpdb->update( $table, array( 'payload' => wp_json_encode( $payload ), 'updated_at' => DB::now() ), array( 'canonical_key' => $row['canonical_key'] ), array( '%s', '%s' ), array( '%s' ) );
+					if ( false === $cleared ) { throw new \RuntimeException( 'Stale doctor rank cleanup failed.' ); }
+				}
 				$rank = 0;
 				foreach ( $scored as $item ) {
 					$rank++; $payload = $item['payload']; $payload['global_doctor_rank'] = $rank; $payload['doctor_rank_score'] = round( $item['score'], 6 ); $payload['doctor_rank_policy_version'] = $policy['version'];
@@ -48,8 +66,10 @@ final class Doctor_Ranking {
 		$limit = isset( $request['limit'] ) ? max( 1, min( 100, (int) $request['limit'] ) ) : 20; $policy = $this->policy();
 		$cursor_context = hash( 'sha256', wp_json_encode( array( 'context' => $context, 'value' => $value, 'tier' => $tier, 'limit' => $limit, 'policy' => $policy['version'] ) ) ); $offset = 0;
 		if ( ! empty( $request['cursor'] ) ) { $cursor = $this->security->verify_cursor( $request['cursor'] ); if ( ! $cursor || empty( $cursor['h'] ) || empty( $cursor['p'] ) || $cursor['p'] !== $policy['version'] || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) { return new \WP_Error( 'file26_invalid_cursor', 'The doctor-ranking cursor is invalid or expired.', array( 'status' => 400 ) ); } $offset = max( 0, min( 100000, (int) $cursor['o'] ) ); }
+		$rows = $this->eligible_rows();
+		if ( is_wp_error( $rows ) ) { return $rows; }
 		$scored = array();
-		foreach ( $this->eligible_rows() as $row ) { $payload = json_decode( $row['payload'], true ); if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) || ! $this->matches_context( $row, $payload, $context, $value ) ) { continue; } $global_rank = isset( $payload['global_doctor_rank'] ) ? max( 0, (int) $payload['global_doctor_rank'] ) : 0; if ( ! $this->matches_tier( $global_rank, $tier ) ) { continue; } $scored[] = array( 'key' => $row['canonical_key'], 'title' => $row['title'], 'url' => $row['canonical_url'], 'country' => $row['country'], 'location' => $row['location'], 'locale' => $row['locale'], 'payload' => $payload, 'score' => $this->score( $payload, $policy['weights'] ), 'global_rank' => $global_rank ); }
+		foreach ( $rows as $row ) { $payload = json_decode( $row['payload'], true ); if ( ! is_array( $payload ) || empty( $payload['verified_doctor'] ) || ! $this->matches_context( $row, $payload, $context, $value ) ) { continue; } $global_rank = isset( $payload['global_doctor_rank'] ) ? max( 0, (int) $payload['global_doctor_rank'] ) : 0; if ( ! $this->matches_tier( $global_rank, $tier ) ) { continue; } $scored[] = array( 'key' => $row['canonical_key'], 'title' => $row['title'], 'url' => $row['canonical_url'], 'country' => $row['country'], 'location' => $row['location'], 'locale' => $row['locale'], 'payload' => $payload, 'score' => $this->score( $payload, $policy['weights'] ), 'global_rank' => $global_rank ); }
 		$this->sort_scored( $scored ); $context_rank = 0;
 		foreach ( $scored as &$item ) { $context_rank++; $item['context_rank'] = $context_rank; $item['global_tier'] = $this->tier_for_rank( $item['global_rank'] ); $item['explanation'] = $this->explain( $item['payload'], $policy ); unset( $item['payload'] ); } unset( $item );
 		$total = count( $scored ); $page = array_slice( $scored, $offset, $limit ); $has_more = $total > $offset + $limit;
@@ -73,10 +93,12 @@ final class Doctor_Ranking {
 		global $wpdb;
 		$documents = DB::table( 'documents' );
 		$connectors = DB::table( 'connectors' );
-		return (array) $wpdb->get_results(
+		$rows = $wpdb->get_results(
 			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key",
 			ARRAY_A
 		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $rows ) { return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) ); }
+		return $rows;
 	}
 	private function matches_context( array $row, array $payload, $context, $value ) { if ( 'global' === $context ) { return true; } $topics = json_decode( isset( $row['topic_ids'] ) ? $row['topic_ids'] : '', true ); $topics = is_array( $topics ) ? array_map( 'sanitize_key', $topics ) : array(); if ( 'educator' === $context ) { return in_array( 'educator', $topics, true ) || in_array( 'teacher', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.6 ); } if ( 'researcher' === $context ) { return in_array( 'researcher', $topics, true ) || in_array( 'research', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.75 ); } $needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $value ), 'UTF-8' ) : strtolower( trim( $value ) ); if ( 'country' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['country'] ), 'UTF-8' ) : strtolower( trim( (string) $row['country'] ) ); return $candidate === $needle; } if ( 'city' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['location'] ), 'UTF-8' ) : strtolower( trim( (string) $row['location'] ) ); return $candidate === $needle; } if ( 'language' === $context ) { $language = isset( $payload['language'] ) ? (string) $payload['language'] : (string) $row['locale']; $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $language ), 'UTF-8' ) : strtolower( trim( $language ) ); return $candidate === $needle || 0 === strpos( $candidate, $needle . '-' ); } if ( 'specialization' === $context ) { return in_array( sanitize_key( $value ), $topics, true ); } return false; }
 	private function matches_tier( $rank, $tier ) { if ( $rank <= 0 ) { return 'all_verified' === $tier; } if ( 'top_10' === $tier ) { return $rank <= 10; } if ( 'top_100' === $tier ) { return $rank <= 100; } if ( 'top_1000' === $tier ) { return $rank <= 1000; } return true; }
