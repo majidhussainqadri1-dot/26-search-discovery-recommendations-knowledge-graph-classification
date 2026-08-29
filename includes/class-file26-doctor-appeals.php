@@ -52,8 +52,15 @@ final class Doctor_Appeals {
 		if ( ! $this->security->rate_limit( 'doctor-appeal|u:' . $user_id, 5, DAY_IN_SECONDS ) ) { return new \WP_Error( 'file26_appeal_rate_limited', 'Too many ranking appeals were submitted.', array( 'status' => 429 ) ); }
 		$doctor_key = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $doctor_key ) ); $reason = trim( wp_strip_all_tags( (string) $reason, true ) ); $reason_length = function_exists( 'mb_strlen' ) ? mb_strlen( $reason, 'UTF-8' ) : strlen( $reason );
 		if ( 64 !== strlen( $doctor_key ) || $reason_length < 20 || $reason_length > 4000 ) { return new \WP_Error( 'file26_invalid_appeal', 'A valid doctor reference and a reason between 20 and 4000 characters are required.', array( 'status' => 400 ) ); }
-		$document = $wpdb->get_row( $wpdb->prepare( 'SELECT canonical_key,author_key,payload FROM ' . DB::table( 'documents' ) . " WHERE canonical_key=%s AND entity_type='doctor' AND state IN ('published','active','corrected') AND visibility='public' LIMIT 1", $doctor_key ), ARRAY_A );
-		if ( ! $document ) { return new \WP_Error( 'file26_doctor_not_found', 'The eligible doctor ranking record was not found.', array( 'status' => 404 ) ); }
+		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
+		$document = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT d.canonical_key,d.author_key,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.canonical_key=%s AND d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' LIMIT 1",
+				$doctor_key
+			),
+			ARRAY_A
+		);
+		if ( ! $document ) { return new \WP_Error( 'file26_doctor_not_found', 'The eligible doctor ranking projection was not found.', array( 'status' => 404 ) ); }
 		$payload = json_decode( $document['payload'], true ); $payload = is_array( $payload ) ? $payload : array(); if ( empty( $payload['verified_doctor'] ) ) { return new \WP_Error( 'file26_doctor_not_eligible', 'Only a verified-doctor ranking record may be appealed.', array( 'status' => 409 ) ); }
 		$owner_aliases = array( (string) $user_id, 'u:' . $user_id, 'user:' . $user_id, 'wp:' . $user_id ); $owns_profile = in_array( (string) $document['author_key'], $owner_aliases, true );
 		$allowed = apply_filters( 'sabri_file26_can_appeal_doctor_ranking', $owns_profile, $user_id, $doctor_key, array( 'author_key' => $document['author_key'], 'policy_version' => isset( $payload['doctor_rank_policy_version'] ) ? $payload['doctor_rank_policy_version'] : '' ) );
