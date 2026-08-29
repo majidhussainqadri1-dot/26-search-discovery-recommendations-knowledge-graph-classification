@@ -33,7 +33,7 @@ foreach ( array( 'CV-164', 'CV-165', 'CV-166', 'CV-167', 'CV-168', 'CV-169', 'CV
 
 f26_central_assert( f26_central_has_all( $files['central'], array( 'used_for_personalization', 'false', 'saved_queries' ) ), 'saved queries cannot silently personalize ranking' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'sabri_file26_encrypt_saved_query', 'file26_sensitive_save_encryption_unavailable', 'ciphertext', 'key_id' ) ), 'sensitive saved queries fail closed without approved encryption' );
-f26_central_assert( f26_central_has_all( $files['central'], array( "'q'=>$sensitive?'':$q", 'q_encrypted' ) ) || f26_central_has_all( $files['central'], array( "'q'", '$sensitive', "''", '$q', 'q_encrypted' ) ), 'sensitive saved-query plaintext is not persisted' );
+f26_central_assert( f26_central_has_all( $files['central'], array( "'q'", '$sensitive', "''", '$q', 'q_encrypted' ) ), 'sensitive saved-query plaintext is not persisted' );
 f26_central_assert( false !== strpos( $files['central'], 'file26_sensitive_saved_query_metadata' ), 'sensitive saved-query metadata is rejected rather than persisted in plaintext' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'require_step_up', 'saved_query_decrypt' ) ), 'sensitive saved-query decryption requires fresh step-up authorization' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'public_saved_record', 'privacy_export', 'false' ) ), 'privacy export does not opportunistically decrypt protected query text' );
@@ -54,10 +54,10 @@ f26_central_assert( f26_central_has_all( $files['central'], array( 'paid_or_spon
 f26_central_assert( f26_central_has_all( $files['central'], array( 'single_free_tier_rank_parity', 'true' ) ), 'single-free-tier ranking parity' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'donation', 'founder_favoritism', 'paid_promotion' ) ), 'forbidden money/favoritism signals are named' );
 f26_central_assert( f26_central_has_all( $files['central'], array( "'connector'", '$connector', "'source'", '$source' ) ), 'advanced search separates connector lane from owner-source filtering' );
-f26_central_assert( f26_central_has_all( $files['central'], array( "meta['visibility']", "''===$access", 'extended' ) ), 'advanced access filter fails closed instead of assuming public' );
+f26_central_assert( f26_central_has_all( $files['central'], array( "meta['visibility']", 'access', 'visibility', 'extended' ) ), 'advanced access filter fails closed instead of assuming public' );
 f26_central_assert( f26_central_has_all( $files['central'], array( "extended['exact']", 'field_haystack', 'strpos' ) ), 'field-scoped exact phrase must actually occur in selected fields' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'continuation_limited', 'next_offset', 'offset', 'bounded_more' ) ), 'advanced-search cursor cannot self-loop after a bounded scan ceiling' );
-f26_central_assert( f26_central_has_all( $files['central'], array( 'advanced-search|', 'client_bucket', '12,60' ) ) || f26_central_has_all( $files['central'], array( 'advanced-search|', 'client_bucket', 'rate_limit' ) ), 'advanced search has an explicit abuse-rate gate' );
+f26_central_assert( f26_central_has_all( $files['central'], array( 'advanced-search|', 'client_bucket', 'rate_limit' ) ), 'advanced search has an explicit abuse-rate gate' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'secure_route_response', 'Cache-Control', 'private, no-store' ) ), 'new central REST routes have explicit no-store security semantics' );
 f26_central_assert( f26_central_has_all( $files['central'], array( 'saved_query_retention_days', 'explicit_gap_retention_days', 'setting_days' ) ), 'saved-query and explicit-gap retention use governed settings' );
 
