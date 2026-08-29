@@ -8,6 +8,7 @@ $recommendations = file_get_contents( $root . '/includes/class-file26-recommenda
 $taxonomy = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
 $graph = file_get_contents( $root . '/includes/class-file26-graph.php' );
 $governance = file_get_contents( $root . '/includes/class-file26-governance.php' );
+$rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -34,5 +35,6 @@ f26_r62_81_assert( false !== strpos( $graph, "sabri_file26_allowed_evidence_url'
 f26_r62_81_assert( false !== strpos( $graph, 'file26_graph_source_owner_changed' ), 'R68: graph activation revalidates source owner before approval' );
 f26_r62_81_assert( false !== strpos( $governance, 'file26_policy_activation_transaction_unavailable' ), 'R69: ranking activation fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $governance, 'file26_policy_rollback_transaction_unavailable' ), 'R69: ranking rollback fails closed if transaction start fails' );
+f26_r62_81_assert( false !== strpos( $rest, 'file26_invalid_consent' ) && false !== strpos( $rest, 'strict_bool' ), 'R70: personalization consent uses strict boolean parsing and rejects malformed values' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
