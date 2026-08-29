@@ -19,7 +19,7 @@ final class Security {
 		$audience['user_id']=$current_user_id;
 		$audience['authenticated']=$authenticated;
 		$audience['roles']=$authenticated?wp_get_current_user()->roles:array();
-		$audience['contract_version']=isset($audience['contract_version'])?substr(sanitize_text_field((string)$audience['contract_version']),0,32):null;
+		$audience['contract_version']=isset($audience['contract_version'])?$this->sanitize_claim_text($audience['contract_version'],32):null;
 		$suspended=$this->normalize_claim_bool(isset($audience['suspended'])?$audience['suspended']:false);
 		$is_minor=$this->normalize_claim_bool(isset($audience['is_minor'])?$audience['is_minor']:false);
 		$guardian=$this->normalize_claim_bool(isset($audience['guardian_verified'])?$audience['guardian_verified']:false);
@@ -39,9 +39,17 @@ final class Security {
 		return null;
 	}
 
+	private function sanitize_claim_text($value,$max_length){
+		if(!is_scalar($value)){return '';}
+		$text=(string)$value;
+		if(function_exists('sanitize_text_field')){$text=\sanitize_text_field($text);}else{$text=strip_tags($text);$text=preg_replace('/[\x00-\x1F\x7F]/u','',$text);$text=preg_replace('/\s+/u',' ',trim($text));}
+		$max_length=max(1,(int)$max_length);
+		return function_exists('mb_substr')?mb_substr($text,0,$max_length,'UTF-8'):substr($text,0,$max_length);
+	}
+
 	private function normalize_string_claim_list($value,$max_items,$max_length){
 		if(!is_array($value)){return array();}$out=array();
-		foreach(array_slice($value,0,max(1,(int)$max_items)) as $item){if(!is_scalar($item)){continue;}$item=substr(sanitize_text_field((string)$item),0,max(1,(int)$max_length));if(''!==$item){$out[$item]=true;}}
+		foreach(array_slice($value,0,max(1,(int)$max_items)) as $item){$item=$this->sanitize_claim_text($item,$max_length);if(''!==$item){$out[$item]=true;}}
 		return array_keys($out);
 	}
 
