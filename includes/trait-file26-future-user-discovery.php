@@ -46,7 +46,8 @@ trait Future_User_Discovery_Trait {
 		$params = $this->params( $request );
 		$entity_type = isset( $params['entity_type'] ) && in_array( sanitize_key( (string) $params['entity_type'] ), array( 'doctor', 'clinic' ), true ) ? sanitize_key( (string) $params['entity_type'] ) : 'doctor';
 		$filters = array( 'entity_type' => $entity_type );
-		foreach ( array( 'country', 'location', 'language', 'specialization' ) as $key ) { if ( ! empty( $params[ $key ] ) ) { $filters[ $key ] = sanitize_text_field( (string) $params[ $key ] ); } }
+		foreach ( array( 'country', 'location', 'language' ) as $key ) { if ( ! empty( $params[ $key ] ) ) { $filters[ $key ] = sanitize_text_field( (string) $params[ $key ] ); } }
+		if ( ! empty( $params['specialization'] ) ) { $filters['topic'] = sanitize_key( (string) $params['specialization'] ); }
 		$availability_request = array();
 		foreach ( array( 'availability', 'timezone', 'mode' ) as $key ) { if ( ! empty( $params[ $key ] ) ) { $availability_request[ $key ] = sanitize_text_field( (string) $params[ $key ] ); } }
 		if ( isset( $params['radius_km'] ) ) { $availability_request['radius_km'] = max( 1, min( 500, (int) $params['radius_km'] ) ); }
