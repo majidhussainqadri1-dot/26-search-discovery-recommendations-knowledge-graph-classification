@@ -11,8 +11,14 @@ final class Doctor_Appeals {
 	public static function table() { global $wpdb; return $wpdb->prefix . 'f26_ranking_appeals'; }
 
 	public static function install_schema() {
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) { return true; }
-		global $wpdb; require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate(); $table = self::table();
+		global $wpdb;
+		$table = self::table();
+		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) {
+			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+			if ( $table === $exists ) { return true; }
+			delete_option( self::OPTION_SCHEMA );
+		}
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate();
 		dbDelta( "CREATE TABLE $table (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			appeal_uuid char(36) NOT NULL,
@@ -35,7 +41,7 @@ final class Doctor_Appeals {
 			KEY appellant_status (appellant_user_id,status),
 			KEY submitted_at (submitted_at)
 		) $charset;" );
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 		if ( $table !== $exists ) { delete_option( self::OPTION_SCHEMA ); return false; }
 		return update_option( self::OPTION_SCHEMA, self::SCHEMA_VERSION, false ) || self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA );
 	}
