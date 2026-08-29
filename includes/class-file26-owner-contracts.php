@@ -8,6 +8,13 @@ final class Owner_Contracts {
 	private $connectors;
 	public function __construct( Connectors $connectors ) { $this->connectors = $connectors; }
 
+	private function strict_bool( $value ) {
+		if ( is_bool( $value ) ) { return $value; }
+		if ( is_int( $value ) || is_float( $value ) ) { if ( 1 === (int) $value ) { return true; } if ( 0 === (int) $value ) { return false; } return null; }
+		if ( is_string( $value ) ) { $value = strtolower( trim( $value ) ); if ( in_array( $value, array( '1','true','yes','on' ), true ) ) { return true; } if ( in_array( $value, array( '0','false','no','off','' ), true ) ) { return false; } }
+		return null;
+	}
+
 	public function requirements() {
 		return array(
 			'file03' => array( 'owner_file'=>'File 03','entity_types'=>array('founder','doctor','member_profile') ),
@@ -57,9 +64,9 @@ final class Owner_Contracts {
 
 	/** Default activation decision; every listed evidence item and explicit approval are mandatory. */
 	public function activation_gate( $approved, array $health, array $connectors ) {
-		if ( ! $approved ) { return false; }
+		if ( true !== $this->strict_bool( $approved ) ) { return false; }
 		$evidence=apply_filters('sabri_file26_cross_file_gate_evidence',array('file00_identity_contract'=>false,'file20_shell_contract'=>false,'file24_assurance_contract'=>false,'file25_visual_contract'=>false,'staging_acceptance'=>false,'migration_rehearsal'=>false,'rollback_rehearsal'=>false));$evidence=is_array($evidence)?$evidence:array();
-		foreach(array('file00_identity_contract','file20_shell_contract','file24_assurance_contract','file25_visual_contract','staging_acceptance','migration_rehearsal','rollback_rehearsal') as $key){if(empty($evidence[$key])){return false;}}
+		foreach(array('file00_identity_contract','file20_shell_contract','file24_assurance_contract','file25_visual_contract','staging_acceptance','migration_rehearsal','rollback_rehearsal') as $key){if(!array_key_exists($key,$evidence)||true!==$this->strict_bool($evidence[$key])){return false;}}
 		$status=isset($health['status'])?sanitize_key((string)$health['status']):'';
 		return $this->all_required_active()&&!empty($connectors)&&in_array($status,array('inactive','healthy'),true);
 	}
