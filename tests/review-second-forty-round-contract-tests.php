@@ -6,6 +6,7 @@ $files = array(
     'db' => file_get_contents( $root . '/includes/class-file26-db.php' ),
     'security' => file_get_contents( $root . '/includes/class-file26-security.php' ),
     'rest' => file_get_contents( $root . '/includes/class-file26-rest.php' ),
+    'recommendations' => file_get_contents( $root . '/includes/class-file26-recommendations.php' ),
     'owner' => file_get_contents( $root . '/includes/class-file26-owner-contracts.php' ),
     'roles' => file_get_contents( $root . '/includes/class-file26-roles.php' ),
     'plugin' => file_get_contents( $root . '/includes/class-file26-plugin.php' ),
@@ -16,11 +17,7 @@ $files = array(
 );
 $checks = 0;
 $failures = 0;
-function f26_second40_assert( $condition, $message ) {
-    global $checks, $failures;
-    $checks++;
-    if ( ! $condition ) { $failures++; fwrite( STDERR, "FAIL: $message\n" ); }
-}
+function f26_second40_assert( $condition, $message ) { global $checks, $failures; $checks++; if ( ! $condition ) { $failures++; fwrite( STDERR, "FAIL: $message\n" ); } }
 
 f26_second40_assert( false !== strpos( $files['db'], "'primary_color'=>'#087A4E'" ), 'Sabri Green remains the DB default accent' );
 f26_second40_assert( false !== strpos( $files['db'], "delete_option(self::OPTION_SCHEMA);return false;" ), 'main schema marker is cleared when a required table is missing' );
@@ -45,6 +42,11 @@ f26_second40_assert( false !== strpos( $files['rest'], "file26_membership_invali
 f26_second40_assert( false !== strpos( $files['rest'], "is_wp_error($appeals)?$appeals" ), 'own-appeals read errors are not hidden inside success envelopes' );
 f26_second40_assert( false !== strpos( $files['rest'], "is_wp_error($result)?$result:$this->respond($result)" ), 'reconciliation errors are propagated to REST callers' );
 f26_second40_assert( false !== strpos( $files['rest'], "Cache-Control','private, no-store" ), 'non-public REST responses stay no-store' );
+
+f26_second40_assert( false !== strpos( $files['recommendations'], "START TRANSACTION" ) && false !== strpos( $files['recommendations'], "feedback_commit_failed" ), 'feedback mutations and negative-control projection are atomic' );
+f26_second40_assert( false !== strpos( $files['recommendations'], "ORDER BY id DESC LIMIT 3000" ), 'negative-control rebuild considers latest bounded feedback rather than oldest rows only' );
+f26_second40_assert( false !== strpos( $files['recommendations'], "Opt-out commit failed." ), 'opt-out purge and persisted marker commit atomically' );
+f26_second40_assert( false === strpos( $files['recommendations'], "ORDER BY id ASC LIMIT 1000" ), 'obsolete oldest-1000 negative-control truncation is absent' );
 
 f26_second40_assert( false !== strpos( $files['owner'], "if ( ! $approved ) { return false; }" ), 'cross-file activation requires explicit upstream approval' );
 f26_second40_assert( false !== strpos( $files['owner'], "'ready'=>$callbacks&&isset($connector['status'])&&'active'===$connector['status']" ), 'owner readiness explicitly distinguishes active-ready connectors' );
