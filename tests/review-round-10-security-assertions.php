@@ -3,8 +3,8 @@
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-security.php' );
 $checks = array(
-	"audience['user_id']=$current_user_id" => 'membership adapter cannot swap request subject',
-	"audience['authenticated']=$authenticated" => 'membership adapter cannot spoof authentication state',
+	'audience[\'user_id\']=$current_user_id' => 'membership adapter cannot swap request subject',
+	'audience[\'authenticated\']=$authenticated' => 'membership adapter cannot spoof authentication state',
 	'current_membership_valid()&&current_user_can' => 'privileged capabilities require fresh valid membership',
 	'if(!$this->current_membership_valid())' => 'step-up refuses invalid/suspended membership',
 	'$target_scheme!==$home_scheme' => 'same-origin URL rejects scheme downgrade',
