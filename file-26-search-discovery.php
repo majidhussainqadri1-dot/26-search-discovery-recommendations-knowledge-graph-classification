@@ -60,6 +60,8 @@ foreach (
 		'sabri_file26_classification_writer_authorized',
 		'sabri_file26_taxonomy_domain_owner_approved',
 		'sabri_file26_classification_domain_reviewer_approved',
+		'sabri_file26_graph_edge_owner_approved',
+		'sabri_file26_allowed_evidence_url',
 	) as $sabri_file26_boolean_authorization_filter
 ) {
 	add_filter(
@@ -85,7 +87,6 @@ register_activation_hook(
 			wp_die( esc_html( $message ) );
 		};
 
-		// Activation must know the custom recurrence before DB::schedule() runs.
 		add_filter(
 			'cron_schedules',
 			static function ( $schedules ) {
@@ -97,7 +98,6 @@ register_activation_hook(
 			}
 		);
 
-		// Register public rewrites before the activation flush.
 		add_rewrite_rule( '^search/?$', 'index.php?sabri_f26_route=search', 'top' );
 		add_rewrite_rule( '^discover/?$', 'index.php?sabri_f26_route=discover', 'top' );
 		add_rewrite_rule( '^topics/([^/]+)/?$', 'index.php?sabri_f26_route=topic&sabri_f26_term=$matches[1]', 'top' );
@@ -123,10 +123,6 @@ add_action(
 	5
 );
 
-/**
- * Documented compatibility contracts. These wrappers are intentionally thin:
- * they never bypass connector validation, authorization or lifecycle rules.
- */
 function sabri_file26_register_connector( array $manifest ) {
 	return \Sabri\File26\Plugin::instance()->connectors()->register( $manifest );
 }
@@ -136,23 +132,11 @@ function sabri_file26_upsert_document( array $document ) {
 }
 
 function sabri_file26_restrict_document( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) {
-	return \Sabri\File26\Plugin::instance()->indexer()->restrict(
-		(string) $connector,
-		(string) $domain,
-		(string) $object_id,
-		(int) $object_version,
-		(string) $reason
-	);
+	return \Sabri\File26\Plugin::instance()->indexer()->restrict( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason );
 }
 
 function sabri_file26_tombstone_document( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) {
-	return \Sabri\File26\Plugin::instance()->indexer()->tombstone(
-		(string) $connector,
-		(string) $domain,
-		(string) $object_id,
-		(int) $object_version,
-		(string) $reason
-	);
+	return \Sabri\File26\Plugin::instance()->indexer()->tombstone( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason );
 }
 
 function sabri_file26_search( array $request ) {
@@ -169,16 +153,11 @@ function sabri_file26_ranking_constitution() {
 	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
 }
 
-/** Return the complete Future Search & Knowledge Intelligence Superset 24 registry. */
 function sabri_file26_future_capabilities() {
 	$future = isset( $GLOBALS['sabri_file26_future_intelligence'] ) ? $GLOBALS['sabri_file26_future_intelligence'] : null;
 	return $future instanceof \Sabri\File26\Future_Intelligence ? $future->capability_manifest() : array();
 }
 
-/**
- * Recompute the explainable global verified-doctor ranking projection.
- * Manual calls remain capability-gated inside the service.
- */
 function sabri_file26_recompute_doctor_ranking( $reason = 'manual' ) {
 	return \Sabri\File26\Plugin::instance()->doctor_ranking()->recompute( (string) $reason );
 }
