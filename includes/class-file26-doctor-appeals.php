@@ -9,15 +9,14 @@ final class Doctor_Appeals {
 	private $security;
 	public function __construct( Security $security ) { $this->security = $security; }
 	public static function table() { global $wpdb; return $wpdb->prefix . 'f26_ranking_appeals'; }
+	public static function required_columns(){return array('id','appeal_uuid','doctor_key','appellant_user_id','reason_text','evidence_json','status','reviewer_id','decision_reason','policy_version','rank_snapshot','version','submitted_at','updated_at','decided_at');}
+	public static function schema_physical_ok(){global $wpdb;$table=self::table();$wpdb->last_error='';$exists=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));if($table!==$exists||''!==(string)$wpdb->last_error){return false;}$wpdb->last_error='';$columns=$wpdb->get_col("SHOW COLUMNS FROM `{$table}`",0);return is_array($columns)&&''===(string)$wpdb->last_error&&!array_diff(self::required_columns(),$columns);}
 
 	public static function install_schema() {
 		global $wpdb;
 		$table = self::table();
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) {
-			$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
-			if ( $table === $exists ) { return true; }
-			delete_option( self::OPTION_SCHEMA );
-		}
+		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) && self::schema_physical_ok() ) { return true; }
+		delete_option( self::OPTION_SCHEMA );
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate();
 		dbDelta( "CREATE TABLE $table (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -41,8 +40,7 @@ final class Doctor_Appeals {
 			KEY appellant_status (appellant_user_id,status),
 			KEY submitted_at (submitted_at)
 		) $charset;" );
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
-		if ( $table !== $exists ) { delete_option( self::OPTION_SCHEMA ); return false; }
+		if ( ! self::schema_physical_ok() ) { delete_option( self::OPTION_SCHEMA ); return false; }
 		return update_option( self::OPTION_SCHEMA, self::SCHEMA_VERSION, false ) || self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA );
 	}
 
@@ -53,13 +51,9 @@ final class Doctor_Appeals {
 		$doctor_key = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $doctor_key ) ); $reason = trim( wp_strip_all_tags( (string) $reason, true ) ); $reason_length = function_exists( 'mb_strlen' ) ? mb_strlen( $reason, 'UTF-8' ) : strlen( $reason );
 		if ( 64 !== strlen( $doctor_key ) || $reason_length < 20 || $reason_length > 4000 ) { return new \WP_Error( 'file26_invalid_appeal', 'A valid doctor reference and a reason between 20 and 4000 characters are required.', array( 'status' => 400 ) ); }
 		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
-		$document = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT d.canonical_key,d.author_key,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.canonical_key=%s AND d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' LIMIT 1",
-				$doctor_key
-			),
-			ARRAY_A
-		);
+		$wpdb->last_error='';
+		$document = $wpdb->get_row($wpdb->prepare("SELECT d.canonical_key,d.author_key,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.canonical_key=%s AND d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' LIMIT 1",$doctor_key),ARRAY_A);
+		if ( null === $document && '' !== (string) $wpdb->last_error ) { return new \WP_Error( 'file26_doctor_projection_read_failed', 'The doctor ranking projection could not be read safely.', array( 'status' => 503 ) ); }
 		if ( ! $document ) { return new \WP_Error( 'file26_doctor_not_found', 'The eligible doctor ranking projection was not found.', array( 'status' => 404 ) ); }
 		$payload = json_decode( $document['payload'], true ); $payload = is_array( $payload ) ? $payload : array(); if ( empty( $payload['verified_doctor'] ) ) { return new \WP_Error( 'file26_doctor_not_eligible', 'Only a verified-doctor ranking record may be appealed.', array( 'status' => 409 ) ); }
 		$owner_aliases = array( (string) $user_id, 'u:' . $user_id, 'user:' . $user_id, 'wp:' . $user_id ); $owns_profile = in_array( (string) $document['author_key'], $owner_aliases, true );
@@ -68,7 +62,7 @@ final class Doctor_Appeals {
 		$clean_evidence = array(); foreach ( array_slice( $evidence, 0, 20 ) as $item ) { $item = is_scalar( $item ) ? trim( sanitize_text_field( (string) $item ) ) : ''; if ( '' !== $item ) { $clean_evidence[] = function_exists( 'mb_substr' ) ? mb_substr( $item, 0, 500, 'UTF-8' ) : substr( $item, 0, 500 ); } }
 		$lock_name = 'file26:appeal:' . substr( $doctor_key, 0, 48 ); if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock_name ) ) ) { return new \WP_Error( 'file26_appeal_busy', 'This ranking appeal is being updated; retry safely.', array( 'status' => 409 ) ); }
 		try {
-			$open = (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM ' . self::table() . " WHERE doctor_key=%s AND status IN ('submitted','under_review','changes_requested') LIMIT 1", $doctor_key ) ); if ( $open ) { return new \WP_Error( 'file26_appeal_already_open', 'An open appeal already exists for this doctor ranking.', array( 'status' => 409 ) ); }
+			$wpdb->last_error='';$open_raw=$wpdb->get_var($wpdb->prepare('SELECT 1 FROM '.self::table()." WHERE doctor_key=%s AND status IN ('submitted','under_review','changes_requested') LIMIT 1",$doctor_key));if(null===$open_raw&&''!==(string)$wpdb->last_error){return new \WP_Error('file26_appeal_open_state_read_failed','Open ranking-appeal state could not be read safely.',array('status'=>503));}$open=(bool)$open_raw;if($open){return new \WP_Error('file26_appeal_already_open','An open appeal already exists for this doctor ranking.',array('status'=>409));}
 			$uuid = DB::uuid(); $policy = isset( $payload['doctor_rank_policy_version'] ) ? sanitize_text_field( $payload['doctor_rank_policy_version'] ) : (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' );
 			$ok = $wpdb->insert( self::table(), array( 'appeal_uuid' => $uuid, 'doctor_key' => $doctor_key, 'appellant_user_id' => $user_id, 'reason_text' => $reason, 'evidence_json' => wp_json_encode( $clean_evidence ), 'status' => 'submitted', 'policy_version' => $policy, 'rank_snapshot' => isset( $payload['global_doctor_rank'] ) ? max( 0, (int) $payload['global_doctor_rank'] ) : null, 'version' => 1, 'submitted_at' => DB::now(), 'updated_at' => DB::now() ) );
 			if ( ! $ok ) { return new \WP_Error( 'file26_appeal_create_failed', 'The ranking appeal could not be created.', array( 'status' => 500 ) ); }
@@ -82,7 +76,8 @@ final class Doctor_Appeals {
 		$appeal_uuid = sanitize_text_field( $appeal_uuid ); $decision = sanitize_key( $decision ); $reason = trim( wp_strip_all_tags( (string) $reason, true ) ); $reason_length = function_exists( 'mb_strlen' ) ? mb_strlen( $reason, 'UTF-8' ) : strlen( $reason );
 		$allowed = array( 'under_review', 'changes_requested', 'upheld', 'corrected', 'rejected' );
 		if ( ! in_array( $decision, $allowed, true ) || $reason_length < 10 || $reason_length > 4000 || (int) $expected_version < 1 ) { return new \WP_Error( 'file26_invalid_appeal_decision', 'A valid decision, reason and expected version are required.', array( 'status' => 400 ) ); }
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' WHERE appeal_uuid=%s', $appeal_uuid ), ARRAY_A );
+		$wpdb->last_error='';$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' WHERE appeal_uuid=%s', $appeal_uuid ), ARRAY_A );
+		if(null===$row&&''!==(string)$wpdb->last_error){return new \WP_Error('file26_appeal_review_read_failed','The ranking appeal could not be read safely.',array('status'=>503));}
 		if ( ! $row || in_array( $row['status'], array( 'upheld', 'corrected', 'rejected', 'withdrawn' ), true ) ) { return new \WP_Error( 'file26_appeal_not_reviewable', 'The appeal is missing or already final.', array( 'status' => 409 ) ); }
 		if ( (int) $row['appellant_user_id'] === get_current_user_id() ) { return new \WP_Error( 'file26_appeal_conflict', 'An appellant cannot review the same appeal.', array( 'status' => 403 ) ); }
 		$version = (int) $expected_version; if ( $version !== (int) $row['version'] ) { return new \WP_Error( 'file26_appeal_conflict', 'The appeal changed concurrently. Reload and retry.', array( 'status' => 409 ) ); }
