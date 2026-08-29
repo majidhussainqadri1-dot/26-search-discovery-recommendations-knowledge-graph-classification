@@ -39,7 +39,7 @@ final class Search {
 		$offset = 0;
 		if ( ! empty( $request['cursor'] ) ) {
 			$cursor = $this->security->verify_cursor( $request['cursor'] );
-			if ( ! $cursor || empty( $cursor['p'] ) || empty( $cursor['h'] ) || $cursor['p'] !== $policy_version || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) {
+			if ( ! $cursor || empty( $cursor['p'] ) || empty( $cursor['h'] ) || ! array_key_exists( 'o', $cursor ) || ! is_numeric( $cursor['o'] ) || $cursor['p'] !== $policy_version || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) {
 				return new \WP_Error( 'file26_invalid_cursor', 'The result cursor is invalid or expired.', array( 'status' => 400, 'trace_id' => $trace ) );
 			}
 			$offset = max( 0, min( 100000, (int) $cursor['o'] ) );
@@ -50,7 +50,8 @@ final class Search {
 
 		$audience = $this->security->audience();
 		$sensitive_query = $this->security->contains_sensitive_query( $query );
-		$public_cache = empty( $audience['authenticated'] ) && empty( $filters['availability'] ) && ! $sensitive_query;
+		/* Fail-safe: public result caching stays disabled until every visibility/connector/classification mutation is bound to a cache epoch. */
+		$public_cache = false;
 		$cache_key = 'search:' . hash( 'sha256', wp_json_encode( array(
 			'q' => $query, 'locale' => $locale, 'filters' => $filters, 'offset' => $offset,
 			'limit' => $limit, 'policy' => $policy_version,
@@ -136,7 +137,11 @@ final class Search {
 		while ( $scan_offset < $max_scan ) {
 			$sql = $base_sql . ' LIMIT %d OFFSET %d';
 			$query_args = array_merge( $args, array( $batch_size, $scan_offset ) );
+			$wpdb->last_error = '';
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $query_args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $rows && '' !== (string) $wpdb->last_error ) {
+				return new \WP_Error( 'file26_search_read_failed', 'Search candidates could not be read safely.', array( 'status' => 503, 'trace_id' => $trace ) );
+			}
 			if ( ! $rows ) {
 				break;
 			}
@@ -240,7 +245,7 @@ final class Search {
 		);
 		$output = array();
 		$audience = array( 'authenticated' => false, 'valid' => true, 'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array() );
-		foreach ( $rows as $row ) {
+		foreach ( (array) $rows as $row ) {
 			$row = $this->hydrate_row( $row );
 			if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) {
 				continue;
@@ -392,7 +397,6 @@ final class Search {
 				if ( $topic ) {
 					$facets['topic'][ $topic ] = isset( $facets['topic'][ $topic ] ) ? $facets['topic'][ $topic ] + 1 : 1;
 				}
-			}
 		}
 		foreach ( $facets as &$values ) {
 			arsort( $values );
