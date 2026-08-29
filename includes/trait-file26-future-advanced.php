@@ -15,15 +15,17 @@ trait Future_Advanced_Trait {
 		if ( ! is_array( $provided ) || 'owner_authorized' !== ( isset( $provided['authorization_attestation'] ) ? $provided['authorization_attestation'] : '' ) || ! isset( $provided['results'] ) || ! is_array( $provided['results'] ) ) { return array( 'state' => 'private_owner_provider_unavailable_or_not_authorized', 'results' => array(), 'public_index_used' => false ); }
 		$out = array();
 		foreach ( array_slice( $provided['results'], 0, 30 ) as $item ) {
-			if ( is_array( $item ) && ! empty( $item['owner'] ) && ! empty( $item['object_id'] ) ) {
-				$out[] = array(
-					'owner' => sanitize_key( (string) $item['owner'] ),
-					'object_id' => substr( sanitize_text_field( (string) $item['object_id'] ), 0, 191 ),
-					'title' => $this->bounded_future_text( isset( $item['title'] ) ? $item['title'] : '', 240 ),
-					'excerpt' => $this->bounded_future_text( isset( $item['excerpt'] ) ? $item['excerpt'] : '', 1600 ),
-					'open_contract' => substr( sanitize_text_field( isset( $item['open_contract'] ) ? (string) $item['open_contract'] : '' ), 0, 191 ),
-				);
-			}
+			if ( ! is_array( $item ) || empty( $item['owner'] ) || empty( $item['object_id'] ) ) { continue; }
+			$owner = sanitize_key( (string) $item['owner'] );
+			$object_id = substr( sanitize_text_field( (string) $item['object_id'] ), 0, 191 );
+			if ( '' === $owner || '' === $object_id ) { continue; }
+			$out[] = array(
+				'owner' => $owner,
+				'object_id' => $object_id,
+				'title' => $this->bounded_future_text( isset( $item['title'] ) ? $item['title'] : '', 240 ),
+				'excerpt' => $this->bounded_future_text( isset( $item['excerpt'] ) ? $item['excerpt'] : '', 1600 ),
+				'open_contract' => substr( sanitize_text_field( isset( $item['open_contract'] ) ? (string) $item['open_contract'] : '' ), 0, 191 ),
+			);
 		}
 		return array( 'state' => 'ok', 'results' => $out, 'public_index_used' => false, 'cache_policy' => 'no-store', 'authorization_owner' => 'native private-data owner', 'authorization_attestation' => 'owner_authorized' );
 	}
@@ -45,14 +47,20 @@ trait Future_Advanced_Trait {
 			if ( ! $parts || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) { continue; }
 			$host = strtolower( (string) $parts['host'] );
 			if ( 'localhost' === $host || substr( $host, -6 ) === '.local' || ( filter_var( $host, FILTER_VALIDATE_IP ) && ! filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) ) { continue; }
+			$source_name = $this->bounded_future_text( $item['source_name'], 191 );
+			$rights_status = sanitize_key( (string) $item['rights_status'] );
+			$provenance = $this->bounded_future_text( $item['provenance'], 600 );
+			$retrieved_raw = trim( sanitize_text_field( (string) $item['retrieved_at'] ) );
+			$retrieved_ts = $retrieved_raw ? strtotime( $retrieved_raw ) : false;
+			if ( '' === $source_name || '' === $rights_status || '' === $provenance || false === $retrieved_ts || $retrieved_ts > time() + 300 ) { continue; }
 			$out[] = array(
 				'external' => true, 'connector' => $connector,
 				'title' => $this->bounded_future_text( isset( $item['title'] ) ? $item['title'] : '', 240 ),
 				'excerpt' => $this->bounded_future_text( isset( $item['excerpt'] ) ? $item['excerpt'] : '', 1600 ),
-				'source_name' => $this->bounded_future_text( $item['source_name'], 191 ), 'source_url' => $url,
-				'retrieved_at' => substr( sanitize_text_field( (string) $item['retrieved_at'] ), 0, 40 ),
-				'rights_status' => sanitize_key( (string) $item['rights_status'] ),
-				'provenance' => $this->bounded_future_text( $item['provenance'], 600 ),
+				'source_name' => $source_name, 'source_url' => $url,
+				'retrieved_at' => gmdate( 'c', $retrieved_ts ),
+				'rights_status' => $rights_status,
+				'provenance' => $provenance,
 			);
 		}
 		return array( 'state' => 'ok', 'connector' => $connector, 'results' => $out, 'merged_into_organic_ranking' => false, 'canonical_platform_truth' => false, 'external_source_label_required' => true, 'eligibility_attestation' => 'approved_external_public' );
