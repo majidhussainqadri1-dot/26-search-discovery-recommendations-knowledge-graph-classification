@@ -31,9 +31,7 @@ trait Future_Infra_Trait {
 
 	public function assurance_manifest( $manifests ) {
 		$manifests = is_array( $manifests ) ? $manifests : array();
-		if ( ! isset( $manifests['file26'] ) || ! is_array( $manifests['file26'] ) ) {
-			$manifests['file26'] = array();
-		}
+		if ( ! isset( $manifests['file26'] ) || ! is_array( $manifests['file26'] ) ) { $manifests['file26'] = array(); }
 		$controls = isset( $manifests['file26']['native_controls'] ) && is_array( $manifests['file26']['native_controls'] ) ? $manifests['file26']['native_controls'] : array();
 		$controls[] = 'future-search-knowledge-intelligence-superset-24';
 		$controls[] = 'local-first-search-history';
@@ -58,47 +56,25 @@ trait Future_Infra_Trait {
 
 	public function register_exporter( $exporters ) {
 		$exporters = is_array( $exporters ) ? $exporters : array();
-		$exporters['sabri-file26-future'] = array(
-			'exporter_friendly_name' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ),
-			'callback' => array( $this, 'privacy_export' ),
-		);
+		$exporters['sabri-file26-future'] = array( 'exporter_friendly_name' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'callback' => array( $this, 'privacy_export' ) );
 		return $exporters;
 	}
 
 	public function register_eraser( $erasers ) {
 		$erasers = is_array( $erasers ) ? $erasers : array();
-		$erasers['sabri-file26-future'] = array(
-			'eraser_friendly_name' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ),
-			'callback' => array( $this, 'privacy_erase' ),
-		);
+		$erasers['sabri-file26-future'] = array( 'eraser_friendly_name' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'callback' => array( $this, 'privacy_erase' ) );
 		return $erasers;
 	}
 
 	public function privacy_export( $email_address, $page = 1 ) {
 		$user = get_user_by( 'email', $email_address );
 		if ( ! $user ) { return array( 'data' => array(), 'done' => true ); }
-		$groups = array(
-			self::META_TRAILS => 'Research trails',
-			self::META_ALERTS => 'Saved search alerts',
-			self::META_HISTORY => 'Opt-in server search history',
-			self::META_DISCOVERY => 'Discovery controls',
-		);
-		$page = max( 1, (int) $page );
-		$keys = array_keys( $groups );
-		$index = $page - 1;
-		if ( ! isset( $keys[ $index ] ) ) {
-			return array( 'data' => array(), 'done' => true );
-		}
-		$meta_key = $keys[ $index ];
-		$value = get_user_meta( $user->ID, $meta_key, true );
-		$data = array();
+		$groups = array( self::META_TRAILS => 'Research trails', self::META_ALERTS => 'Saved search alerts', self::META_HISTORY => 'Opt-in server search history', self::META_DISCOVERY => 'Discovery controls' );
+		$page = max( 1, (int) $page ); $keys = array_keys( $groups ); $index = $page - 1;
+		if ( ! isset( $keys[ $index ] ) ) { return array( 'data' => array(), 'done' => true ); }
+		$meta_key = $keys[ $index ]; $value = get_user_meta( $user->ID, $meta_key, true ); $data = array();
 		if ( ! empty( $value ) ) {
-			$data[] = array(
-				'group_id' => 'sabri-file26-future',
-				'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ),
-				'item_id' => $meta_key,
-				'data' => array( array( 'name' => $groups[ $meta_key ], 'value' => wp_json_encode( $value ) ) ),
-			);
+			$data[] = array( 'group_id' => 'sabri-file26-future', 'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'item_id' => $meta_key, 'data' => array( array( 'name' => $groups[ $meta_key ], 'value' => wp_json_encode( $value ) ) ) );
 		}
 		return array( 'data' => $data, 'done' => $page >= count( $keys ) );
 	}
@@ -106,22 +82,23 @@ trait Future_Infra_Trait {
 	public function privacy_erase( $email_address, $page = 1 ) {
 		$user = get_user_by( 'email', $email_address );
 		if ( ! $user ) { return array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true ); }
-		$removed = false;
+		$removed = false; $failed = array();
 		foreach ( array( self::META_TRAILS, self::META_ALERTS, self::META_HISTORY, self::META_HISTORY_OPT_IN, self::META_DISCOVERY ) as $meta_key ) {
-			$removed = delete_user_meta( $user->ID, $meta_key ) || $removed;
+			$had = metadata_exists( 'user', $user->ID, $meta_key );
+			if ( ! $had ) { continue; }
+			delete_user_meta( $user->ID, $meta_key );
+			if ( metadata_exists( 'user', $user->ID, $meta_key ) ) { $failed[] = $meta_key; }
+			else { $removed = true; }
+		}
+		if ( $failed ) {
+			return array( 'items_removed' => $removed, 'items_retained' => true, 'messages' => array( __( 'Some File 26 Future account data could not be erased. Retry the erasure request.', 'sabri-file26' ) ), 'done' => false );
 		}
 		return array( 'items_removed' => $removed, 'items_retained' => false, 'messages' => array(), 'done' => true );
 	}
 
 	public function expose_capabilities( $capabilities ) {
 		$capabilities = is_array( $capabilities ) ? $capabilities : array();
-		$capabilities['future_search_knowledge_intelligence_24'] = array(
-			'contract' => self::CONTRACT,
-			'count' => 24,
-			'capabilities' => $this->capability_manifest(),
-			'canonical_owner_boundary' => 'File 26 orchestrates derivative search/discovery only; native owners retain source truth and write authority.',
-		);
+		$capabilities['future_search_knowledge_intelligence_24'] = array( 'contract' => self::CONTRACT, 'count' => 24, 'capabilities' => $this->capability_manifest(), 'canonical_owner_boundary' => 'File 26 orchestrates derivative search/discovery only; native owners retain source truth and write authority.' );
 		return $capabilities;
 	}
-
 }
