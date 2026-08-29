@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0 review hardening — 2026-08-29
+
+- Continued the independent sequential review discipline on a dedicated review branch; each round is completed before its defect ledger is corrected and the next round starts.
+- Added a dedicated second-cycle regression contract and required it in source and clean-extract package QA.
+- Hardened deterministic ZIP metadata, symlink rejection and exact-head CI coverage for `review/**` branches.
+- Made plugin activation, schema/settings persistence, role-model installation and required scheduling fail closed.
+- Bounded signed cursors and added value-level sensitive audit-metadata redaction.
+- Made feedback/negative-control projection and opt-out persistence atomic.
+- Tightened Future privacy erasure, smart-command source enforcement, sensitive provider disclosure, geo constraint precedence, server-history opt-in ordering, relevance-lab eligibility and external-source host validation.
+- Completed destructive-uninstall coverage for File 26 account metadata, Central Plan options and rollback transients.
+- Removed stale tracked v1.0.0 package/checksum evidence; current package evidence must be produced from the exact reviewed v1.3.0 commit by QA/Actions.
+- This review-hardening entry is repository evidence only; staging/live deployment and operational status remain separate and unclaimed.
+
 ## 1.3.0 — 2026-08-13
 
 - Added the complete **Future Search & Knowledge Intelligence Superset 24** as versioned derivative/orchestration contracts (`F26-FUT-01` through `F26-FUT-24`).
