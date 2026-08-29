@@ -24,9 +24,10 @@ printf '[7/15] Sequential 20-round review regressions\n'
 shopt -s nullglob
 ROUND_TESTS=("$ROOT"/tests/review-round-*.php)
 for test_file in "${ROUND_TESTS[@]}"; do php "$test_file"; done
-printf '[8/15] Future Search Intelligence Superset 24 regressions\n'
+printf '[8/15] Future and current review-cycle regressions\n'
 php "$ROOT/tests/future-intelligence-contract-tests.php"
 php "$ROOT/tests/review-second-forty-round-contract-tests.php"
+php "$ROOT/tests/review-r62-r81-contract-tests.php"
 
 printf '[9/15] Dangerous execution primitive scan\n'
 if grep -RInE --include='*.php' '(eval\s*\(|shell_exec\s*\(|passthru\s*\(|proc_open\s*\(|popen\s*\()' "$ROOT"; then echo 'FAIL: dangerous execution primitive'; exit 1; fi
@@ -75,6 +76,7 @@ php "$PACKAGE/tests/central-plan-contract-tests.php" >/dev/null
 for test_file in "$PACKAGE"/tests/review-round-*.php; do php "$test_file" >/dev/null; done
 php "$PACKAGE/tests/future-intelligence-contract-tests.php" >/dev/null
 php "$PACKAGE/tests/review-second-forty-round-contract-tests.php" >/dev/null
+php "$PACKAGE/tests/review-r62-r81-contract-tests.php" >/dev/null
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
 mkdir -p "$ROOT/release"
