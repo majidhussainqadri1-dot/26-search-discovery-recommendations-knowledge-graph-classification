@@ -53,7 +53,7 @@ f26_second40_assert( f26_has_all( $files['recommendations'], array( 'ORDER BY id
 f26_second40_assert( false === strpos( $files['recommendations'], 'ORDER BY id ASC LIMIT 1000' ), 'obsolete oldest-1000 truncation is absent' );
 
 f26_second40_assert( f26_has_all( $files['owner'], array( 'matching_connector_count', 'production_ready', 'active', 'callbacks_complete' ) ), 'owner readiness prioritizes and exposes active-ready connector evidence' );
-f26_second40_assert( f26_has_all( $files['owner'], array( 'activation_gate', 'if ( ! $approved )', 'staging_acceptance', 'migration_rehearsal', 'rollback_rehearsal' ) ), 'cross-file activation requires explicit approval and evidence' );
+f26_second40_assert( f26_has_all( $files['owner'], array( 'activation_gate', 'strict_bool', 'true !== $this->strict_bool( $approved )', 'staging_acceptance', 'migration_rehearsal', 'rollback_rehearsal' ) ), 'cross-file activation requires explicit strict approval and evidence' );
 
 f26_second40_assert( f26_has_all( $files['roles'], array( 'OPTION_VERSION', 'delete_option', 'has_cap', 'return false' ) ), 'role migration verifies capabilities and clears false-success marker' );
 
