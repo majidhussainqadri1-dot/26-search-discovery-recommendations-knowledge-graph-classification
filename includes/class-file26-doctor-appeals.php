@@ -11,8 +11,11 @@ final class Doctor_Appeals {
 	public static function table() { global $wpdb; return $wpdb->prefix . 'f26_ranking_appeals'; }
 
 	public static function install_schema() {
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) { return; }
-		global $wpdb; require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate(); $table = self::table();
+		global $wpdb;
+		$table = self::table();
+		$table_present = $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) && $table_present ) { return; }
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate();
 		dbDelta( "CREATE TABLE $table (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			appeal_uuid char(36) NOT NULL,
