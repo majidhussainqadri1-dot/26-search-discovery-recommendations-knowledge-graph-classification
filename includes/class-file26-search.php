@@ -25,6 +25,9 @@ final class Search {
 		}
 		$query = $this->security->sanitize_query( isset( $request['q'] ) ? $request['q'] : '' );
 		$locale = isset( $request['locale'] ) ? substr( sanitize_text_field( $request['locale'] ), 0, 20 ) : determine_locale();
+		if ( '' === trim( (string) $locale ) ) {
+			$locale = determine_locale();
+		}
 		$limit = isset( $request['limit'] ) ? (int) $request['limit'] : (int) DB::setting( 'results_per_page', 20 );
 		$limit = max( 1, min( (int) DB::setting( 'max_results_per_page', 30 ), $limit ) );
 		$filters = $this->sanitize_filters( isset( $request['filters'] ) ? $request['filters'] : array() );
@@ -159,7 +162,6 @@ final class Search {
 			$scan_limit_hit = true;
 		}
 
-		// Active, public, provenance-governed graph edges contribute only a bounded relationship signal.
 		$eligible = $this->apply_graph_relationship_scores( $eligible );
 		$ranked = $this->ranking->sort_and_diversify( $eligible, $query, count( $eligible ) );
 		if ( ! empty( $filters['sort'] ) && in_array( $filters['sort'], array( 'newest', 'oldest', 'authority' ), true ) ) {
@@ -304,16 +306,27 @@ final class Search {
 			return array();
 		}
 		$clean = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'language' ) as $key ) {
+		foreach ( array( 'entity_type', 'availability', 'connector', 'domain', 'topic', 'sort' ) as $key ) {
 			if ( ! empty( $filters[ $key ] ) ) {
-				$clean[ $key ] = 'language' === $key ? substr( sanitize_text_field( $filters[ $key ] ), 0, 20 ) : sanitize_key( $filters[ $key ] );
+				$clean[ $key ] = sanitize_key( $filters[ $key ] );
 			}
 		}
+		foreach ( array( 'country', 'location' ) as $key ) {
+			if ( ! empty( $filters[ $key ] ) ) {
+				$clean[ $key ] = substr( sanitize_text_field( $filters[ $key ] ), 0, 191 );
+			}
+		}
+		if ( ! empty( $filters['language'] ) ) {
+			$clean['language'] = substr( sanitize_text_field( $filters['language'] ), 0, 20 );
+		}
 		if ( ! empty( $filters['author'] ) ) {
-			$clean['author'] = sanitize_text_field( $filters['author'] );
+			$clean['author'] = substr( sanitize_text_field( $filters['author'] ), 0, 191 );
 		}
 		foreach ( array( 'date_from', 'date_to' ) as $date_key ) {
-			if ( ! empty( $filters[ $date_key ] ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters[ $date_key ] ) ) {
+			if ( empty( $filters[ $date_key ] ) || ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', (string) $filters[ $date_key ], $m ) ) {
+				continue;
+			}
+			if ( checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
 				$clean[ $date_key ] = $filters[ $date_key ];
 			}
 		}
@@ -379,7 +392,6 @@ final class Search {
 				if ( $topic ) {
 					$facets['topic'][ $topic ] = isset( $facets['topic'][ $topic ] ) ? $facets['topic'][ $topic ] + 1 : 1;
 				}
-			}
 		}
 		foreach ( $facets as &$values ) {
 			arsort( $values );
