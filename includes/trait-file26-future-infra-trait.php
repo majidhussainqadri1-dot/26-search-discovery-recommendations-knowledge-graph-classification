@@ -69,12 +69,18 @@ trait Future_Infra_Trait {
 	public function privacy_export( $email_address, $page = 1 ) {
 		$user = get_user_by( 'email', $email_address );
 		if ( ! $user ) { return array( 'data' => array(), 'done' => true ); }
-		$groups = array( self::META_TRAILS => 'Research trails', self::META_ALERTS => 'Saved search alerts', self::META_HISTORY => 'Opt-in server search history', self::META_DISCOVERY => 'Discovery controls' );
+		$groups = array(
+			self::META_TRAILS => 'Research trails',
+			self::META_ALERTS => 'Saved search alerts',
+			self::META_HISTORY => 'Opt-in server search history',
+			self::META_HISTORY_OPT_IN => 'Server search history sync opt-in',
+			self::META_DISCOVERY => 'Discovery controls',
+		);
 		$page = max( 1, (int) $page ); $keys = array_keys( $groups ); $index = $page - 1;
 		if ( ! isset( $keys[ $index ] ) ) { return array( 'data' => array(), 'done' => true ); }
 		$meta_key = $keys[ $index ]; $value = get_user_meta( $user->ID, $meta_key, true ); $data = array();
-		if ( ! empty( $value ) ) {
-			$data[] = array( 'group_id' => 'sabri-file26-future', 'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'item_id' => $meta_key, 'data' => array( array( 'name' => $groups[ $meta_key ], 'value' => wp_json_encode( $value ) ) ) );
+		if ( metadata_exists( 'user', $user->ID, $meta_key ) ) {
+			$data[] = array( 'group_id' => 'sabri-file26-future', 'group_label' => __( 'File 26 Future Search Intelligence', 'sabri-file26' ), 'item_id' => $meta_key, 'data' => array( array( 'name' => $groups[ $meta_key ], 'value' => is_scalar( $value ) ? (string) $value : wp_json_encode( $value ) ) ) );
 		}
 		return array( 'data' => $data, 'done' => $page >= count( $keys ) );
 	}
