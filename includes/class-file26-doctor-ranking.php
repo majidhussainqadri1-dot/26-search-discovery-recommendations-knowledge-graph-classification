@@ -18,6 +18,7 @@ final class Doctor_Ranking {
 		if ( '1' !== (string) $locked ) { return new \WP_Error( 'file26_ranking_busy', 'Doctor ranking recompute is already running.', array( 'status' => 409 ) ); }
 		try {
 			$policy = $this->policy();
+			if ( ! empty( $policy['policy_read_failed'] ) ) { return new \WP_Error( 'file26_doctor_policy_read_failed', 'Doctor-ranking policy could not be read safely.', array( 'status' => 503 ) ); }
 			$rows = $this->eligible_rows();
 			if ( is_wp_error( $rows ) ) { return $rows; }
 			$scored = array();
@@ -30,7 +31,6 @@ final class Doctor_Ranking {
 			$table = DB::table( 'documents' );
 			if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_doctor_ranking_transaction_unavailable', 'Doctor ranking transaction could not be started safely.', array( 'status' => 500 ) ); }
 			try {
-				// First remove stale ranking metadata from the entire currently visible File 07 doctor projection cohort.
 				foreach ( $rows as $row ) {
 					$payload = json_decode( $row['payload'], true );
 					if ( ! is_array( $payload ) ) { $payload = array(); }
@@ -64,8 +64,9 @@ final class Doctor_Ranking {
 		if ( ! in_array( $context, $allowed_contexts, true ) || ! in_array( $tier, $allowed_tiers, true ) ) { return new \WP_Error( 'file26_invalid_doctor_ranking_view', 'Invalid doctor-ranking context or tier.', array( 'status' => 400 ) ); }
 		if ( in_array( $context, array( 'country', 'city', 'language', 'specialization' ), true ) && '' === $value ) { return new \WP_Error( 'file26_ranking_context_value_required', 'This contextual ranking requires a value.', array( 'status' => 400 ) ); }
 		$limit = isset( $request['limit'] ) ? max( 1, min( 100, (int) $request['limit'] ) ) : 20; $policy = $this->policy();
+		if ( ! empty( $policy['policy_read_failed'] ) ) { return new \WP_Error( 'file26_doctor_policy_read_failed', 'Doctor-ranking policy could not be read safely.', array( 'status' => 503 ) ); }
 		$cursor_context = hash( 'sha256', wp_json_encode( array( 'context' => $context, 'value' => $value, 'tier' => $tier, 'limit' => $limit, 'policy' => $policy['version'] ) ) ); $offset = 0;
-		if ( ! empty( $request['cursor'] ) ) { $cursor = $this->security->verify_cursor( $request['cursor'] ); if ( ! $cursor || empty( $cursor['h'] ) || empty( $cursor['p'] ) || $cursor['p'] !== $policy['version'] || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) { return new \WP_Error( 'file26_invalid_cursor', 'The doctor-ranking cursor is invalid or expired.', array( 'status' => 400 ) ); } $offset = max( 0, min( 100000, (int) $cursor['o'] ) ); }
+		if ( ! empty( $request['cursor'] ) ) { $cursor = $this->security->verify_cursor( $request['cursor'] ); if ( ! $cursor || empty( $cursor['h'] ) || empty( $cursor['p'] ) || ! array_key_exists( 'o', $cursor ) || ! is_numeric( $cursor['o'] ) || $cursor['p'] !== $policy['version'] || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) { return new \WP_Error( 'file26_invalid_cursor', 'The doctor-ranking cursor is invalid or expired.', array( 'status' => 400 ) ); } $offset = max( 0, min( 100000, (int) $cursor['o'] ) ); }
 		$rows = $this->eligible_rows();
 		if ( is_wp_error( $rows ) ) { return $rows; }
 		$scored = array();
@@ -76,12 +77,14 @@ final class Doctor_Ranking {
 		return array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'policy_version' => $policy['version'], 'policy_safe_fallback' => ! empty( $policy['safe_fallback'] ), 'context' => $context, 'context_value' => $value, 'tier' => $tier, 'total_eligible' => $total, 'results' => $page, 'next_cursor' => $has_more ? $this->security->sign_cursor( array( 'o' => $offset + $limit, 'p' => $policy['version'], 'h' => $cursor_context ) ) : null, 'global_tiers_preserved' => true );
 	}
 
-	public function score( array $payload, array $weights = array() ) { $weights = $weights ? $weights : $this->policy()['weights']; $score = 0.0; foreach ( $weights as $field => $weight ) { $value = isset( $payload[ $field ] ) ? min( 1.0, max( 0.0, (float) $payload[ $field ] ) ) : 0.0; $score += $value * max( 0.0, (float) $weight ); } return round( $score * 100, 6 ); }
+	public function score( array $payload, array $weights = array() ) { if ( ! $weights ) { $policy=$this->policy(); $weights=$policy['weights']; } $score = 0.0; foreach ( $weights as $field => $weight ) { $value = isset( $payload[ $field ] ) ? min( 1.0, max( 0.0, (float) $payload[ $field ] ) ) : 0.0; $score += $value * max( 0.0, (float) $weight ); } return round( $score * 100, 6 ); }
 
 	public function policy() {
 		global $wpdb;
-		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' ), 'safe_fallback' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
+		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' ), 'safe_fallback' => false, 'policy_read_failed' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
+		$wpdb->last_error='';
 		$row = $wpdb->get_row( "SELECT version,features_json FROM " . DB::table( 'ranking_policies' ) . " WHERE context_name='doctor_global' AND audience='public' AND status='active' ORDER BY effective_at DESC,id DESC LIMIT 1", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $row && '' !== (string) $wpdb->last_error ) { $defaults['safe_fallback']=true; $defaults['policy_read_failed']=true; $defaults['version']='policy-unavailable'; return $defaults; }
 		if ( ! $row ) { return $defaults; }
 		$features = json_decode( $row['features_json'], true ); $features = is_array( $features ) ? $features : array(); $weights = isset( $features['weights'] ) && is_array( $features['weights'] ) ? $features['weights'] : $features; $candidate = $defaults['weights'];
 		foreach ( $candidate as $field => $fallback ) { if ( isset( $weights[ $field ] ) && is_numeric( $weights[ $field ] ) ) { $candidate[ $field ] = min( 1.0, max( 0.0, (float) $weights[ $field ] ) ); } }
@@ -91,12 +94,9 @@ final class Doctor_Ranking {
 
 	private function eligible_rows() {
 		global $wpdb;
-		$documents = DB::table( 'documents' );
-		$connectors = DB::table( 'connectors' );
-		$rows = $wpdb->get_results(
-			"SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key",
-			ARRAY_A
-		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
+		$wpdb->last_error='';
+		$rows = $wpdb->get_results( "SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		if ( null === $rows ) { return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) ); }
 		return $rows;
 	}
