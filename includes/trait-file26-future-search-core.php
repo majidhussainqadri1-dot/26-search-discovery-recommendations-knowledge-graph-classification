@@ -43,8 +43,14 @@ trait Future_Search_Core_Trait {
 		if ( ! empty( $params['execute'] ) ) {
 			foreach ( $plan as $step ) {
 				if ( '' === $step['query'] && empty( $step['filters'] ) ) { $executed[] = array( 'query' => '', 'state' => 'skipped_empty' ); continue; }
-				$r = $this->base_search( $step['query'], array( 'filters' => $step['filters'], 'limit' => 8, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' ) );
-				$executed[] = is_wp_error( $r ) ? array( 'query' => $step['query'], 'state' => 'failed', 'code' => $r->get_error_code() ) : array( 'query' => $step['query'], 'state' => 'ok', 'results' => $this->safe_results( (array) $r['results'] ) );
+				if ( ! empty( $step['filters']['source'] ) ) {
+					$advanced = array( 'q' => $step['query'], 'limit' => 8, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' );
+					foreach ( $step['filters'] as $filter_key => $filter_value ) { $advanced[ $filter_key ] = $filter_value; }
+					$r = $this->advanced_search_data( $advanced );
+				} else {
+					$r = $this->base_search( $step['query'], array( 'filters' => $step['filters'], 'limit' => 8, 'locale' => isset( $params['locale'] ) ? $params['locale'] : '' ) );
+				}
+				$executed[] = is_wp_error( $r ) ? array( 'query' => $step['query'], 'state' => 'failed', 'code' => $r->get_error_code() ) : array( 'query' => $step['query'], 'state' => 'ok', 'results' => $this->safe_results( isset( $r['results'] ) ? (array) $r['results'] : array() ), 'source_constraint_enforced' => ! empty( $step['filters']['source'] ) );
 			}
 		}
 		return array( 'query' => $q, 'query_normalized' => $normalized, 'bounded_steps' => $plan, 'executed' => $executed );
