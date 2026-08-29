@@ -44,6 +44,9 @@ add_action(
 	'plugins_loaded',
 	static function () {
 		$plugin = Plugin::instance();
+		if ( ! $plugin->runtime_ready() ) {
+			return;
+		}
 		$future = new Future_Intelligence( $plugin->search(), $plugin->recommendations(), new Normalizer(), new Security(), $plugin->central_plan(), $plugin->health() );
 		$future->boot();
 		$GLOBALS['sabri_file26_future_intelligence'] = $future;
