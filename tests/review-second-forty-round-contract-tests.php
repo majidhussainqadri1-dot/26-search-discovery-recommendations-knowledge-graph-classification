@@ -11,6 +11,10 @@ $files = array(
     'roles' => file_get_contents( $root . '/includes/class-file26-roles.php' ),
     'plugin' => file_get_contents( $root . '/includes/class-file26-plugin.php' ),
     'central' => file_get_contents( $root . '/includes/class-file26-central-plan.php' ),
+    'future_advanced' => file_get_contents( $root . '/includes/trait-file26-future-advanced.php' ),
+    'future_infra' => file_get_contents( $root . '/includes/trait-file26-future-infra-trait.php' ),
+    'future_utility' => file_get_contents( $root . '/includes/trait-file26-future-utility-trait.php' ),
+    'future_class' => file_get_contents( $root . '/includes/class-file26-future-intelligence.php' ),
     'qa' => file_get_contents( $root . '/qa/run-tests.sh' ),
     'builder' => file_get_contents( $root . '/tools/build-package.py' ),
     'workflow' => file_get_contents( $root . '/.github/workflows/qa.yml' ),
@@ -62,6 +66,13 @@ f26_second40_assert( false !== strpos( $files['plugin'], "file26_schema_marker_i
 
 f26_second40_assert( false !== strpos( $files['central'], "file26_membership_invalid" ), 'central-plan account routes require current membership assertions' );
 f26_second40_assert( false !== strpos( $files['central'], "private, no-store" ), 'central-plan sensitive/account responses remain no-store' );
+
+f26_second40_assert( false !== strpos( $files['future_advanced'], "sensitive_query_external_disclosure_blocked" ), 'external evidence blocks sensitive-query disclosure at handler boundary' );
+f26_second40_assert( false !== strpos( $files['future_advanced'], "file26_external_evidence_consent_required" ), 'external evidence requires per-request explicit consent at handler boundary' );
+f26_second40_assert( false !== strpos( $files['future_infra'], "META_HISTORY_OPT_IN => 'Server search history sync opt-in'" ), 'privacy export includes server-history synchronization consent state' );
+f26_second40_assert( false !== strpos( $files['future_utility'], "esc_url_raw( (string) $item[ $key ], array( 'http', 'https' ) )" ), 'Future safe-result boundary sanitizes returned URLs' );
+f26_second40_assert( false !== strpos( $files['future_utility'], "wp_strip_all_tags( (string) $item[ $key ] )" ), 'Future safe-result boundary strips unsafe excerpt markup' );
+f26_second40_assert( false !== strpos( $files['future_class'], "'unavailable' ===" ) && false !== strpos( $files['future_class'], "schema_drift" ), 'Future bootstrap remains closed when core schema health is unavailable or drifting' );
 
 f26_second40_assert( false !== strpos( $files['qa'], "FAIL: node is required for JavaScript syntax verification" ), 'JavaScript syntax runtime is a hard QA requirement' );
 f26_second40_assert( false !== strpos( $files['qa'], "node --check \"$ROOT/assets/js/file26-future.js\"" ), 'Future JavaScript receives syntax verification' );
