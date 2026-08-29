@@ -27,7 +27,8 @@ foreach ( array( 'administrator', 'sabri_search_operator', 'sabri_taxonomy_curat
 foreach ( array( 'sabri_search_operator', 'sabri_taxonomy_curator', 'sabri_ranking_approver', 'sabri_search_auditor' ) as $role_name ) { remove_role( $role_name ); }
 delete_option( 'sabri_file26_role_model_version' );
 
-$destructive = (bool) get_option( 'sabri_file26_destructive_uninstall', false );
+$destructive_raw = get_option( 'sabri_file26_destructive_uninstall', false );
+$destructive = true === $destructive_raw || 1 === $destructive_raw || '1' === $destructive_raw;
 if ( ! $destructive ) { return; }
 
 global $wpdb;
@@ -43,7 +44,6 @@ foreach ( $tables as $name ) {
 $appeals_table = $wpdb->prefix . 'f26_ranking_appeals';
 $wpdb->query( "DROP TABLE IF EXISTS `$appeals_table`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-// Account-owned File 26 metadata is retained on normal uninstall, but destructive uninstall must remove it comprehensively.
 foreach ( array(
 	'sabri_file26_saved_queries_v1',
 	'sabri_file26_research_trails_v1',
@@ -66,7 +66,6 @@ foreach ( array(
 	delete_option( $option_key );
 }
 
-// Remove bounded rollback-approval transients created by File 26 governance.
 $like_transient = $wpdb->esc_like( '_transient_file26_rb_' ) . '%';
 $like_timeout = $wpdb->esc_like( '_transient_timeout_file26_rb_' ) . '%';
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $like_transient, $like_timeout ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
