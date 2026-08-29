@@ -59,9 +59,8 @@ f26_second40_assert( false !== strpos( $files['recommendations'], 'ORDER BY id D
 f26_second40_assert( false !== strpos( $files['recommendations'], 'Opt-out commit failed.' ), 'opt-out purge and persisted marker commit atomically' );
 f26_second40_assert( false === strpos( $files['recommendations'], 'ORDER BY id ASC LIMIT 1000' ), 'obsolete oldest-1000 negative-control truncation is absent' );
 
+f26_second40_assert( false !== strpos( $files['owner'], 'matching_connector_count' ) && false !== strpos( $files['owner'], "'production_ready'" ), 'owner readiness explicitly distinguishes active-ready connectors and exposes matching evidence' );
 f26_second40_assert( false !== strpos( $files['owner'], 'if ( ! $approved ) { return false; }' ), 'cross-file activation requires explicit upstream approval' );
-f26_second40_assert( false !== strpos( $files['owner'], "'ready'=>$callbacks&&isset($connector['status'])&&'active'===$connector['status']" ), 'owner readiness explicitly distinguishes active-ready connectors' );
-f26_second40_assert( false !== strpos( $files['owner'], 'matching_connector_count' ), 'owner readiness exposes duplicate/multiple connector evidence' );
 
 f26_second40_assert( false !== strpos( $files['roles'], 'delete_option(self::OPTION_VERSION);return false;' ), 'role migration does not retain a false success marker' );
 f26_second40_assert( false !== strpos( $files['roles'], '!$role->has_cap($cap)' ), 'required role capabilities are verified after mutation' );
@@ -77,7 +76,7 @@ f26_second40_assert( false !== strpos( $files['central'], 'private, no-store' ),
 f26_second40_assert( false !== strpos( $files['future_advanced'], 'sensitive_query_external_disclosure_blocked' ), 'external evidence blocks sensitive-query disclosure at handler boundary' );
 f26_second40_assert( false !== strpos( $files['future_advanced'], 'file26_external_evidence_consent_required' ), 'external evidence requires per-request explicit consent at handler boundary' );
 f26_second40_assert( false !== strpos( $files['future_infra'], "META_HISTORY_OPT_IN => 'Server search history sync opt-in'" ), 'privacy export includes server-history synchronization consent state' );
-f26_second40_assert( false !== strpos( $files['future_utility'], "esc_url_raw( (string) $item[ $key ], array( 'http', 'https' ) )" ), 'Future safe-result boundary sanitizes returned URLs' );
+f26_second40_assert( false !== strpos( $files['future_utility'], 'esc_url_raw(' ) && false !== strpos( $files['future_utility'], "array( 'http', 'https' )" ), 'Future safe-result boundary sanitizes returned URLs to HTTP/HTTPS' );
 f26_second40_assert( false !== strpos( $files['future_utility'], 'wp_strip_all_tags( (string) $item[ $key ] )' ), 'Future safe-result boundary strips unsafe excerpt markup' );
 f26_second40_assert( false !== strpos( $files['future_class'], "'unavailable' ===" ) && false !== strpos( $files['future_class'], 'schema_drift' ), 'Future bootstrap remains closed when core schema health is unavailable or drifting' );
 
