@@ -1,6 +1,5 @@
 <?php
 namespace Sabri\File26;
-
 defined( 'ABSPATH' ) || exit;
 
 trait Future_Knowledge_Trait {
@@ -19,9 +18,15 @@ trait Future_Knowledge_Trait {
 			$results = array_values( array_filter( $provider_results, static function ( $item ) use ( $eligible ) { return is_array( $item ) && ! empty( $item['key'] ) && isset( $eligible[ (string) $item['key'] ] ); } ) );
 			$constraint_state = 'owner_revalidated_special_constraints_eligible_keys_only';
 		}
-		$snapshot = apply_filters( 'sabri_file26_research_snapshot_provider', null, array( 'query' => $q, 'filters' => $filters, 'policy_version' => isset( $result['policy_version'] ) ? $result['policy_version'] : '' ) );
 		$reproducibility = array( 'state' => 'snapshot_provider_unavailable', 'current_results_not_claimed_historical' => true );
-		if ( is_array( $snapshot ) && ! empty( $snapshot['snapshot_id'] ) && 'immutable_query_snapshot' === ( isset( $snapshot['snapshot_attestation'] ) ? $snapshot['snapshot_attestation'] : '' ) ) { $reproducibility = array( 'state' => 'snapshot_available', 'snapshot_id' => substr( sanitize_text_field( (string) $snapshot['snapshot_id'] ), 0, 191 ), 'created_at' => isset( $snapshot['created_at'] ) ? sanitize_text_field( (string) $snapshot['created_at'] ) : '', 'policy_version' => isset( $snapshot['policy_version'] ) ? sanitize_text_field( (string) $snapshot['policy_version'] ) : '', 'current_results_not_claimed_historical' => true ); }
+		if ( $this->sensitive_query( $q ) ) {
+			$reproducibility['state'] = 'snapshot_provider_bypassed_for_sensitive_query';
+		} else {
+			$snapshot = apply_filters( 'sabri_file26_research_snapshot_provider', null, array( 'query' => $q, 'filters' => $filters, 'policy_version' => isset( $result['policy_version'] ) ? $result['policy_version'] : '' ) );
+			if ( is_array( $snapshot ) && ! empty( $snapshot['snapshot_id'] ) && 'immutable_query_snapshot' === ( isset( $snapshot['snapshot_attestation'] ) ? $snapshot['snapshot_attestation'] : '' ) ) {
+				$reproducibility = array( 'state' => 'snapshot_available', 'snapshot_id' => substr( sanitize_text_field( (string) $snapshot['snapshot_id'] ), 0, 191 ), 'created_at' => isset( $snapshot['created_at'] ) ? substr( sanitize_text_field( (string) $snapshot['created_at'] ), 0, 64 ) : '', 'policy_version' => isset( $snapshot['policy_version'] ) ? substr( sanitize_text_field( (string) $snapshot['policy_version'] ), 0, 64 ) : '', 'current_results_not_claimed_historical' => true );
+			}
+		}
 		return array( 'state' => 'ok', 'query' => $q, 'filters' => $filters, 'constraint_state' => $constraint_state, 'results' => $results, 'reproducibility' => $reproducibility );
 	}
 
@@ -36,8 +41,11 @@ trait Future_Knowledge_Trait {
 	}
 
 	public function graph_path( \WP_REST_Request $request ) {
-		$params = $this->params( $request ); $from = isset( $params['from'] ) ? sanitize_text_field( (string) $params['from'] ) : ''; $to = isset( $params['to'] ) ? sanitize_text_field( (string) $params['to'] ) : '';
+		$params = $this->params( $request );
+		$from = isset( $params['from'] ) ? substr( sanitize_text_field( (string) $params['from'] ), 0, 191 ) : '';
+		$to = isset( $params['to'] ) ? substr( sanitize_text_field( (string) $params['to'] ), 0, 191 ) : '';
 		if ( '' === $from || '' === $to ) { return new \WP_Error( 'file26_graph_endpoints_required', 'Both graph endpoints are required.', array( 'status' => 400 ) ); }
+		if ( $this->sensitive_query( $from . ' ' . $to ) ) { return new \WP_Error( 'file26_graph_sensitive_endpoint_not_allowed', 'Sensitive identifiers are not sent to the public graph-path provider.', array( 'status' => 400 ) ); }
 		$path = apply_filters( 'sabri_file26_graph_path_provider', null, $from, $to, array( 'max_depth' => 6, 'public_only' => true, 'provenance_required' => true, 'eligibility_attestation_required' => true ) );
 		if ( ! is_array( $path ) || 'owner_revalidated_for_request' !== ( isset( $path['eligibility_attestation'] ) ? $path['eligibility_attestation'] : '' ) || empty( $path['nodes'] ) || empty( $path['edges'] ) ) { return array( 'state' => 'no_verified_path_or_provider_unavailable', 'from' => $from, 'to' => $to, 'nodes' => array(), 'edges' => array() ); }
 		$nodes = array(); $node_ids = array(); foreach ( array_slice( (array) $path['nodes'], 0, 40 ) as $node ) { if ( is_array( $node ) ) { $clean = $this->sanitize_graph_node( $node ); if ( '' !== $clean['id'] ) { $nodes[] = $clean; $node_ids[ $clean['id'] ] = true; } } }
@@ -72,8 +80,15 @@ trait Future_Knowledge_Trait {
 		$parsed = \DateTimeImmutable::createFromFormat( $format, $as_of, new \DateTimeZone( 'UTC' ) );
 		$errors = \DateTimeImmutable::getLastErrors();
 		if ( false === $parsed || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) || $parsed->format( ltrim( $format, '!' ) ) !== $as_of ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date/time is invalid.', array( 'status' => 400 ) ); }
-		$snapshot = apply_filters( 'sabri_file26_historical_snapshot_search', null, $q, $as_of, array_merge( $params, array( 'eligibility_attestation_required' => true ) ) );
+		if ( $this->sensitive_query( $q ) ) { return array( 'state' => 'historical_provider_bypassed_for_sensitive_query', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
+		$provider_context = array(
+			'eligibility_attestation_required' => true,
+			'locale' => isset( $params['locale'] ) ? substr( sanitize_text_field( (string) $params['locale'] ), 0, 20 ) : '',
+			'filters' => isset( $params['filters'] ) && is_array( $params['filters'] ) ? $this->sanitize_filters( $params['filters'] ) : array(),
+			'limit' => isset( $params['limit'] ) ? max( 1, min( 30, (int) $params['limit'] ) ) : 20,
+		);
+		$snapshot = apply_filters( 'sabri_file26_historical_snapshot_search', null, $q, $as_of, $provider_context );
 		if ( ! is_array( $snapshot ) || empty( $snapshot['snapshot_id'] ) || 'owner_revalidated_for_request' !== ( isset( $snapshot['eligibility_attestation'] ) ? $snapshot['eligibility_attestation'] : '' ) ) { return array( 'state' => 'historical_snapshot_unavailable', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
-		return array( 'state' => 'ok', 'query' => $q, 'as_of' => $as_of, 'snapshot_id' => sanitize_text_field( (string) $snapshot['snapshot_id'] ), 'results' => $this->safe_results( isset( $snapshot['results'] ) ? (array) $snapshot['results'] : array() ), 'current_results_substituted' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
+		return array( 'state' => 'ok', 'query' => $q, 'as_of' => $as_of, 'snapshot_id' => substr( sanitize_text_field( (string) $snapshot['snapshot_id'] ), 0, 191 ), 'results' => $this->safe_results( isset( $snapshot['results'] ) ? (array) $snapshot['results'] : array() ), 'current_results_substituted' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
 }
