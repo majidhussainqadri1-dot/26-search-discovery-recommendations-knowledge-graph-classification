@@ -12,6 +12,7 @@ $rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
 $plugin = file_get_contents( $root . '/includes/class-file26-plugin.php' );
 $appeals = file_get_contents( $root . '/includes/class-file26-doctor-appeals.php' );
 $doctor_ranking = file_get_contents( $root . '/includes/class-file26-doctor-ranking.php' );
+$privacy = file_get_contents( $root . '/includes/class-file26-privacy.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -47,5 +48,7 @@ f26_r62_81_assert( false !== strpos( $doctor_ranking, 'file26_doctor_ranking_rea
 f26_r62_81_assert( false !== strpos( $doctor_ranking, "unset( \$payload['global_doctor_rank'], \$payload['doctor_rank_score'], \$payload['doctor_rank_policy_version'] )" ), 'R72: stale rank metadata is cleared before rebuilding the verified cohort' );
 f26_r62_81_assert( false !== strpos( $appeals, "d.entity_type='doctor_directory_projection'" ), 'R73: appeals target the same doctor projection entity type used by ranking' );
 f26_r62_81_assert( false !== strpos( $appeals, "c.status='active' AND c.owner_file='File 07'" ), 'R73: appeals are restricted to the active File 07 ranking production lane' );
+f26_r62_81_assert( false !== strpos( $privacy, 'sabri_file26_research_trails_v1' ) && false !== strpos( $privacy, 'sabri_file26_saved_search_alerts_v1' ) && false !== strpos( $privacy, 'sabri_file26_search_history_sync_v1' ) && false !== strpos( $privacy, 'sabri_file26_discovery_controls_v1' ), 'R74: Future account-owned meta stores participate in WordPress privacy export/erase' );
+f26_r62_81_assert( false !== strpos( $privacy, "metadata_exists('user',\$user->ID,\$meta_key)" ) && false !== strpos( $privacy, "delete_user_meta(\$user->ID,\$meta_key)" ), 'R74: Future metadata erasure is verified instead of reported optimistically' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
