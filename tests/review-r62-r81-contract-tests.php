@@ -13,6 +13,7 @@ $plugin = file_get_contents( $root . '/includes/class-file26-plugin.php' );
 $appeals = file_get_contents( $root . '/includes/class-file26-doctor-appeals.php' );
 $doctor_ranking = file_get_contents( $root . '/includes/class-file26-doctor-ranking.php' );
 $privacy = file_get_contents( $root . '/includes/class-file26-privacy.php' );
+$central_plan = file_get_contents( $root . '/includes/class-file26-central-plan.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -50,5 +51,11 @@ f26_r62_81_assert( false !== strpos( $appeals, "d.entity_type='doctor_directory_
 f26_r62_81_assert( false !== strpos( $appeals, "c.status='active' AND c.owner_file='File 07'" ), 'R73: appeals are restricted to the active File 07 ranking production lane' );
 f26_r62_81_assert( false !== strpos( $privacy, 'sabri_file26_research_trails_v1' ) && false !== strpos( $privacy, 'sabri_file26_saved_search_alerts_v1' ) && false !== strpos( $privacy, 'sabri_file26_search_history_sync_v1' ) && false !== strpos( $privacy, 'sabri_file26_discovery_controls_v1' ), 'R74: Future account-owned meta stores participate in WordPress privacy export/erase' );
 f26_r62_81_assert( false !== strpos( $privacy, "metadata_exists('user',\$user->ID,\$meta_key)" ) && false !== strpos( $privacy, "delete_user_meta(\$user->ID,\$meta_key)" ), 'R74: Future metadata erasure is verified instead of reported optimistically' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'file26_central_plan_migration_failed' ) && false !== strpos( $central_plan, "'activated'=>false" ), 'R75: central-plan migration failure explicitly fails closed before route registration' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'acquire_saved_query_lock' ) && false !== strpos( $central_plan, 'prune_saved_queries' ), 'R75: saved-query mutations and expiry cleanup are serialized instead of read-time overwrite races' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'expected version was omitted' ), 'R75: existing saved-query updates require an expected record version' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'Explicit boolean confirmation is required' ) && false !== strpos( $central_plan, 'strict_bool' ), 'R75: sensitive saved-query confirmation uses strict boolean parsing' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'Explicit boolean submission consent is required' ), 'R75: content-gap submission requires strict boolean consent' );
+f26_r62_81_assert( false !== strpos( $central_plan, 'acquire_content_gap_lock' ) && false !== strpos( $central_plan, 'content_gap_retention_lock_failed' ), 'R75: content-gap submit/retention share a serialized registry lock' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
