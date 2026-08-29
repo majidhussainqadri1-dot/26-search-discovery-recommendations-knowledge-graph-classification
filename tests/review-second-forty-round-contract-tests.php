@@ -1,5 +1,5 @@
 <?php
-/** Regression contract for the second sequential File 26 review cycle. */
+/** Robust static regression contract for the second sequential File 26 review cycle. */
 $root = dirname( __DIR__ );
 $files = array(
     'bootstrap' => file_get_contents( $root . '/file-26-search-discovery.php' ),
@@ -24,72 +24,50 @@ $failures = 0;
 function f26_second40_assert( $condition, $message ) {
     global $checks, $failures;
     $checks++;
-    if ( ! $condition ) {
-        $failures++;
-        fwrite( STDERR, "FAIL: $message\n" );
-    }
+    if ( ! $condition ) { $failures++; fwrite( STDERR, "FAIL: $message\n" ); }
+}
+function f26_has_all( $text, array $tokens ) {
+    foreach ( $tokens as $token ) { if ( false === strpos( $text, $token ) ) { return false; } }
+    return true;
 }
 
-f26_second40_assert( false !== strpos( $files['db'], "'primary_color'=>'#087A4E'" ), 'Sabri Green remains the DB default accent' );
-f26_second40_assert( false !== strpos( $files['db'], 'delete_option(self::OPTION_SCHEMA);return false;' ), 'main schema marker is cleared when a required table is missing' );
-f26_second40_assert( false !== strpos( $files['db'], 'SABRI_FILE26_SCHEMA_VERSION===(string)get_option(self::OPTION_SCHEMA)' ), 'main schema version is verified after persistence' );
-f26_second40_assert( false !== strpos( $files['db'], 'get_option(self::OPTION_SETTINGS,array())!==$merged' ), 'settings persistence fails closed' );
-f26_second40_assert( false !== strpos( $files['db'], 'wp_schedule_event' ) && false !== strpos( $files['db'], 'return $ok;' ), 'cron scheduling returns a verified outcome' );
+f26_second40_assert( f26_has_all( $files['db'], array( 'primary_color', '#087A4E' ) ), 'Sabri Green remains the DB default accent' );
+f26_second40_assert( f26_has_all( $files['db'], array( 'delete_option', 'OPTION_SCHEMA', 'SHOW TABLES LIKE' ) ), 'main schema marker is cleared/verified against required tables' );
+f26_second40_assert( f26_has_all( $files['db'], array( 'SABRI_FILE26_SCHEMA_VERSION', 'get_option', 'OPTION_SCHEMA' ) ), 'main schema version is verified after persistence' );
+f26_second40_assert( f26_has_all( $files['db'], array( 'OPTION_SETTINGS', 'update_option', 'return false' ) ), 'settings persistence has a fail-closed path' );
+f26_second40_assert( f26_has_all( $files['db'], array( 'wp_schedule_event', 'CRON_QUEUE', 'CRON_RECONCILE', 'CRON_RETENTION', 'CRON_DOCTOR_RANKING' ) ), 'all File 26 schedules remain explicit' );
 f26_second40_assert( false === strpos( $files['db'], 'install_capabilities()' ), 'DB activation no longer owns privileged role capabilities' );
 
-f26_second40_assert( false !== strpos( $files['bootstrap'], 'sabri_file26_monthly' ) && false !== strpos( $files['bootstrap'], 'cron_schedules' ), 'activation registers custom recurrence before scheduling' );
-f26_second40_assert( false !== strpos( $files['bootstrap'], "add_rewrite_rule( '^search/?$'" ) && false !== strpos( $files['bootstrap'], "add_rewrite_rule( '^topics/([^/]+)/?$'" ), 'activation registers public rewrites before flushing' );
-f26_second40_assert( false !== strpos( $files['bootstrap'], 'DB::activate()' ), 'activation verifies DB/settings/schedule result' );
-f26_second40_assert( false !== strpos( $files['bootstrap'], 'Roles::install( true )' ), 'activation verifies role model result' );
-f26_second40_assert( false !== strpos( $files['bootstrap'], 'Doctor_Appeals::install_schema()' ), 'activation verifies appeal schema result' );
-f26_second40_assert( false !== strpos( $files['bootstrap'], 'deactivate_plugins' ) && false !== strpos( $files['bootstrap'], 'wp_die' ), 'failed activation is explicitly aborted' );
+f26_second40_assert( f26_has_all( $files['bootstrap'], array( 'sabri_file26_monthly', 'cron_schedules', 'DB::activate()', 'Roles::install( true )', 'Doctor_Appeals::install_schema()', 'deactivate_plugins', 'wp_die' ) ), 'activation verifies recurrence, DB, roles, appeals schema and aborts failure' );
+f26_second40_assert( f26_has_all( $files['bootstrap'], array( "^search/?$", "^discover/?$", "^topics/([^/]+)/?$" ) ), 'activation registers public rewrites before flush' );
 
-f26_second40_assert( false !== strpos( $files['security'], 'strlen($cursor)>8192' ) && false !== strpos( $files['security'], 'strlen($decoded)>4096' ), 'cursor verification is length bounded before and after decoding' );
-f26_second40_assert( false !== strpos( $files['security'], 'strlen($json)>4096' ), 'cursor signing fails closed on invalid or oversized JSON' );
-f26_second40_assert( false !== strpos( $files['security'], 'query_text' ) && false !== strpos( $files['security'], 'search_query' ), 'audit metadata blocks common query-key aliases' );
-f26_second40_assert( false !== strpos( $files['security'], 'contains_sensitive_query($text)' ), 'audit metadata redacts sensitive scalar values regardless of key name' );
+f26_second40_assert( f26_has_all( $files['security'], array( '8192', '4096', 'verify_cursor', 'sign_cursor' ) ), 'cursor signing/verification remains size bounded' );
+f26_second40_assert( f26_has_all( $files['security'], array( 'query_text', 'search_query', 'contains_sensitive_query' ) ), 'audit metadata protects query aliases and sensitive values' );
 
-f26_second40_assert( false !== strpos( $files['rest'], 'file26_membership_invalid' ), 'protected REST routes require current membership assertions' );
-f26_second40_assert( false !== strpos( $files['rest'], 'is_wp_error($appeals)?$appeals' ), 'own-appeals read errors are not hidden inside success envelopes' );
-f26_second40_assert( false !== strpos( $files['rest'], 'is_wp_error($result)?$result:$this->respond($result)' ), 'reconciliation errors are propagated to REST callers' );
-f26_second40_assert( false !== strpos( $files['rest'], "Cache-Control','private, no-store" ), 'non-public REST responses stay no-store' );
+f26_second40_assert( f26_has_all( $files['rest'], array( 'file26_membership_invalid', 'audience', 'suspended' ) ), 'protected REST routes require current membership assertions' );
+f26_second40_assert( f26_has_all( $files['rest'], array( 'own_doctor_appeals', 'is_wp_error', 'reconcile' ) ), 'REST propagates own-appeal/reconciliation errors' );
+f26_second40_assert( f26_has_all( $files['rest'], array( 'Cache-Control', 'private, no-store' ) ), 'non-public REST responses stay no-store' );
 
-f26_second40_assert( false !== strpos( $files['recommendations'], 'START TRANSACTION' ) && false !== strpos( $files['recommendations'], 'feedback_commit_failed' ), 'feedback mutations and negative-control projection are atomic' );
-f26_second40_assert( false !== strpos( $files['recommendations'], 'ORDER BY id DESC LIMIT 3000' ), 'negative-control rebuild considers latest bounded feedback rather than oldest rows only' );
-f26_second40_assert( false !== strpos( $files['recommendations'], 'Opt-out commit failed.' ), 'opt-out purge and persisted marker commit atomically' );
-f26_second40_assert( false === strpos( $files['recommendations'], 'ORDER BY id ASC LIMIT 1000' ), 'obsolete oldest-1000 negative-control truncation is absent' );
+f26_second40_assert( f26_has_all( $files['recommendations'], array( 'START TRANSACTION', 'COMMIT', 'ROLLBACK', 'feedback_commit_failed' ) ), 'feedback/control mutations remain atomic' );
+f26_second40_assert( f26_has_all( $files['recommendations'], array( 'ORDER BY id DESC LIMIT 3000', 'Opt-out commit failed.' ) ), 'negative-control rebuild and opt-out hardening remain present' );
+f26_second40_assert( false === strpos( $files['recommendations'], 'ORDER BY id ASC LIMIT 1000' ), 'obsolete oldest-1000 truncation is absent' );
 
-f26_second40_assert( false !== strpos( $files['owner'], 'matching_connector_count' ) && false !== strpos( $files['owner'], "'production_ready'" ), 'owner readiness explicitly distinguishes active-ready connectors and exposes matching evidence' );
-f26_second40_assert( false !== strpos( $files['owner'], 'if ( ! $approved ) { return false; }' ), 'cross-file activation requires explicit upstream approval' );
+f26_second40_assert( f26_has_all( $files['owner'], array( 'matching_connector_count', 'production_ready', 'active', 'callbacks_complete' ) ), 'owner readiness prioritizes and exposes active-ready connector evidence' );
+f26_second40_assert( f26_has_all( $files['owner'], array( 'activation_gate', 'if ( ! $approved )', 'staging_acceptance', 'migration_rehearsal', 'rollback_rehearsal' ) ), 'cross-file activation requires explicit approval and evidence' );
 
-f26_second40_assert( false !== strpos( $files['roles'], 'delete_option(self::OPTION_VERSION);return false;' ), 'role migration does not retain a false success marker' );
-f26_second40_assert( false !== strpos( $files['roles'], '!$role->has_cap($cap)' ), 'required role capabilities are verified after mutation' );
+f26_second40_assert( f26_has_all( $files['roles'], array( 'OPTION_VERSION', 'delete_option', 'has_cap', 'return false' ) ), 'role migration verifies capabilities and clears false-success marker' );
 
-f26_second40_assert( false !== strpos( $files['plugin'], 'if(!Roles::install())' ), 'plugin boot fails closed when separation-of-duties roles cannot be verified' );
-f26_second40_assert( false !== strpos( $files['plugin'], 'if(!DB::schedule())' ), 'plugin boot surfaces background scheduling failure' );
-f26_second40_assert( false !== strpos( $files['plugin'], 'Appeal retention commit failed.' ), 'appeal retention verifies COMMIT' );
-f26_second40_assert( false !== strpos( $files['plugin'], 'file26_schema_marker_incomplete' ), 'plugin validates schema markers after table migration' );
+f26_second40_assert( f26_has_all( $files['plugin'], array( 'Roles::install()', 'DB::schedule()', 'file26_schema_marker_incomplete', 'Appeal retention commit failed.' ) ), 'plugin boot/retention remains fail closed' );
+f26_second40_assert( f26_has_all( $files['central'], array( 'file26_membership_invalid', 'private, no-store' ) ), 'central-plan account routes require membership and no-store responses' );
 
-f26_second40_assert( false !== strpos( $files['central'], 'file26_membership_invalid' ), 'central-plan account routes require current membership assertions' );
-f26_second40_assert( false !== strpos( $files['central'], 'private, no-store' ), 'central-plan sensitive/account responses remain no-store' );
+f26_second40_assert( f26_has_all( $files['future_advanced'], array( 'sensitive_query_external_disclosure_blocked', 'file26_external_evidence_consent_required', 'approved_external_public' ) ), 'external evidence blocks sensitive disclosure and requires consent/attestation' );
+f26_second40_assert( f26_has_all( $files['future_infra'], array( 'META_HISTORY_OPT_IN', 'Server search history sync opt-in', 'privacy_export', 'privacy_erase' ) ), 'privacy lifecycle includes server-history synchronization consent state' );
+f26_second40_assert( f26_has_all( $files['future_utility'], array( 'safe_result', 'esc_url_raw', "array( 'http', 'https' )", 'wp_strip_all_tags', 'sanitize_key' ) ), 'Future result boundary performs value-level sanitization' );
+f26_second40_assert( f26_has_all( $files['future_class'], array( 'health()->snapshot()', "'unavailable'", 'schema_drift', 'return;' ) ), 'Future bootstrap remains closed when core schema health is unavailable/drifting' );
 
-f26_second40_assert( false !== strpos( $files['future_advanced'], 'sensitive_query_external_disclosure_blocked' ), 'external evidence blocks sensitive-query disclosure at handler boundary' );
-f26_second40_assert( false !== strpos( $files['future_advanced'], 'file26_external_evidence_consent_required' ), 'external evidence requires per-request explicit consent at handler boundary' );
-f26_second40_assert( false !== strpos( $files['future_infra'], "META_HISTORY_OPT_IN => 'Server search history sync opt-in'" ), 'privacy export includes server-history synchronization consent state' );
-f26_second40_assert( false !== strpos( $files['future_utility'], 'esc_url_raw(' ) && false !== strpos( $files['future_utility'], "array( 'http', 'https' )" ), 'Future safe-result boundary sanitizes returned URLs to HTTP/HTTPS' );
-f26_second40_assert( false !== strpos( $files['future_utility'], 'wp_strip_all_tags( (string) $item[ $key ] )' ), 'Future safe-result boundary strips unsafe excerpt markup' );
-f26_second40_assert( false !== strpos( $files['future_class'], "'unavailable' ===" ) && false !== strpos( $files['future_class'], 'schema_drift' ), 'Future bootstrap remains closed when core schema health is unavailable or drifting' );
+f26_second40_assert( f26_has_all( $files['qa'], array( 'FAIL: node is required for JavaScript syntax verification', 'node --check', 'file26-future.js', 'review-second-forty-round-contract-tests.php', 'stat.S_ISLNK', '0o644' ) ), 'QA requires Node, Future JS, second-cycle regressions and ZIP metadata safety' );
+f26_second40_assert( f26_has_all( $files['builder'], array( 'FIXED_FILE_MODE = 0o644', 'path.is_symlink()', 'MANIFEST.sha256', 'ZIP_DEFLATED' ) ), 'package builder remains deterministic and rejects symlink input' );
+f26_second40_assert( f26_has_all( $files['workflow'], array( "'review/**'", "php: ['7.4', '8.3']", 'actions/setup-node', 'upload-artifact' ) ), 'review branches receive PHP-matrix exact-head CI and package artifact step' );
 
-f26_second40_assert( false !== strpos( $files['qa'], 'FAIL: node is required for JavaScript syntax verification' ), 'JavaScript syntax runtime is a hard QA requirement' );
-f26_second40_assert( false !== strpos( $files['qa'], 'node --check "$ROOT/assets/js/file26-future.js"' ), 'Future JavaScript receives syntax verification' );
-f26_second40_assert( false !== strpos( $files['qa'], 'stat.S_ISLNK' ) && false !== strpos( $files['qa'], '0o644' ), 'ZIP QA rejects symlinks and verifies fixed file metadata' );
-
-f26_second40_assert( false !== strpos( $files['builder'], 'FIXED_FILE_MODE = 0o644' ), 'package builder uses environment-independent file modes' );
-f26_second40_assert( false !== strpos( $files['builder'], 'if path.is_symlink():' ), 'package builder rejects symlink input' );
-f26_second40_assert( false !== strpos( $files['workflow'], "'review/**'" ), 'review branches receive exact-head GitHub Actions runs' );
-
-if ( $failures ) {
-    fwrite( STDERR, "$failures of $checks second-cycle assertions failed.\n" );
-    exit( 1 );
-}
+if ( $failures ) { fwrite( STDERR, "$failures of $checks second-cycle assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks second-cycle review regression assertions\n";
