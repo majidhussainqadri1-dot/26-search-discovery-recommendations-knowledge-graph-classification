@@ -2,7 +2,7 @@ name: File 26 QA
 on:
   pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'review/**']
 permissions:
   contents: read
 jobs:
