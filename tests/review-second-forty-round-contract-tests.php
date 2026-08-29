@@ -9,6 +9,8 @@ $files = array(
     'plugin' => file_get_contents( $root . '/includes/class-file26-plugin.php' ),
     'central' => file_get_contents( $root . '/includes/class-file26-central-plan.php' ),
     'qa' => file_get_contents( $root . '/qa/run-tests.sh' ),
+    'builder' => file_get_contents( $root . '/tools/build-package.py' ),
+    'workflow' => file_get_contents( $root . '/.github/workflows/qa.yml' ),
 );
 $checks = 0;
 $failures = 0;
@@ -49,6 +51,11 @@ f26_second40_assert( false !== strpos( $files['central'], "private, no-store" ),
 
 f26_second40_assert( false !== strpos( $files['qa'], "FAIL: node is required for JavaScript syntax verification" ), 'JavaScript syntax runtime is a hard QA requirement' );
 f26_second40_assert( false !== strpos( $files['qa'], "node --check \"$ROOT/assets/js/file26-future.js\"" ), 'Future JavaScript receives syntax verification' );
+f26_second40_assert( false !== strpos( $files['qa'], "stat.S_ISLNK" ) && false !== strpos( $files['qa'], "0o644" ), 'ZIP QA rejects symlinks and verifies fixed file metadata' );
+
+f26_second40_assert( false !== strpos( $files['builder'], "FIXED_FILE_MODE = 0o644" ), 'package builder uses environment-independent file modes' );
+f26_second40_assert( false !== strpos( $files['builder'], "if path.is_symlink():" ), 'package builder rejects symlink input' );
+f26_second40_assert( false !== strpos( $files['workflow'], "'review/**'" ), 'review branches receive exact-head GitHub Actions runs' );
 
 if ( $failures ) {
     fwrite( STDERR, "$failures of $checks second-cycle assertions failed.\n" );
