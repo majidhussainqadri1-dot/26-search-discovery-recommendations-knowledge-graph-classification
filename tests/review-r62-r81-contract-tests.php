@@ -5,6 +5,7 @@ $indexer = file_get_contents( $root . '/includes/class-file26-indexer.php' );
 $connectors = file_get_contents( $root . '/includes/class-file26-connectors.php' );
 $security = file_get_contents( $root . '/includes/class-file26-security.php' );
 $recommendations = file_get_contents( $root . '/includes/class-file26-recommendations.php' );
+$taxonomy = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -24,5 +25,7 @@ f26_r62_81_assert( false !== strpos( $recommendations, 'file26_feedback_transact
 f26_r62_81_assert( false !== strpos( $recommendations, 'file26_consent_transaction_unavailable' ), 'R66: consent mutation fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $recommendations, 'file26_profile_reset_transaction_unavailable' ), 'R66: reset fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $recommendations, 'file26_opt_out_transaction_unavailable' ), 'R66: opt-out fails closed if transaction start fails' );
+f26_r62_81_assert( false !== strpos( $taxonomy, 'file26_merge_transaction_unavailable' ), 'R67: taxonomy merge fails closed if transaction start fails' );
+f26_r62_81_assert( false !== strpos( $taxonomy, 'file26_split_transaction_unavailable' ), 'R67: taxonomy split fails closed if transaction start fails' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
