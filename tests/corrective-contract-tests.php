@@ -32,7 +32,11 @@ $uninstall = $read( 'uninstall.php' );
 
 corrective_assert( false !== strpos( $connectors, "'active' === \$manifest['status']" ), 'Only the active connector lane is publicly retrievable.' );
 corrective_assert( false !== strpos( $connectors, "array( 'shadow', 'approved', 'active' )" ), 'Shadow and approved lanes are explicitly index-only lifecycle states.' );
-corrective_assert( false !== strpos( $connectors, "\$manifest['status'] = 'proposed'" ) && false !== strpos( $connectors, 'Every new connector and every owner/contract change' ), 'Every new or changed connector begins in the proposed lifecycle state.' );
+corrective_assert(
+	false !== strpos( $connectors, "\$manifest['status'] = 'proposed'" ) &&
+	false !== strpos( $connectors, "owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status)" ),
+	'Every new or owner/contract-changed connector begins in the proposed lifecycle state.'
+);
 corrective_assert( false !== strpos( $search, "c.status='active'" ), 'Search SQL joins only active production connectors.' );
 corrective_assert( false !== strpos( $search, "fc.status IN ('approved','corrected')" ), 'Topic retrieval consumes only approved/corrected classifications.' );
 corrective_assert( false !== strpos( $search, 'apply_graph_relationship_scores' ) && false !== strpos( $search, "state='active' AND visibility='public'" ), 'Only active public graph edges contribute a bounded relationship signal.' );
@@ -51,7 +55,12 @@ corrective_assert( false === strpos( $security, 'WP_CLI' ) && false !== strpos( 
 foreach ( array( 'sabri_search_operator', 'sabri_taxonomy_curator', 'sabri_ranking_approver', 'sabri_search_auditor' ) as $role ) {
 	corrective_assert( false !== strpos( $roles, $role ), "Dedicated separation-of-duties role exists: $role" );
 }
-corrective_assert( false !== strpos( $recommendations, 'session_contextual' ) && false !== strpos( $recommendations, 'never persisted by File 26' ), 'Guest/session discovery is request-bound and non-persistent.' );
+corrective_assert(
+	false !== strpos( $recommendations, 'session_contextual' ) &&
+	false !== strpos( $recommendations, 'session_topics' ) &&
+	false !== strpos( $recommendations, 'does not save a profile' ),
+	'Guest/session discovery is request-bound and non-persistent.'
+);
 foreach ( array( 'hide_item', 'hide_author', 'hide_topic', 'undo', 'opt_out', 'set_interests' ) as $control ) {
 	corrective_assert( false !== strpos( $recommendations, $control ), "Recommendation control is implemented: $control" );
 }
