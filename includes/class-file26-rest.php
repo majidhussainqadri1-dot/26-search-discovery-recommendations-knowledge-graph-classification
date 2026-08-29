@@ -15,7 +15,7 @@ final class REST {
 	public function suggest(\WP_REST_Request $request){$query=$request->get_param('q');return $this->respond(array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'suggestions'=>$this->search->suggest($query,$request->get_param('locale'),$request->get_param('limit')?:8)),200,!$this->security->contains_sensitive_query($query));}
 	public function discover(\WP_REST_Request $request){$session_topics=array_values(array_filter((array)$request->get_param('session_topics')));$data=$this->recommendations->get(array('context'=>$request->get_param('context')?:'discover','limit'=>$request->get_param('limit')?:12,'cursor'=>$request->get_param('cursor'),'locale'=>$request->get_param('locale'),'session_topics'=>$session_topics));return $this->respond($data,200,!is_user_logged_in()&&empty($session_topics));}
 	public function feedback(\WP_REST_Request $request){return $this->respond($this->recommendations->record_feedback((array)$request->get_json_params()),201);}
-	public function consent(\WP_REST_Request $request){return $this->respond($this->recommendations->set_consent((bool)$request->get_param('consent')));}
+	public function consent(\WP_REST_Request $request){$consent=$this->strict_bool($request->get_param('consent'));if(null===$consent){return new \WP_Error('file26_invalid_consent','Consent must be an explicit boolean value.',array('status'=>400));}return $this->respond($this->recommendations->set_consent($consent));}
 	public function interests(\WP_REST_Request $request){return $this->respond($this->recommendations->set_interests((array)$request->get_param('interests')));}
 	public function reset(){return $this->respond($this->recommendations->reset());}
 	public function opt_out(){return $this->respond($this->recommendations->opt_out());}
@@ -54,5 +54,6 @@ final class REST {
 	public function can_approve_ranking(){return $this->security->can_approve_ranking()?true:new \WP_Error('file26_forbidden','Ranking approval capability is required.',array('status'=>403));}
 	public function can_audit(){return $this->security->can_audit()?true:new \WP_Error('file26_forbidden','Audit capability is required.',array('status'=>403));}
 
+	private function strict_bool($value){if(is_bool($value)){return $value;}if(is_int($value)||is_float($value)){if(1===(int)$value){return true;}if(0===(int)$value){return false;}return null;}if(is_string($value)){$value=strtolower(trim($value));if(in_array($value,array('1','true','yes','on'),true)){return true;}if(in_array($value,array('0','false','no','off'),true)){return false;}}return null;}
 	private function respond($data,$status=200,$public_cache=false){if(is_wp_error($data)){return $data;}$response=new \WP_REST_Response($data,$status);$response->header('X-Sabri-File26-Contract',SABRI_FILE26_CONTRACT_VERSION);$response->header('X-Content-Type-Options','nosniff');if($public_cache&&!is_user_logged_in()){$response->header('Cache-Control','public, max-age=60, stale-while-revalidate=120');$response->header('ETag','"'.hash('sha256',wp_json_encode($data)).'"');}else{$response->header('Cache-Control','private, no-store');}return $response;}
 }
