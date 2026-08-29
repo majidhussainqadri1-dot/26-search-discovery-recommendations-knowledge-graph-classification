@@ -38,6 +38,7 @@ final class Security {
 		if(is_string($value)){$value=strtolower(trim($value));if(in_array($value,array('1','true','yes','on'),true)){return true;}if(in_array($value,array('0','false','no','off',''),true)){return false;}}
 		return null;
 	}
+	public function normalize_authorization($value){return true===$this->normalize_claim_bool($value);}
 
 	private function sanitize_claim_text($value,$max_length){
 		if(!is_scalar($value)){return '';}
