@@ -34,13 +34,18 @@ trait Future_Search_Core_Trait {
 	public function query_planner( \WP_REST_Request $request ) {
 		$params = $this->params( $request ); $q = $this->query( $params );
 		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
+		$execute = false;
+		if ( array_key_exists( 'execute', $params ) ) {
+			$execute = $this->future_strict_bool( $params['execute'] );
+			if ( null === $execute ) { return new \WP_Error( 'file26_query_planner_execute_invalid', 'execute must be an explicit boolean value.', array( 'status' => 400 ) ); }
+		}
 		$normalized = $this->normalizer->normalize( $q );
 		$pieces = preg_split( '/\s+(?:and|اور|vs\.?|versus)\s+|[;؛]+/iu', $q, -1, PREG_SPLIT_NO_EMPTY );
 		$pieces = array_slice( array_values( array_unique( array_map( 'trim', (array) $pieces ) ) ), 0, 6 ); if ( ! $pieces ) { $pieces = array( $q ); }
 		$plan = array();
 		foreach ( $pieces as $piece ) { $parsed = $this->parse_smart_query( $piece ); $plan[] = array( 'query' => $parsed['query'], 'filters' => $parsed['filters'], 'intent' => $this->infer_mode( $piece ), 'execution' => 'owner-federated-search' ); }
 		$executed = array();
-		if ( ! empty( $params['execute'] ) ) {
+		if ( $execute ) {
 			foreach ( $plan as $step ) {
 				if ( '' === $step['query'] && empty( $step['filters'] ) ) { $executed[] = array( 'query' => '', 'state' => 'skipped_empty' ); continue; }
 				if ( ! empty( $step['filters']['source'] ) ) {
@@ -53,20 +58,24 @@ trait Future_Search_Core_Trait {
 				$executed[] = is_wp_error( $r ) ? array( 'query' => $step['query'], 'state' => 'failed', 'code' => $r->get_error_code() ) : array( 'query' => $step['query'], 'state' => 'ok', 'results' => $this->safe_results( isset( $r['results'] ) ? (array) $r['results'] : array() ), 'source_constraint_enforced' => ! empty( $step['filters']['source'] ) );
 			}
 		}
-		return array( 'query' => $q, 'query_normalized' => $normalized, 'bounded_steps' => $plan, 'executed' => $executed );
+		return array( 'query' => $q, 'query_normalized' => $normalized, 'bounded_steps' => $plan, 'executed' => $executed, 'execution_requested' => $execute );
 	}
 
 	public function cross_language_search( \WP_REST_Request $request ) {
 		$params = $this->params( $request ); $q = $this->query( $params );
 		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
 		$locale = isset( $params['locale'] ) ? sanitize_text_field( (string) $params['locale'] ) : '';
+		$sensitive = $this->sensitive_query( $q );
+		$clinical = $this->autonomous_clinical_intent( $q );
 		$variants = array(); foreach ( $this->normalizer->expansions( $q ) as $expansion ) { if ( ! $this->sensitive_query( $expansion ) ) { $variants[] = array( 'query' => $expansion, 'locale' => $locale, 'source' => 'file26_normalizer' ); } }
-		$provided = array(); if ( ! $this->sensitive_query( $q ) ) { $provided = apply_filters( 'sabri_file26_cross_language_variants', array(), $q, $locale ); }
+		$provided = array(); $provider_called = false; $usable_provider_variants = 0;
+		if ( ! $sensitive && ! $clinical ) { $provider_called = true; $provided = apply_filters( 'sabri_file26_cross_language_variants', array(), $q, $locale ); }
 		foreach ( array_slice( (array) $provided, 0, 8 ) as $variant ) {
 			if ( is_array( $variant ) && ! empty( $variant['query'] ) ) {
 				$sanitized_variant = $this->security->sanitize_query( (string) $variant['query'] );
 				if ( '' === $sanitized_variant || $this->sensitive_query( $sanitized_variant ) ) { continue; }
 				$variants[] = array( 'query' => $sanitized_variant, 'locale' => isset( $variant['locale'] ) ? sanitize_text_field( (string) $variant['locale'] ) : '', 'source' => 'approved_cross_language_provider' );
+				$usable_provider_variants++;
 			}
 		}
 		$unique_variants = array();
@@ -80,7 +89,7 @@ trait Future_Search_Core_Trait {
 			foreach ( (array) $r['results'] as $item ) { $key = isset( $item['key'] ) ? (string) $item['key'] : hash( 'sha256', wp_json_encode( $item ) ); if ( isset( $seen[ $key ] ) ) { continue; } $seen[ $key ] = true; $item['cross_language_match'] = true; $merged[] = $item; }
 		}
 		usort( $merged, static function ( $a, $b ) { $as = isset( $a['score'] ) ? (float) $a['score'] : 0; $bs = isset( $b['score'] ) ? (float) $b['score'] : 0; return $as === $bs ? 0 : ( $as > $bs ? -1 : 1 ); } );
-		return array( 'query' => $q, 'variant_count' => count( $variants ), 'variant_states' => $states, 'results' => $this->safe_results( array_slice( $merged, 0, 30 ) ), 'translation_claim' => false, 'semantic_cross_language_provider_available' => ! empty( $provided ), 'sensitive_provider_bypass' => $this->sensitive_query( $q ) );
+		return array( 'query' => $q, 'variant_count' => count( $variants ), 'variant_states' => $states, 'results' => $this->safe_results( array_slice( $merged, 0, 30 ) ), 'translation_claim' => false, 'semantic_cross_language_provider_available' => $provider_called && $usable_provider_variants > 0, 'provider_called' => $provider_called, 'provider_bypassed_for_sensitive_or_clinical' => $sensitive || $clinical, 'sensitive_provider_bypass' => $sensitive );
 	}
 
 	public function semantic_rerank( \WP_REST_Request $request ) {
