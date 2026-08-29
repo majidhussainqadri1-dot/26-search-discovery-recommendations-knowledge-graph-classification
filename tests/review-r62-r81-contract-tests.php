@@ -9,6 +9,8 @@ $taxonomy = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
 $graph = file_get_contents( $root . '/includes/class-file26-graph.php' );
 $governance = file_get_contents( $root . '/includes/class-file26-governance.php' );
 $rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
+$plugin = file_get_contents( $root . '/includes/class-file26-plugin.php' );
+$appeals = file_get_contents( $root . '/includes/class-file26-doctor-appeals.php' );
 $checks = 0;
 $failures = 0;
 function f26_r62_81_assert( $condition, $message ) {
@@ -36,5 +38,8 @@ f26_r62_81_assert( false !== strpos( $graph, 'file26_graph_source_owner_changed'
 f26_r62_81_assert( false !== strpos( $governance, 'file26_policy_activation_transaction_unavailable' ), 'R69: ranking activation fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $governance, 'file26_policy_rollback_transaction_unavailable' ), 'R69: ranking rollback fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $rest, 'file26_invalid_consent' ) && false !== strpos( $rest, 'strict_bool' ), 'R70: personalization consent uses strict boolean parsing and rejects malformed values' );
+f26_r62_81_assert( false !== strpos( $plugin, 'main_schema_tables_present' ) && false !== strpos( $plugin, 'appeals_schema_table_present' ) && false !== strpos( $plugin, '$main_current&&$appeal_current&&$main_present&&$appeal_present' ), 'R71: boot trusts schema markers only when required physical tables are present' );
+f26_r62_81_assert( false !== strpos( $appeals, "SHOW TABLES LIKE %s" ) && false !== strpos( $appeals, "delete_option( self::OPTION_SCHEMA )" ), 'R71: appeals schema marker is revalidated against the physical table' );
+f26_r62_81_assert( false !== strpos( $plugin, 'file26_appeal_retention_transaction_unavailable' ), 'R71: appeal retention fails closed if transaction start fails' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
