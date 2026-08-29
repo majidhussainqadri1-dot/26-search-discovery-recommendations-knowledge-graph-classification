@@ -11,13 +11,15 @@ final class Taxonomy {
 		if ( ! $this->security->can_curate() ) { return new \WP_Error( 'file26_forbidden', 'Taxonomy capability is required.', array( 'status' => 403 ) ); }
 		$label = isset( $input['preferred_label'] ) ? sanitize_text_field( $input['preferred_label'] ) : ''; $language = isset( $input['language'] ) ? substr( sanitize_text_field( $input['language'] ), 0, 20 ) : 'en-US'; $slug = isset( $input['slug'] ) ? sanitize_title( $input['slug'] ) : sanitize_title( $label );
 		if ( ! $label || ! $slug ) { return new \WP_Error( 'file26_invalid_term', 'A preferred label and slug are required.' ); }
-		$uuid = DB::uuid(); $wpdb->query( 'START TRANSACTION' );
+		$uuid = DB::uuid();
+		$owns_transaction = ! (bool) $wpdb->get_var( 'SELECT @@in_transaction' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( $owns_transaction && false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_term_create_failed', 'The taxonomy transaction could not be started.', array( 'status' => 500 ) ); }
 		try {
 			$ok = $wpdb->insert( DB::table( 'terms' ), array( 'term_uuid'=>$uuid,'slug'=>$slug,'preferred_label'=>$label,'definition'=>isset($input['definition'])?sanitize_textarea_field($input['definition']):'','language'=>$language,'parent_uuid'=>!empty($input['parent_uuid'])?sanitize_text_field($input['parent_uuid']):null,'related_json'=>wp_json_encode(array()),'owner_file'=>isset($input['owner_file'])?sanitize_text_field($input['owner_file']):'File 26','status'=>'draft','version'=>1,'created_at'=>DB::now(),'updated_at'=>DB::now() ) );
 			if ( ! $ok ) { throw new \RuntimeException( 'Term insert failed.' ); }
 			foreach ( array_slice( isset( $input['aliases'] ) ? (array) $input['aliases'] : array(), 0, 100 ) as $alias ) { if ( ! $this->add_alias( $uuid, $alias, $language ) ) { throw new \RuntimeException( 'Alias write failed.' ); } }
-			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Term transaction commit failed.' ); }
-		} catch ( \Throwable $e ) { $wpdb->query( 'ROLLBACK' ); return new \WP_Error( 'file26_term_create_failed', 'The taxonomy term and aliases could not be created atomically.', array( 'status' => 409 ) ); }
+			if ( $owns_transaction && false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Term transaction commit failed.' ); }
+		} catch ( \Throwable $e ) { if ( $owns_transaction ) { $wpdb->query( 'ROLLBACK' ); } return new \WP_Error( 'file26_term_create_failed', 'The taxonomy term and aliases could not be created atomically.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'taxonomy_term_created', array( 'object_type'=>'taxonomy_term','object_key'=>$uuid ) ); return $this->get( $uuid );
 	}
 
