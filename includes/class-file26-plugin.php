@@ -7,7 +7,7 @@ final class Plugin {
 	private $security; private $normalizer; private $ranking; private $connectors; private $owner_contracts;
 	private $indexer; private $search; private $recommendations; private $taxonomy; private $graph; private $health;
 	private $governance; private $doctor_ranking; private $doctor_appeals; private $central_plan; private $rest; private $routes;
-	private $admin; private $privacy; private $booted = false;
+	private $admin; private $privacy; private $booted = false; private $runtime_ready = false;
 
 	public static function instance() { if ( ! self::$instance ) { self::$instance = new self(); } return self::$instance; }
 	private function __construct() {
@@ -29,10 +29,12 @@ final class Plugin {
 		load_plugin_textdomain( 'sabri-file26', false, dirname( plugin_basename( SABRI_FILE26_FILE ) ) . '/languages' );
 		$migration = $this->ensure_schema_current();
 		if ( is_wp_error( $migration ) ) {
+			$this->runtime_ready = false;
 			DB::update_settings( array( 'activated' => false, 'public_search_enabled' => false, 'personalization_enabled' => false ) );
 			add_action( 'admin_notices', static function () { echo '<div class="notice notice-error"><p>' . esc_html__( 'File 26 is fail-closed because its database migration could not be verified. Review migration evidence before reactivation.', 'sabri-file26' ) . '</p></div>'; } );
 			return;
 		}
+		$this->runtime_ready = true;
 		Roles::install();
 		add_filter( 'sabri_file26_connector_manifests', array( $this->owner_contracts, 'collect' ), 5 );
 		add_filter( 'sabri_file26_activation_gate_approved', array( $this->owner_contracts, 'activation_gate' ), 10, 3 );
@@ -90,6 +92,7 @@ final class Plugin {
 	}
 
 	public function maybe_upgrade() { return $this->ensure_schema_current(); }
+	public function runtime_ready() { return $this->runtime_ready; }
 	public function cron_schedules( $schedules ) { $schedules['sabri_file26_monthly'] = array( 'interval' => 30 * DAY_IN_SECONDS, 'display' => 'Every 30 days — File 26' ); return $schedules; }
 
 	public function retain_doctor_appeals() {
