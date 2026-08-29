@@ -48,8 +48,8 @@ f26_future_assert( false !== strpos( $future, 'file26_multimodal_clinical_diagno
 f26_future_assert( false !== strpos( $future, "'current_results_substituted' => false" ), 'historical search forbids current-result substitution' );
 f26_future_assert( false !== strpos( $future, "'public_index_used' => false" ), 'private vault declares public-index isolation' );
 f26_future_assert( false !== strpos( $future, "'delivery_owner' => 'File 19'" ), 'saved-search notification delivery owned by File 19' );
-f26_future_assert( false !== strpos( $future, "'doctor_truth_owner' => 'File 07'" ), 'doctor truth remains File 07' );
-f26_future_assert( false !== strpos( $future, "'clinic_and_appointment_truth_owner' => 'File 08'" ), 'clinic/appointment truth remains File 08' );
+f26_future_assert( 1 === preg_match( "/'doctor_truth_owner'\\s*=>\\s*'File 07'/", $future ), 'doctor truth remains File 07' );
+f26_future_assert( 1 === preg_match( "/'clinic_and_appointment_truth_owner'\\s*=>\\s*'File 08'/", $future ), 'clinic/appointment truth remains File 08' );
 f26_future_assert( false !== strpos( $future, "'availability_claims_suppressed'" ), 'availability claims suppressed without owner provider' );
 f26_future_assert( false !== strpos( $future, "'merged_into_organic_ranking' => false" ), 'external evidence never silently merges into organic ranking' );
 f26_future_assert( false !== strpos( $future, 'external_connector_not_approved' ), 'external connector approval is fail closed' );
@@ -69,7 +69,7 @@ f26_future_assert( false !== strpos( $future, "future_capability_count'] = 24" )
 $forbidden = array( 'donation' . '_score', 'payment' . '_score', 'paid_rank' . '_score', 'founder_favoritism' . '_score', 'sponsor' . '_score' );
 foreach ( $forbidden as $signal ) { f26_future_assert( false === strpos( $future, $signal ), "forbidden organic ranking signal absent: $signal" ); }
 
-f26_future_assert( 0 === preg_match( '/(?:SELECT|UPDATE|DELETE|INSERT)\s+.*(?:clinical_|message_body|payment_card|smc_)/i', $future ), 'no direct sensitive foreign-table access' );
+f26_future_assert( 0 === preg_match( '/(?:SELECT|UPDATE|DELETE|INSERT)\\s+.*(?:clinical_|message_body|payment_card|smc_)/i', $future ), 'no direct sensitive foreign-table access' );
 f26_future_assert( false !== strpos( $doc, 'Specified' ) && false !== strpos( $doc, 'Coded' ) && false !== strpos( $doc, 'Staging-Accepted' ) && false !== strpos( $doc, 'Live-Deployed' ), 'status/evidence ladder preserved' );
 
 echo "PASS: $checks Future Search Intelligence contract assertions\n";
