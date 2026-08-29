@@ -53,11 +53,45 @@ require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-user-discovery.php
 require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-advanced.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-future-intelligence.php';
 
-register_activation_hook( __FILE__, static function () {
-	\Sabri\File26\DB::activate();
-	\Sabri\File26\Roles::install( true );
-	\Sabri\File26\Doctor_Appeals::install_schema();
-} );
+register_activation_hook(
+	__FILE__,
+	static function () {
+		$fail_activation = static function ( $message ) {
+			\Sabri\File26\DB::deactivate();
+			if ( function_exists( 'deactivate_plugins' ) ) {
+				deactivate_plugins( plugin_basename( SABRI_FILE26_FILE ), true );
+			}
+			wp_die( esc_html( $message ) );
+		};
+
+		// Activation must know the custom recurrence before DB::schedule() runs.
+		add_filter(
+			'cron_schedules',
+			static function ( $schedules ) {
+				$schedules['sabri_file26_monthly'] = array(
+					'interval' => 30 * DAY_IN_SECONDS,
+					'display'  => 'Every 30 days — File 26',
+				);
+				return $schedules;
+			}
+		);
+
+		// Register public rewrites before the activation flush.
+		add_rewrite_rule( '^search/?$', 'index.php?sabri_f26_route=search', 'top' );
+		add_rewrite_rule( '^discover/?$', 'index.php?sabri_f26_route=discover', 'top' );
+		add_rewrite_rule( '^topics/([^/]+)/?$', 'index.php?sabri_f26_route=topic&sabri_f26_term=$matches[1]', 'top' );
+
+		if ( ! \Sabri\File26\DB::activate() ) {
+			$fail_activation( __( 'File 26 activation failed because its database, settings, schedules or rewrite state could not be verified.', 'sabri-file26' ) );
+		}
+		if ( ! \Sabri\File26\Roles::install( true ) ) {
+			$fail_activation( __( 'File 26 activation failed because its separation-of-duties roles could not be verified.', 'sabri-file26' ) );
+		}
+		if ( ! \Sabri\File26\Doctor_Appeals::install_schema() ) {
+			$fail_activation( __( 'File 26 activation failed because the ranking-appeals schema could not be verified.', 'sabri-file26' ) );
+		}
+	}
+);
 register_deactivation_hook( __FILE__, array( 'Sabri\\File26\\DB', 'deactivate' ) );
 
 add_action(
