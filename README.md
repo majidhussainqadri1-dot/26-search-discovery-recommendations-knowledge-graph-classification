@@ -29,7 +29,9 @@ Provider-dependent features fail closed or return an explicit unavailable state.
 
 ## Installation
 
-Install the deterministic ZIP from `release/`, activate the plugin, register versioned owner connectors/providers, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, then enable **Approved runtime activation**.
+Build or obtain the deterministic **v1.3.0 package from the exact reviewed commit**. `bash qa/run-tests.sh` creates `release/26-sabri-file26-search-discovery-1.3.0.zip` and its checksum in the runner/worktree; GitHub Actions uploads the exact-head package artifact on the PHP 8.3 matrix job. The repository intentionally does not keep an older tracked ZIP as current release evidence.
+
+After package provenance is verified, activate the plugin, register versioned owner connectors/providers, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, then enable **Approved runtime activation**.
 
 ## Local QA
 
@@ -38,3 +40,5 @@ bash qa/run-tests.sh
 ```
 
 This proves source/package checks in the repository environment. Hostinger staging, real owner/provider connectors, browser/accessibility evidence, load tests, restore/rollback rehearsal, live deployment and live monitoring are separate acceptance gates.
+
+**Repository package/CI evidence never proves the exact deployed live build without deployment-parity evidence.**
