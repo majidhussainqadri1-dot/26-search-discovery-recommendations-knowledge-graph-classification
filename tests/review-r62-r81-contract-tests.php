@@ -45,5 +45,7 @@ f26_r62_81_assert( false !== strpos( $plugin, 'file26_appeal_retention_transacti
 f26_r62_81_assert( false !== strpos( $doctor_ranking, 'file26_doctor_ranking_transaction_unavailable' ), 'R72: doctor ranking recompute fails closed if transaction start fails' );
 f26_r62_81_assert( false !== strpos( $doctor_ranking, 'file26_doctor_ranking_read_failed' ), 'R72: doctor ranking source read failure is not treated as an empty cohort' );
 f26_r62_81_assert( false !== strpos( $doctor_ranking, "unset( \$payload['global_doctor_rank'], \$payload['doctor_rank_score'], \$payload['doctor_rank_policy_version'] )" ), 'R72: stale rank metadata is cleared before rebuilding the verified cohort' );
+f26_r62_81_assert( false !== strpos( $appeals, "d.entity_type='doctor_directory_projection'" ), 'R73: appeals target the same doctor projection entity type used by ranking' );
+f26_r62_81_assert( false !== strpos( $appeals, "c.status='active' AND c.owner_file='File 07'" ), 'R73: appeals are restricted to the active File 07 ranking production lane' );
 if ( $failures ) { fwrite( STDERR, "$failures of $checks R62-R81 assertions failed.\n" ); exit( 1 ); }
 echo "PASS: $checks R62-R81 review regression assertions\n";
