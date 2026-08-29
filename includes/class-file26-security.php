@@ -15,9 +15,34 @@ final class Security {
 		$default = array( 'contract_version'=>null,'user_id'=>$current_user_id,'authenticated'=>$authenticated,'suspended'=>false,'is_minor'=>false,'guardian_verified'=>false,'entitlements'=>array(),'consents'=>array(),'roles'=>$authenticated?wp_get_current_user()->roles:array(),'valid'=>!$authenticated );
 		$claims = apply_filters( 'sabri_file26_membership_assertions', $default, $current_user_id );
 		if ( ! is_array( $claims ) ) { $claims=$default; $claims['valid']=false; }
-		$version = isset( $claims['contract_version'] ) ? (string) $claims['contract_version'] : '';
-		if ( $authenticated ) { $claims['valid']=$version&&in_array($version,$this->supported_membership_contracts,true)&&empty($claims['suspended']); } else { $claims['valid']=true; }
-		$audience=array_merge($default,$claims);$audience['user_id']=$current_user_id;$audience['authenticated']=$authenticated;$audience['roles']=$authenticated?wp_get_current_user()->roles:array();return $audience;
+		$audience=array_merge($default,$claims);
+		$audience['user_id']=$current_user_id;
+		$audience['authenticated']=$authenticated;
+		$audience['roles']=$authenticated?wp_get_current_user()->roles:array();
+		$audience['contract_version']=isset($audience['contract_version'])?substr(sanitize_text_field((string)$audience['contract_version']),0,32):null;
+		$suspended=$this->normalize_claim_bool(isset($audience['suspended'])?$audience['suspended']:false);
+		$is_minor=$this->normalize_claim_bool(isset($audience['is_minor'])?$audience['is_minor']:false);
+		$guardian=$this->normalize_claim_bool(isset($audience['guardian_verified'])?$audience['guardian_verified']:false);
+		$audience['suspended']=null===$suspended?true:$suspended;
+		$audience['is_minor']=null===$is_minor?true:$is_minor;
+		$audience['guardian_verified']=null===$guardian?false:$guardian;
+		$audience['entitlements']=$this->normalize_string_claim_list(isset($audience['entitlements'])?$audience['entitlements']:array(),100,191);
+		$audience['consents']=$this->normalize_string_claim_list(isset($audience['consents'])?$audience['consents']:array(),100,191);
+		if($authenticated){$version=(string)$audience['contract_version'];$audience['valid']=$version&&in_array($version,$this->supported_membership_contracts,true)&&!$audience['suspended'];}else{$audience['valid']=true;}
+		return $audience;
+	}
+
+	private function normalize_claim_bool($value){
+		if(is_bool($value)){return $value;}
+		if(is_int($value)||is_float($value)){if(1===(int)$value){return true;}if(0===(int)$value){return false;}return null;}
+		if(is_string($value)){$value=strtolower(trim($value));if(in_array($value,array('1','true','yes','on'),true)){return true;}if(in_array($value,array('0','false','no','off',''),true)){return false;}}
+		return null;
+	}
+
+	private function normalize_string_claim_list($value,$max_items,$max_length){
+		if(!is_array($value)){return array();}$out=array();
+		foreach(array_slice($value,0,max(1,(int)$max_items)) as $item){if(!is_scalar($item)){continue;}$item=substr(sanitize_text_field((string)$item),0,max(1,(int)$max_length));if(''!==$item){$out[$item]=true;}}
+		return array_keys($out);
 	}
 
 	public function can_view_visibility( $visibility, array $audience, array $payload = array() ) {
