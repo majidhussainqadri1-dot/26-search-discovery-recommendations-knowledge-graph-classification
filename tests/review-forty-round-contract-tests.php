@@ -28,6 +28,6 @@ f26_r40_assert( false !== strpos( $files['discovery'], 'owner_revalidated_for_re
 f26_r40_assert( false !== strpos( $files['knowledge'], 'owner_revalidated_special_constraints_eligible_keys_only' ), 'research eligibility guard present' );
 f26_r40_assert( false !== strpos( $files['knowledge'], 'file26_graph_referential_integrity' ), 'graph integrity guard present' );
 f26_r40_assert( false !== strpos( $files['knowledge'], '64 !== strlen' ) && false !== strpos( $files['knowledge'], 'source_key' ), 'canonical source-key check present' );
-f26_r40_assert( false !== strpos( $files['knowledge'], 'checkdate(' ), 'calendar validation present' );
+f26_r40_assert( false !== strpos( $files['knowledge'], 'DateTimeImmutable::createFromFormat' ) && false !== strpos( $files['knowledge'], 'DateTimeImmutable::getLastErrors' ) && false !== strpos( $files['knowledge'], 'file26_historical_date_invalid' ), 'calendar date/time validation present' );
 f26_r40_assert( false !== strpos( $files['account'], 'file26_alert_filters_not_allowed' ), 'saved-alert filter guard present' );
 echo "PASS: $checks forty-round review regression assertions\n";
