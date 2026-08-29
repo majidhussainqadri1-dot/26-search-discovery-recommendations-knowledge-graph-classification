@@ -5,44 +5,30 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 printf '[1/15] PHP syntax\n'
-while IFS= read -r -d '' file; do
-  if ! php -l "$file"; then
-    echo "FAIL: PHP syntax: $file" >&2
-    exit 1
-  fi
-done < <(find "$ROOT" -type f -name '*.php' -print0)
+while IFS= read -r -d '' file; do php -l "$file" || { echo "FAIL: PHP syntax: $file" >&2; exit 1; }; done < <(find "$ROOT" -type f -name '*.php' -print0)
 
 printf '[2/15] JavaScript syntax\n'
-if command -v node >/dev/null 2>&1; then
-  node --check "$ROOT/assets/js/file26.js"
-  node --check "$ROOT/assets/js/file26-future.js"
-else
-  echo 'SKIP: node unavailable'
-fi
+if ! command -v node >/dev/null 2>&1; then echo 'FAIL: node is required for JavaScript syntax verification' >&2; exit 1; fi
+node --check "$ROOT/assets/js/file26.js"
+node --check "$ROOT/assets/js/file26-future.js"
 
 printf '[3/15] Pure normalization and ranking tests\n'
 php "$ROOT/tests/test-normalizer-ranking.php"
-
 printf '[4/15] Architecture, policy and traceability contracts\n'
 php "$ROOT/tests/contract-tests.php"
-
 printf '[5/15] Corrective architecture regressions\n'
 php "$ROOT/tests/corrective-contract-tests.php"
-
 printf '[6/15] New governing-plan completion regressions\n'
 php "$ROOT/tests/central-plan-contract-tests.php"
-
 printf '[7/15] Sequential 20-round review regressions\n'
 shopt -s nullglob
 ROUND_TESTS=("$ROOT"/tests/review-round-*.php)
 for test_file in "${ROUND_TESTS[@]}"; do php "$test_file"; done
-
 printf '[8/15] Future Search Intelligence Superset 24 regressions\n'
 php "$ROOT/tests/future-intelligence-contract-tests.php"
 
 printf '[9/15] Dangerous execution primitive scan\n'
 if grep -RInE --include='*.php' '(eval\s*\(|shell_exec\s*\(|passthru\s*\(|proc_open\s*\(|popen\s*\()' "$ROOT"; then echo 'FAIL: dangerous execution primitive'; exit 1; fi
-
 printf '[10/15] Forbidden ranking/business and sensitive-table scans\n'
 if grep -RInE --include='*.php' '(10% commission|donation_score|payment_score|founder_favoritism_score|paid_rank_score|sponsor_score)' "$ROOT"; then echo 'FAIL: forbidden ranking/business rule'; exit 1; fi
 if grep -RInE --include='*.php' '(SELECT|UPDATE|DELETE|INSERT).*(smc_|clinical_|message_body|payment_card)' "$ROOT/includes"; then echo 'FAIL: direct sensitive foreign-table access'; exit 1; fi
@@ -62,7 +48,6 @@ printf '[13/15] Deterministic double build\n'
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/a.zip"
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/b.zip"
 cmp "$TMP/a.zip" "$TMP/b.zip"
-
 printf '[14/15] ZIP integrity and path safety\n'
 python3 - "$TMP/a.zip" <<'PY'
 import sys, zipfile
@@ -75,7 +60,6 @@ with zipfile.ZipFile(p) as z:
     assert z.testzip() is None
 print('PASS: safe single-root deterministic ZIP')
 PY
-
 printf '[15/15] Clean-extract QA and manifest parity\n'
 unzip -q "$TMP/a.zip" -d "$TMP/extract"
 PACKAGE="$TMP/extract/sabri-file26-search-discovery"
@@ -87,7 +71,6 @@ for test_file in "$PACKAGE"/tests/review-round-*.php; do php "$test_file" >/dev/
 php "$PACKAGE/tests/future-intelligence-contract-tests.php" >/dev/null
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
-
 mkdir -p "$ROOT/release"
 cp "$TMP/a.zip" "$ROOT/release/26-sabri-file26-search-discovery-1.3.0.zip"
 sha256sum "$ROOT/release/26-sabri-file26-search-discovery-1.3.0.zip" > "$ROOT/release/CHECKSUMS.sha256"
