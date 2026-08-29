@@ -55,6 +55,10 @@ trait Future_Multimodal_Trait {
 		$valid = array();
 		foreach ( array_slice( $provided['segments'], 0, 50 ) as $segment ) {
 			if ( ! is_array( $segment ) || empty( $segment['owner'] ) || empty( $segment['object_id'] ) || empty( $segment['canonical_url'] ) || empty( $segment['provenance'] ) ) { continue; }
+			$owner = sanitize_key( (string) $segment['owner'] );
+			$object_id = substr( sanitize_text_field( (string) $segment['object_id'] ), 0, 191 );
+			$provenance = substr( sanitize_text_field( (string) $segment['provenance'] ), 0, 300 );
+			if ( '' === $owner || '' === $object_id || '' === $provenance ) { continue; }
 			$position = array();
 			foreach ( array( 'page', 'paragraph', 'timestamp_seconds' ) as $key ) { if ( isset( $segment[ $key ] ) && is_numeric( $segment[ $key ] ) ) { $position[ $key ] = max( 0, (int) $segment[ $key ] ); } }
 			foreach ( array( 'chapter', 'lesson' ) as $key ) { if ( isset( $segment[ $key ] ) && '' !== $segment[ $key ] ) { $position[ $key ] = substr( sanitize_text_field( (string) $segment[ $key ] ), 0, 120 ); } }
@@ -65,7 +69,7 @@ trait Future_Multimodal_Trait {
 			$title = function_exists( 'mb_substr' ) ? mb_substr( $title, 0, 240, 'UTF-8' ) : substr( $title, 0, 240 );
 			$excerpt = isset( $segment['excerpt'] ) ? wp_strip_all_tags( (string) $segment['excerpt'] ) : '';
 			$excerpt = function_exists( 'mb_substr' ) ? mb_substr( $excerpt, 0, 1200, 'UTF-8' ) : substr( $excerpt, 0, 1200 );
-			$valid[] = array( 'owner' => sanitize_key( (string) $segment['owner'] ), 'object_id' => substr( sanitize_text_field( (string) $segment['object_id'] ), 0, 191 ), 'canonical_url' => $canonical_url, 'title' => $title, 'excerpt' => $excerpt, 'position' => $position, 'provenance' => substr( sanitize_text_field( (string) $segment['provenance'] ), 0, 300 ) );
+			$valid[] = array( 'owner' => $owner, 'object_id' => $object_id, 'canonical_url' => $canonical_url, 'title' => $title, 'excerpt' => $excerpt, 'position' => $position, 'provenance' => $provenance );
 		}
 		return array( 'query' => $q, 'kind' => $kind, 'state' => $valid ? 'ok' : 'no_match', 'segments' => $valid, 'invented_position' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
@@ -74,13 +78,14 @@ trait Future_Multimodal_Trait {
 		$params = $this->params( $request ); $key = isset( $params['canonical_key'] ) ? preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $params['canonical_key'] ) ) : '';
 		if ( 64 !== strlen( $key ) ) { return new \WP_Error( 'file26_canonical_key_required', 'A valid canonical search key is required.', array( 'status' => 400 ) ); }
 		$seed = apply_filters( 'sabri_file26_similarity_seed', null, $key, array( 'eligibility_attestation_required' => true ) );
-		if ( ! is_array( $seed ) || 'owner_revalidated_for_request' !== ( isset( $seed['eligibility_attestation'] ) ? $seed['eligibility_attestation'] : '' ) || empty( $seed['query'] ) ) { return array( 'state' => 'seed_provider_unavailable_or_not_authorized', 'canonical_key' => $key, 'results' => array() ); }
+		$seed_provenance = is_array( $seed ) && isset( $seed['provenance'] ) ? substr( sanitize_text_field( (string) $seed['provenance'] ), 0, 300 ) : '';
+		if ( ! is_array( $seed ) || 'owner_revalidated_for_request' !== ( isset( $seed['eligibility_attestation'] ) ? $seed['eligibility_attestation'] : '' ) || empty( $seed['query'] ) || '' === $seed_provenance ) { return array( 'state' => 'seed_provider_unavailable_or_not_authorized', 'canonical_key' => $key, 'results' => array() ); }
 		$seed_query = $this->security->sanitize_query( (string) $seed['query'] );
 		if ( '' === $seed_query ) { return array( 'state' => 'seed_provider_returned_empty_query', 'canonical_key' => $key, 'results' => array() ); }
 		$filters = isset( $seed['filters'] ) && is_array( $seed['filters'] ) ? $this->sanitize_filters( $seed['filters'] ) : array();
 		$result = $this->base_search( $seed_query, array( 'filters' => $filters, 'limit' => 24 ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		$items = array_values( array_filter( (array) $result['results'], static function ( $item ) use ( $key ) { return empty( $item['key'] ) || $key !== $item['key']; } ) );
-		return array( 'state' => 'ok', 'canonical_key' => $key, 'seed_provenance' => isset( $seed['provenance'] ) ? substr( sanitize_text_field( (string) $seed['provenance'] ), 0, 300 ) : '', 'results' => $this->safe_results( $items ), 'eligibility_attestation' => 'owner_revalidated_for_request' );
+		return array( 'state' => 'ok', 'canonical_key' => $key, 'seed_provenance' => $seed_provenance, 'results' => $this->safe_results( $items ), 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
 }
