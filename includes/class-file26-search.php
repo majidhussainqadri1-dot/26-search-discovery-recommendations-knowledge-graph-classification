@@ -156,7 +156,9 @@ final class Search {
 			}
 		}
 		if ( $scan_offset >= $max_scan ) {
-			$scan_limit_hit = true;
+			$probe_args = array_merge( $args, array( 1, $scan_offset ) );
+			$probe = $wpdb->get_results( $wpdb->prepare( $base_sql . ' LIMIT %d OFFSET %d', $probe_args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$scan_limit_hit = ! empty( $probe );
 		}
 
 		// Active, public, provenance-governed graph edges contribute only a bounded relationship signal.
@@ -167,8 +169,11 @@ final class Search {
 				if ( 'authority' === $filters['sort'] ) {
 					return (float) $a['authority_score'] === (float) $b['authority_score'] ? strcmp( $a['canonical_key'], $b['canonical_key'] ) : ( (float) $a['authority_score'] > (float) $b['authority_score'] ? -1 : 1 );
 				}
-				$at = strtotime( $a['freshness_at'] . ' UTC' );
-				$bt = strtotime( $b['freshness_at'] . ' UTC' );
+				$at = ! empty( $a['freshness_at'] ) ? strtotime( $a['freshness_at'] . ' UTC' ) : false;
+				$bt = ! empty( $b['freshness_at'] ) ? strtotime( $b['freshness_at'] . ' UTC' ) : false;
+				if ( false === $at && false === $bt ) { return strcmp( $a['canonical_key'], $b['canonical_key'] ); }
+				if ( false === $at ) { return 1; }
+				if ( false === $bt ) { return -1; }
 				if ( $at === $bt ) {
 					return strcmp( $a['canonical_key'], $b['canonical_key'] );
 				}
@@ -304,17 +309,24 @@ final class Search {
 			return array();
 		}
 		$clean = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'language' ) as $key ) {
+		foreach ( array( 'entity_type', 'availability', 'connector', 'domain', 'topic', 'sort' ) as $key ) {
 			if ( ! empty( $filters[ $key ] ) ) {
-				$clean[ $key ] = 'language' === $key ? substr( sanitize_text_field( $filters[ $key ] ), 0, 20 ) : sanitize_key( $filters[ $key ] );
+				$clean[ $key ] = sanitize_key( $filters[ $key ] );
 			}
 		}
-		if ( ! empty( $filters['author'] ) ) {
-			$clean['author'] = sanitize_text_field( $filters['author'] );
+		foreach ( array( 'country', 'location', 'author' ) as $key ) {
+			if ( ! empty( $filters[ $key ] ) && is_scalar( $filters[ $key ] ) ) {
+				$clean[ $key ] = substr( sanitize_text_field( (string) $filters[ $key ] ), 0, 191 );
+			}
+		}
+		if ( ! empty( $filters['language'] ) && is_scalar( $filters['language'] ) ) {
+			$clean['language'] = substr( sanitize_text_field( (string) $filters['language'] ), 0, 20 );
 		}
 		foreach ( array( 'date_from', 'date_to' ) as $date_key ) {
-			if ( ! empty( $filters[ $date_key ] ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters[ $date_key ] ) ) {
-				$clean[ $date_key ] = $filters[ $date_key ];
+			if ( empty( $filters[ $date_key ] ) || ! is_scalar( $filters[ $date_key ] ) ) { continue; }
+			$value = (string) $filters[ $date_key ];
+			if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $value, $parts ) && checkdate( (int) $parts[2], (int) $parts[3], (int) $parts[1] ) ) {
+				$clean[ $date_key ] = $value;
 			}
 		}
 		return $clean;
@@ -379,7 +391,6 @@ final class Search {
 				if ( $topic ) {
 					$facets['topic'][ $topic ] = isset( $facets['topic'][ $topic ] ) ? $facets['topic'][ $topic ] + 1 : 1;
 				}
-			}
 		}
 		foreach ( $facets as &$values ) {
 			arsort( $values );
