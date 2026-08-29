@@ -2,6 +2,7 @@
 /** Regression contract for the second sequential File 26 review cycle. */
 $root = dirname( __DIR__ );
 $files = array(
+    'bootstrap' => file_get_contents( $root . '/file-26-search-discovery.php' ),
     'db' => file_get_contents( $root . '/includes/class-file26-db.php' ),
     'rest' => file_get_contents( $root . '/includes/class-file26-rest.php' ),
     'owner' => file_get_contents( $root . '/includes/class-file26-owner-contracts.php' ),
@@ -28,6 +29,14 @@ f26_second40_assert( false !== strpos( $files['db'], "delete_option(self::OPTION
 f26_second40_assert( false !== strpos( $files['db'], "return $schema_saved||SABRI_FILE26_SCHEMA_VERSION===(string)get_option(self::OPTION_SCHEMA)" ), 'main schema version is verified after persistence' );
 f26_second40_assert( false !== strpos( $files['db'], "if(!$saved&&get_option(self::OPTION_SETTINGS,array())!==$merged){return false;}" ), 'settings persistence fails closed' );
 f26_second40_assert( false !== strpos( $files['db'], "return $ok;" ) && false !== strpos( $files['db'], "wp_schedule_event" ), 'cron scheduling returns a verified outcome' );
+f26_second40_assert( false === strpos( $files['db'], 'install_capabilities()' ), 'DB activation no longer owns privileged role capabilities' );
+
+f26_second40_assert( false !== strpos( $files['bootstrap'], "sabri_file26_monthly" ) && false !== strpos( $files['bootstrap'], "cron_schedules" ), 'activation registers custom recurrence before scheduling' );
+f26_second40_assert( false !== strpos( $files['bootstrap'], "add_rewrite_rule( '^search/?$'" ) && false !== strpos( $files['bootstrap'], "add_rewrite_rule( '^topics/([^/]+)/?$'" ), 'activation registers public rewrites before flushing' );
+f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\File26\\DB::activate() )" ), 'activation verifies DB/settings/schedule result' );
+f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\File26\\Roles::install( true ) )" ), 'activation verifies role model result' );
+f26_second40_assert( false !== strpos( $files['bootstrap'], "if ( ! \\Sabri\\File26\\Doctor_Appeals::install_schema() )" ), 'activation verifies appeal schema result' );
+f26_second40_assert( false !== strpos( $files['bootstrap'], "deactivate_plugins" ) && false !== strpos( $files['bootstrap'], "wp_die" ), 'failed activation is explicitly aborted' );
 
 f26_second40_assert( false !== strpos( $files['rest'], "file26_membership_invalid" ), 'protected REST routes require current membership assertions' );
 f26_second40_assert( false !== strpos( $files['rest'], "is_wp_error($appeals)?$appeals" ), 'own-appeals read errors are not hidden inside success envelopes' );
