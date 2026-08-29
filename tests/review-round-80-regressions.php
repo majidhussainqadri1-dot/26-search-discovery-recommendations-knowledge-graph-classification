@@ -12,5 +12,5 @@ f26_r80_assert( false !== strpos( $knowledge, '$snapshot_id = is_array' ) && fal
 f26_r80_assert( false !== strpos( $knowledge, 'file26_graph_endpoint_binding_failed' ), 'R80: graph path must contain both requested endpoints' );
 f26_r80_assert( false !== strpos( $knowledge, 'file26_graph_depth_exceeded' ) && false !== strpos( $knowledge, 'maximum depth of six edges' ), 'R80: graph path depth is enforced by File 26' );
 f26_r80_assert( false !== strpos( $knowledge, 'retain provenance after sanitization' ), 'R80: graph edge provenance is revalidated after sanitization' );
-f26_r80_assert( false !== strpos( $knowledge, "'historical_snapshot_unavailable'" ) && false !== strpos( $knowledge, "'snapshot_id' => $snapshot_id" ) === false, 'R80: historical snapshots require a sanitized identity before success' );
+f26_r80_assert( substr_count( $knowledge, '$snapshot_id = is_array' ) >= 2 && false !== strpos( $knowledge, "'historical_snapshot_unavailable'" ), 'R80: historical snapshots require a sanitized identity before success' );
 echo "PASS: $checks Round 80 regression assertions\n";
