@@ -13,7 +13,7 @@
 | F26-FUT-09 | `/future/research-search` | `Future_Knowledge_Trait::research_search()` | central advanced search; special constraints select existing eligible keys only; snapshot attestation |
 | F26-FUT-10 | `/future/result-clusters` | `Future_Knowledge_Trait::result_clusters()` | bounded clustering over eligible results only |
 | F26-FUT-11 | `/future/graph-path` | `Future_Knowledge_Trait::graph_path()` | owner revalidation; provenance; edge endpoints in returned node set |
-| F26-FUT-12 | `/future/evidence-map` | `Future_Knowledge_Trait::evidence_map()` | allowed relation types; provenance; source key or canonical URL |
+| F26-FUT-12 | `/future/evidence-map` | `Future_Knowledge_Trait::evidence_map()` | allowed relation types; provenance; stable 64-character source key required; canonical URL may be supplementary |
 | F26-FUT-13 | `/future/disambiguate` | `Future_Knowledge_Trait::disambiguate()` | ambiguity surfaced; automatic merge false |
 | F26-FUT-14 | `/future/historical-search` | `Future_Knowledge_Trait::historical_search()` | actual owner snapshot + revalidation; current substitution false |
 | F26-FUT-15 | `/future/research-trails` | `Future_User_Data_Trait::research_trails()` | reference-only storage; bounded collections; CAS conflict handling; privacy export/erase |
@@ -27,4 +27,4 @@
 | F26-FUT-23 | `/future/external-evidence` | `Future_Advanced_Trait::external_evidence()` | non-sensitive + explicit consent + approved connector + public attestation + HTTPS/provenance/rights; organic merge false |
 | F26-FUT-24 | `/future/relevance-lab` | `Future_Advanced_Trait::relevance_lab()` | search-auditor only; production mutation false; bounded comparison metrics |
 
-Cross-cutting regression evidence: `tests/future-intelligence-contract-tests.php`, both parity review documents, all inherited central/corrective tests and all twenty independent `review-round-*.php` regressions.
+Cross-cutting regression evidence: `tests/future-intelligence-contract-tests.php`, `tests/review-second-forty-round-contract-tests.php`, both parity review documents, all inherited central/corrective tests and all twenty independent `review-round-*.php` regressions.
