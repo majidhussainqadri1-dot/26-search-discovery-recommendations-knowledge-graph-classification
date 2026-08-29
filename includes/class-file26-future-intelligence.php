@@ -1,6 +1,5 @@
 <?php
 namespace Sabri\File26;
-
 defined( 'ABSPATH' ) || exit;
 
 /** Future Search & Knowledge Intelligence Superset 24 orchestration owner. */
@@ -44,6 +43,10 @@ add_action(
 	'plugins_loaded',
 	static function () {
 		$plugin = Plugin::instance();
+		$health = $plugin->health()->snapshot();
+		if ( ! is_array( $health ) || 'unavailable' === ( isset( $health['status'] ) ? $health['status'] : 'unavailable' ) || ! empty( $health['schema_drift'] ) ) {
+			return;
+		}
 		$future = new Future_Intelligence( $plugin->search(), $plugin->recommendations(), new Normalizer(), new Security(), $plugin->central_plan(), $plugin->health() );
 		$future->boot();
 		$GLOBALS['sabri_file26_future_intelligence'] = $future;
