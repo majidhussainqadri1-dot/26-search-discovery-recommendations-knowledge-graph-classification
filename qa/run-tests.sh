@@ -49,9 +49,9 @@ printf '[13/15] Deterministic double build\n'
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/a.zip"
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/b.zip"
 cmp "$TMP/a.zip" "$TMP/b.zip"
-printf '[14/15] ZIP integrity and path safety\n'
+printf '[14/15] ZIP integrity, path and metadata safety\n'
 python3 - "$TMP/a.zip" <<'PY'
-import sys, zipfile
+import stat, sys, zipfile
 p=sys.argv[1]
 with zipfile.ZipFile(p) as z:
     bad=[n for n in z.namelist() if n.startswith('/') or '..' in n.split('/')]
@@ -59,7 +59,11 @@ with zipfile.ZipFile(p) as z:
     assert not bad, bad
     assert roots == {'sabri-file26-search-discovery'}, roots
     assert z.testzip() is None
-print('PASS: safe single-root deterministic ZIP')
+    for info in z.infolist():
+        mode=(info.external_attr >> 16) & 0o777777
+        assert not stat.S_ISLNK(mode), info.filename
+        assert (mode & 0o777) == 0o644, (info.filename, oct(mode))
+print('PASS: safe single-root deterministic ZIP with fixed regular-file metadata')
 PY
 printf '[15/15] Clean-extract QA and manifest parity\n'
 unzip -q "$TMP/a.zip" -d "$TMP/extract"
