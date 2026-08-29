@@ -174,7 +174,10 @@ final class Recommendations {
 			if ( 1 !== $reversed ) {
 				return new \WP_Error( 'file26_feedback_not_reversible', 'The feedback action was not found or was already reversed.', array( 'status' => 409 ) );
 			}
-			$this->rebuild_negative_controls( $user_id );
+			$rebuilt = $this->rebuild_negative_controls( $user_id );
+			if ( is_wp_error( $rebuilt ) ) {
+				return $rebuilt;
+			}
 			$this->security->audit( 'recommendation_feedback_reversed', array( 'object_type' => 'recommendation', 'object_key' => $item_key ) );
 			return array( 'reversed' => true, 'effective_next_request' => true );
 		}
@@ -189,8 +192,14 @@ final class Recommendations {
 			wp_json_encode( array( 'context' => isset( $request['context'] ) ? sanitize_key( $request['context'] ) : 'discover' ) ),
 			DB::now(), DB::now(), $expires
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$this->rebuild_negative_controls( $user_id );
+		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $written ) {
+			return new \WP_Error( 'file26_feedback_write_failed', 'Recommendation feedback could not be stored.', array( 'status' => 500 ) );
+		}
+		$rebuilt = $this->rebuild_negative_controls( $user_id );
+		if ( is_wp_error( $rebuilt ) ) {
+			return $rebuilt;
+		}
 		$this->security->audit( 'recommendation_feedback_recorded', array( 'object_type' => 'recommendation', 'object_key' => $item_key, 'reason' => $type ) );
 		return array( 'recorded' => true, 'effective_next_request' => true, 'idempotency_key' => isset( $request['idempotency_key'] ) ? sanitize_text_field( $request['idempotency_key'] ) : '' );
 	}
@@ -198,6 +207,9 @@ final class Recommendations {
 	private function rebuild_negative_controls( $user_id ) {
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT item_key,feedback_type,scope_key FROM ' . DB::table( 'feedback' ) . " WHERE user_id=%d AND active=1 AND feedback_type IN ('not_interested','hide_item','hide_author','hide_topic') ORDER BY id ASC LIMIT 1000", $user_id ), ARRAY_A );
+		if ( null === $rows ) {
+			return new \WP_Error( 'file26_feedback_read_failed', 'Recommendation controls could not be rebuilt.', array( 'status' => 500 ) );
+		}
 		$negatives = array( 'items' => array(), 'authors' => array(), 'topics' => array() );
 		foreach ( $rows as $row ) {
 			if ( in_array( $row['feedback_type'], array( 'not_interested', 'hide_item' ), true ) && $row['item_key'] ) { $negatives['items'][] = $row['item_key']; }
@@ -215,7 +227,8 @@ final class Recommendations {
 			$user_id, $existing ? (int) $existing['consent'] : 0, $existing ? (int) $existing['opted_out'] : 1,
 			$existing ? $existing['interests_json'] : wp_json_encode( array() ), wp_json_encode( $negatives ), DB::now()
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return false === $written ? new \WP_Error( 'file26_negative_controls_write_failed', 'Recommendation controls could not be updated.', array( 'status' => 500 ) ) : true;
 	}
 
 	public function set_consent( $consent ) {
@@ -227,19 +240,28 @@ final class Recommendations {
 		$user_id = (int) $access['user_id'];
 		$consent = (bool) $consent;
 		$empty = wp_json_encode( array() );
-		$sql = $wpdb->prepare(
-			'INSERT INTO ' . DB::table( 'profiles' ) . "
-			(user_id,consent,opted_out,interests_json,negatives_json,version,updated_at)
-			VALUES (%d,%d,%d,%s,%s,1,%s)
-			ON DUPLICATE KEY UPDATE consent=VALUES(consent),opted_out=VALUES(opted_out),interests_json=IF(VALUES(consent)=0,VALUES(interests_json),interests_json),negatives_json=IF(VALUES(consent)=0,VALUES(negatives_json),negatives_json),version=version+1,updated_at=VALUES(updated_at)",
-			$user_id, $consent ? 1 : 0, $consent ? 0 : 1, $empty, $empty, DB::now()
-		);
-		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( false === $written ) {
-			return new \WP_Error( 'file26_consent_write_failed', 'Recommendation consent could not be updated.', array( 'status' => 500 ) );
-		}
-		if ( ! $consent ) {
-			$wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) );
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$sql = $wpdb->prepare(
+				'INSERT INTO ' . DB::table( 'profiles' ) . "
+				(user_id,consent,opted_out,interests_json,negatives_json,version,updated_at)
+				VALUES (%d,%d,%d,%s,%s,1,%s)
+				ON DUPLICATE KEY UPDATE consent=VALUES(consent),opted_out=VALUES(opted_out),interests_json=IF(VALUES(consent)=0,VALUES(interests_json),interests_json),negatives_json=IF(VALUES(consent)=0,VALUES(negatives_json),negatives_json),version=version+1,updated_at=VALUES(updated_at)",
+				$user_id, $consent ? 1 : 0, $consent ? 0 : 1, $empty, $empty, DB::now()
+			);
+			$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( false === $written ) {
+				throw new \RuntimeException( 'Consent write failed.' );
+			}
+			if ( ! $consent && false === $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) {
+				throw new \RuntimeException( 'Feedback purge failed.' );
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new \RuntimeException( 'Consent commit failed.' );
+			}
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_consent_write_failed', 'Recommendation consent could not be updated atomically.', array( 'status' => 500 ) );
 		}
 		$this->security->audit( 'recommendation_consent_updated', array( 'object_type' => 'user', 'object_key' => (string) $user_id, 'metadata' => array( 'consent' => $consent ) ) );
 		return array( 'consent' => $consent, 'opted_out' => ! $consent, 'personalization_enabled' => $consent && DB::setting( 'personalization_enabled', false ) );
@@ -285,7 +307,9 @@ final class Recommendations {
 			if ( false === $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user_id ), array( '%d' ) ) ) {
 				throw new \RuntimeException( 'Profile reset failed.' );
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new \RuntimeException( 'Profile reset commit failed.' );
+			}
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_profile_reset_failed', 'Recommendation profile could not be reset.', array( 'status' => 500 ) );
