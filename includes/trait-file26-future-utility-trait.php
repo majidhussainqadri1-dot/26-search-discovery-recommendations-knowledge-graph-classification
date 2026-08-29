@@ -1,6 +1,5 @@
 <?php
 namespace Sabri\File26;
-
 defined( 'ABSPATH' ) || exit;
 
 trait Future_Utility_Trait {
@@ -49,12 +48,28 @@ trait Future_Utility_Trait {
 	}
 
 	private function safe_result( array $item ) {
-		$allowed = array( 'key', 'title', 'excerpt', 'url', 'canonical_url', 'entity_type', 'domain', 'connector', 'locale', 'topics', 'score', 'why_this', 'explanation_codes', 'freshness', 'integrity', 'source', 'author', 'published_at', 'updated_at', 'format', 'verification', 'status', 'evidence_level', 'edition' );
 		$out = array();
-		foreach ( $allowed as $key ) {
+		if ( isset( $item['key'] ) ) { $out['key'] = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $item['key'] ) ); }
+		foreach ( array( 'title' => 240, 'excerpt' => 2000, 'source' => 191, 'author' => 191, 'published_at' => 64, 'updated_at' => 64, 'edition' => 120 ) as $key => $limit ) {
 			if ( array_key_exists( $key, $item ) ) {
-				$out[ $key ] = $item[ $key ];
+				$value = 'excerpt' === $key ? wp_strip_all_tags( (string) $item[ $key ] ) : sanitize_text_field( (string) $item[ $key ] );
+				$out[ $key ] = function_exists( 'mb_substr' ) ? mb_substr( $value, 0, $limit, 'UTF-8' ) : substr( $value, 0, $limit );
 			}
+		}
+		foreach ( array( 'url', 'canonical_url' ) as $key ) {
+			if ( array_key_exists( $key, $item ) ) { $out[ $key ] = esc_url_raw( (string) $item[ $key ], array( 'http', 'https' ) ); }
+		}
+		foreach ( array( 'entity_type', 'domain', 'connector', 'format', 'verification', 'status', 'evidence_level' ) as $key ) {
+			if ( array_key_exists( $key, $item ) ) { $out[ $key ] = sanitize_key( (string) $item[ $key ] ); }
+		}
+		if ( array_key_exists( 'locale', $item ) ) { $out['locale'] = substr( sanitize_text_field( (string) $item['locale'] ), 0, 20 ); }
+		if ( array_key_exists( 'score', $item ) && is_numeric( $item['score'] ) ) { $out['score'] = max( -1000000, min( 1000000, (float) $item['score'] ) ); }
+		if ( array_key_exists( 'topics', $item ) ) {
+			$topics = is_array( $item['topics'] ) ? $item['topics'] : array();
+			$out['topics'] = array_slice( array_values( array_filter( array_map( 'sanitize_key', $topics ) ) ), 0, 50 );
+		}
+		foreach ( array( 'why_this', 'explanation_codes', 'freshness', 'integrity' ) as $key ) {
+			if ( array_key_exists( $key, $item ) && is_array( $item[ $key ] ) ) { $out[ $key ] = $item[ $key ]; }
 		}
 		return $out;
 	}
