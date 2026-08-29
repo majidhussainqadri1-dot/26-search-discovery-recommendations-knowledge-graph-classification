@@ -4,142 +4,39 @@ defined( 'ABSPATH' ) || exit;
 
 final class REST {
 	private $namespace = 'sabri-search/v1';
-	private $search;
-	private $recommendations;
-	private $taxonomy;
-	private $graph;
-	private $indexer;
-	private $health;
-	private $security;
-	private $connectors;
-	private $governance;
-	private $doctor_ranking;
-	private $doctor_appeals;
+	private $search; private $recommendations; private $taxonomy; private $graph; private $indexer; private $health; private $security; private $connectors; private $governance; private $doctor_ranking; private $doctor_appeals;
 
 	public function __construct( Search $search, Recommendations $recommendations, Taxonomy $taxonomy, Graph $graph, Indexer $indexer, Health $health, Security $security, Connectors $connectors, Governance $governance, Doctor_Ranking $doctor_ranking, Doctor_Appeals $doctor_appeals ) {
-		$this->search = $search; $this->recommendations = $recommendations; $this->taxonomy = $taxonomy; $this->graph = $graph;
-		$this->indexer = $indexer; $this->health = $health; $this->security = $security; $this->connectors = $connectors;
-		$this->governance = $governance; $this->doctor_ranking = $doctor_ranking; $this->doctor_appeals = $doctor_appeals;
+		$this->search=$search;$this->recommendations=$recommendations;$this->taxonomy=$taxonomy;$this->graph=$graph;$this->indexer=$indexer;$this->health=$health;$this->security=$security;$this->connectors=$connectors;$this->governance=$governance;$this->doctor_ranking=$doctor_ranking;$this->doctor_appeals=$doctor_appeals;
 	}
 
 	public function register() {
-		$this->route( '/search', 'GET', 'search', '__return_true' );
-		$this->route( '/suggest', 'GET', 'suggest', '__return_true' );
-		$this->route( '/discover', 'GET', 'discover', '__return_true' );
-		$this->route( '/feedback', 'POST', 'feedback', 'logged_in' );
-		$this->route( '/personalization/consent', 'POST', 'consent', 'logged_in' );
-		$this->route( '/personalization/interests', 'POST', 'interests', 'logged_in' );
-		$this->route( '/personalization/reset', 'POST', 'reset', 'logged_in' );
-		$this->route( '/personalization/opt-out', 'POST', 'opt_out', 'logged_in' );
-		$this->route( '/topics/(?P<term>[a-zA-Z0-9\-_]+)', 'GET', 'topic', '__return_true' );
-		$this->route( '/graph/(?P<key>[a-f0-9]{64})', 'GET', 'graph', '__return_true' );
-		$this->route( '/doctors/ranking', 'GET', 'doctor_ranking', '__return_true' );
-		$this->route( '/doctors/ranking/appeals', 'POST', 'submit_doctor_appeal', 'logged_in' );
-		$this->route( '/doctors/ranking/appeals/mine', 'GET', 'own_doctor_appeals', 'logged_in' );
-		$this->route( '/admin/doctors/ranking/appeals/(?P<appeal>[a-f0-9-]{36})/review', 'POST', 'review_doctor_appeal', 'can_approve_ranking' );
-		$this->route( '/health', 'GET', 'health', 'can_audit' );
-		$this->route( '/admin/reindex', 'POST', 'reindex', 'can_operate' );
-		$this->route( '/admin/reconcile', 'POST', 'reconcile', 'can_operate' );
-		$this->route( '/admin/taxonomy', 'POST', 'create_term', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/submit', 'POST', 'submit_term', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/approve', 'POST', 'approve_term', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/deprecate', 'POST', 'deprecate_term', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge-preview', 'POST', 'merge_preview', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge', 'POST', 'merge_term', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split-preview', 'POST', 'split_preview', 'can_curate' );
-		$this->route( '/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split', 'POST', 'split_term', 'can_curate' );
-		$this->route( '/admin/graph/edge', 'POST', 'create_edge', 'can_curate' );
-		$this->route( '/admin/connectors/(?P<slug>[a-z0-9_-]+)/transition', 'POST', 'transition_connector', 'can_operate' );
-		$this->route( '/admin/ranking/stage', 'POST', 'stage_ranking', 'can_approve_ranking' );
-		$this->route( '/admin/ranking/(?P<policy>[a-f0-9-]+)/second-approve', 'POST', 'second_approve_ranking', 'can_approve_ranking' );
-		$this->route( '/admin/ranking/(?P<policy>[a-f0-9-]+)/activate', 'POST', 'activate_ranking', 'can_approve_ranking' );
-		$this->route( '/admin/ranking/(?P<policy>[a-f0-9-]+)/rollback-second-approve', 'POST', 'second_approve_ranking_rollback', 'can_approve_ranking' );
-		$this->route( '/admin/ranking/(?P<policy>[a-f0-9-]+)/rollback', 'POST', 'rollback_ranking', 'can_approve_ranking' );
-		$this->route( '/admin/classification/review', 'POST', 'review_classification', 'can_curate' );
-		$this->route( '/admin/graph/(?P<edge>[a-f0-9-]+)/transition', 'POST', 'transition_edge', 'can_curate' );
-		$this->route( '/admin/reports', 'GET', 'reports', 'can_audit' );
+		$this->route('/search','GET','search','__return_true');$this->route('/suggest','GET','suggest','__return_true');$this->route('/discover','GET','discover','__return_true');
+		$this->route('/feedback','POST','feedback','logged_in');$this->route('/personalization/consent','POST','consent','logged_in');$this->route('/personalization/interests','POST','interests','logged_in');$this->route('/personalization/reset','POST','reset','logged_in');$this->route('/personalization/opt-out','POST','opt_out','logged_in');
+		$this->route('/topics/(?P<term>[a-zA-Z0-9\-_]+)','GET','topic','__return_true');$this->route('/graph/(?P<key>[a-f0-9]{64})','GET','graph','__return_true');$this->route('/doctors/ranking','GET','doctor_ranking','__return_true');
+		$this->route('/doctors/ranking/appeals','POST','submit_doctor_appeal','logged_in');$this->route('/doctors/ranking/appeals/mine','GET','own_doctor_appeals','logged_in');$this->route('/admin/doctors/ranking/appeals/(?P<appeal>[a-f0-9-]{36})/review','POST','review_doctor_appeal','can_approve_ranking');
+		$this->route('/health','GET','health','can_audit');$this->route('/admin/reindex','POST','reindex','can_operate');$this->route('/admin/reconcile','POST','reconcile','can_operate');
+		$this->route('/admin/taxonomy','POST','create_term','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/submit','POST','submit_term','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/approve','POST','approve_term','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/deprecate','POST','deprecate_term','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge-preview','POST','merge_preview','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/merge','POST','merge_term','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split-preview','POST','split_preview','can_curate');$this->route('/admin/taxonomy/(?P<term>[a-f0-9\-]{36})/split','POST','split_term','can_curate');
+		$this->route('/admin/graph/edge','POST','create_edge','can_curate');$this->route('/admin/connectors/(?P<slug>[a-z0-9_-]+)/transition','POST','transition_connector','can_operate');
+		$this->route('/admin/ranking/stage','POST','stage_ranking','can_approve_ranking');$this->route('/admin/ranking/(?P<policy>[a-f0-9-]+)/second-approve','POST','second_approve_ranking','can_approve_ranking');$this->route('/admin/ranking/(?P<policy>[a-f0-9-]+)/activate','POST','activate_ranking','can_approve_ranking');$this->route('/admin/ranking/(?P<policy>[a-f0-9-]+)/rollback-second-approve','POST','second_approve_ranking_rollback','can_approve_ranking');$this->route('/admin/ranking/(?P<policy>[a-f0-9-]+)/rollback','POST','rollback_ranking','can_approve_ranking');
+		$this->route('/admin/classification/review','POST','review_classification','can_curate');$this->route('/admin/graph/(?P<edge>[a-f0-9-]+)/transition','POST','transition_edge','can_curate');$this->route('/admin/reports','GET','reports','can_audit');
 	}
+	private function route($path,$methods,$callback,$permission){register_rest_route($this->namespace,$path,array('methods'=>$methods,'callback'=>array($this,$callback),'permission_callback'=>'__return_true'===$permission?'__return_true':array($this,$permission)));}
 
-	private function route( $path, $methods, $callback, $permission ) {
-		register_rest_route( $this->namespace, $path, array( 'methods' => $methods, 'callback' => array( $this, $callback ), 'permission_callback' => '__return_true' === $permission ? '__return_true' : array( $this, $permission ) ) );
-	}
+	public function search(\WP_REST_Request $request){$filters=array();foreach(array('entity_type','country','location','availability','connector','domain','topic','sort','author','language','date_from','date_to') as $key){if(null!==$request->get_param($key)){$filters[$key]=$request->get_param($key);}}$query=$request->get_param('q');$data=$this->search->run(array('q'=>$query,'locale'=>$request->get_param('locale'),'cursor'=>$request->get_param('cursor'),'limit'=>$request->get_param('limit'),'filters'=>$filters));$cacheable=!$this->security->contains_sensitive_query($query)&&empty($filters['availability']);return $this->respond($data,200,$cacheable);}
+	public function suggest(\WP_REST_Request $request){$query=$request->get_param('q');return $this->respond(array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'suggestions'=>$this->search->suggest($query,$request->get_param('locale'),$request->get_param('limit')?:8)),200,!$this->security->contains_sensitive_query($query));}
+	public function discover(\WP_REST_Request $request){$session_topics=array_values(array_filter((array)$request->get_param('session_topics')));$data=$this->recommendations->get(array('context'=>$request->get_param('context')?:'discover','limit'=>$request->get_param('limit')?:12,'cursor'=>$request->get_param('cursor'),'locale'=>$request->get_param('locale'),'session_topics'=>$session_topics));return $this->respond($data,200,!is_user_logged_in()&&empty($session_topics));}
+	public function feedback(\WP_REST_Request $request){return $this->respond($this->recommendations->record_feedback((array)$request->get_json_params()),201);} public function consent(\WP_REST_Request $request){return $this->respond($this->recommendations->set_consent((bool)$request->get_param('consent')));} public function interests(\WP_REST_Request $request){return $this->respond($this->recommendations->set_interests((array)$request->get_param('interests')));} public function reset(){return $this->respond($this->recommendations->reset());} public function opt_out(){return $this->respond($this->recommendations->opt_out());}
 
-	public function search( \WP_REST_Request $request ) {
-		$filters = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to' ) as $key ) { if ( null !== $request->get_param( $key ) ) { $filters[ $key ] = $request->get_param( $key ); } }
-		$query = $request->get_param( 'q' );
-		$data = $this->search->run( array( 'q' => $query, 'locale' => $request->get_param( 'locale' ), 'cursor' => $request->get_param( 'cursor' ), 'limit' => $request->get_param( 'limit' ), 'filters' => $filters ) );
-		return $this->respond( $data, 200, ! $this->security->contains_sensitive_query( $query ) );
-	}
+	public function topic(\WP_REST_Request $request){$term=$this->taxonomy->get($request['term']);if(!$term||!in_array($term['status'],array('active','merged'),true)){return new \WP_Error('file26_topic_not_found','Topic not found.',array('status'=>404));}if('merged'===$term['status']&&!empty($term['redirect_uuid'])){$redirect=$this->taxonomy->get($term['redirect_uuid']);if($redirect&&'active'===$redirect['status']){$term=$redirect;}else{return new \WP_Error('file26_topic_not_found','Topic redirect is no longer available.',array('status'=>404));}}$results=$this->search->run(array('q'=>'','locale'=>$term['language'],'limit'=>20,'filters'=>array('topic'=>$term['term_uuid'])));return $this->respond(array('term'=>$term,'related'=>is_wp_error($results)?array():$results['results'],'partial'=>is_wp_error($results)?true:$results['partial'],'partial_domains'=>is_wp_error($results)?array(array('health'=>'search_unavailable')):$results['partial_domains'],'contract_version'=>SABRI_FILE26_CONTRACT_VERSION),200,true);}
+	public function graph(\WP_REST_Request $request){return $this->respond($this->graph->query($request['key'],$request->get_param('depth')?:1,$request->get_param('degree')?:10,(array)$request->get_param('types')),200,true);} public function doctor_ranking(\WP_REST_Request $request){return $this->respond($this->doctor_ranking->directory(array('context'=>$request->get_param('context')?:'global','value'=>$request->get_param('value'),'tier'=>$request->get_param('tier')?:'all_verified','limit'=>$request->get_param('limit')?:20,'cursor'=>$request->get_param('cursor'))),200,true);}
+	public function submit_doctor_appeal(\WP_REST_Request $request){$p=(array)$request->get_json_params();return $this->respond($this->doctor_appeals->submit(isset($p['doctor_key'])?$p['doctor_key']:'',isset($p['reason'])?$p['reason']:'',isset($p['evidence'])&&is_array($p['evidence'])?$p['evidence']:array()),201);} public function own_doctor_appeals(){return $this->respond(array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'appeals'=>$this->doctor_appeals->own()));} public function review_doctor_appeal(\WP_REST_Request $request){$p=(array)$request->get_json_params();return $this->respond($this->doctor_appeals->review($request['appeal'],isset($p['decision'])?$p['decision']:'',isset($p['reason'])?$p['reason']:'',isset($p['expected_version'])?$p['expected_version']:0));}
+	public function health(){return $this->respond($this->health->snapshot());} public function reindex(\WP_REST_Request $request){$job=$this->indexer->enqueue_reindex(sanitize_key($request->get_param('connector')),(array)$request->get_param('scope'));return is_wp_error($job)?$job:$this->respond(array('job_uuid'=>$job),202);} public function reconcile(){$result=$this->indexer->reconcile();return is_wp_error($result)?$result:$this->respond($result);}
+	public function create_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->create((array)$request->get_json_params()),201);} public function submit_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->submit($request['term']));} public function approve_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->approve($request['term']));} public function deprecate_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->deprecate($request['term'],$request->get_param('redirect_uuid'),$request->get_param('reason')));} public function merge_preview(\WP_REST_Request $request){return $this->respond($this->taxonomy->merge_preview($request['term'],$request->get_param('target_uuid')));} public function merge_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->merge($request['term'],$request->get_param('target_uuid'),$request->get_param('reason')));} public function split_preview(\WP_REST_Request $request){return $this->respond($this->taxonomy->split_preview($request['term'],(array)$request->get_param('targets')));} public function split_term(\WP_REST_Request $request){return $this->respond($this->taxonomy->split($request['term'],(array)$request->get_param('targets'),$request->get_param('reason')),201);}
+	public function create_edge(\WP_REST_Request $request){$edge=$this->graph->create_edge((array)$request->get_json_params());return is_wp_error($edge)?$edge:$this->respond(array('edge_uuid'=>$edge),201);} public function transition_connector(\WP_REST_Request $request){return $this->respond($this->governance->transition_connector($request['slug'],$request->get_param('target'),$request->get_param('reason')));} public function stage_ranking(\WP_REST_Request $request){$uuid=$this->governance->stage_ranking_policy((array)$request->get_json_params());return is_wp_error($uuid)?$uuid:$this->respond(array('policy_uuid'=>$uuid),201);} public function second_approve_ranking(\WP_REST_Request $request){return $this->respond($this->governance->second_approve_ranking_policy($request['policy']));} public function activate_ranking(\WP_REST_Request $request){return $this->respond($this->governance->activate_ranking_policy($request['policy'],$request->get_param('second_approver_id'),$request->get_param('reason')));} public function second_approve_ranking_rollback(\WP_REST_Request $request){return $this->respond($this->governance->second_approve_ranking_rollback($request['policy']));} public function rollback_ranking(\WP_REST_Request $request){return $this->respond($this->governance->rollback_ranking_policy($request['policy'],$request->get_param('reason'),$request->get_param('second_approver_id')));} public function review_classification(\WP_REST_Request $request){return $this->respond($this->governance->review_classification($request->get_param('object_key'),$request->get_param('term_uuid'),$request->get_param('decision'),$request->get_param('reason'),(int)$request->get_param('expected_version')));} public function transition_edge(\WP_REST_Request $request){return $this->respond($this->governance->transition_edge($request['edge'],$request->get_param('target'),$request->get_param('reason')));} public function reports(){return $this->respond($this->governance->reports());}
 
-	public function suggest( \WP_REST_Request $request ) {
-		$query = $request->get_param( 'q' );
-		return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'suggestions' => $this->search->suggest( $query, $request->get_param( 'locale' ), $request->get_param( 'limit' ) ?: 8 ) ), 200, ! $this->security->contains_sensitive_query( $query ) );
-	}
+	public function logged_in(){if(!is_user_logged_in()){return new \WP_Error('file26_auth_required','Authentication is required.',array('status'=>401));}$audience=$this->security->audience();return !empty($audience['valid'])&&empty($audience['suspended'])?true:new \WP_Error('file26_membership_invalid','A current, non-suspended membership assertion is required.',array('status'=>403));}
+	public function can_operate(){return $this->security->can_operate();} public function can_curate(){return $this->security->can_curate();} public function can_approve_ranking(){return $this->security->can_approve_ranking();} public function can_audit(){return $this->security->can_audit();}
 
-	public function discover( \WP_REST_Request $request ) {
-		$session_topics = array_values( array_filter( (array) $request->get_param( 'session_topics' ) ) );
-		$data = $this->recommendations->get( array( 'context' => $request->get_param( 'context' ) ?: 'discover', 'limit' => $request->get_param( 'limit' ) ?: 12, 'cursor' => $request->get_param( 'cursor' ), 'locale' => $request->get_param( 'locale' ), 'session_topics' => $session_topics ) );
-		return $this->respond( $data, 200, ! is_user_logged_in() && empty( $session_topics ) );
-	}
-
-	public function feedback( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->record_feedback( (array) $request->get_json_params() ), 201 ); }
-	public function consent( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->set_consent( (bool) $request->get_param( 'consent' ) ) ); }
-	public function interests( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->set_interests( (array) $request->get_param( 'interests' ) ) ); }
-	public function reset() { return $this->respond( $this->recommendations->reset() ); }
-	public function opt_out() { return $this->respond( $this->recommendations->opt_out() ); }
-
-	public function topic( \WP_REST_Request $request ) {
-		$term = $this->taxonomy->get( $request['term'] );
-		if ( ! $term || ! in_array( $term['status'], array( 'active', 'merged' ), true ) ) { return new \WP_Error( 'file26_topic_not_found', 'Topic not found.', array( 'status' => 404 ) ); }
-		if ( 'merged' === $term['status'] && ! empty( $term['redirect_uuid'] ) ) {
-			$redirect = $this->taxonomy->get( $term['redirect_uuid'] );
-			if ( $redirect && 'active' === $redirect['status'] ) { $term = $redirect; } else { return new \WP_Error( 'file26_topic_not_found', 'Topic redirect is no longer available.', array( 'status' => 404 ) ); }
-		}
-		$results = $this->search->run( array( 'q' => '', 'locale' => $term['language'], 'limit' => 20, 'filters' => array( 'topic' => $term['term_uuid'] ) ) );
-		return $this->respond( array( 'term' => $term, 'related' => is_wp_error( $results ) ? array() : $results['results'], 'partial' => is_wp_error( $results ) ? true : $results['partial'], 'partial_domains' => is_wp_error( $results ) ? array( array( 'health' => 'search_unavailable' ) ) : $results['partial_domains'], 'contract_version' => SABRI_FILE26_CONTRACT_VERSION ), 200, true );
-	}
-
-	public function graph( \WP_REST_Request $request ) { return $this->respond( $this->graph->query( $request['key'], $request->get_param( 'depth' ) ?: 1, $request->get_param( 'degree' ) ?: 10, (array) $request->get_param( 'types' ) ), 200, true ); }
-	public function doctor_ranking( \WP_REST_Request $request ) { return $this->respond( $this->doctor_ranking->directory( array( 'context' => $request->get_param( 'context' ) ?: 'global', 'value' => $request->get_param( 'value' ), 'tier' => $request->get_param( 'tier' ) ?: 'all_verified', 'limit' => $request->get_param( 'limit' ) ?: 20, 'cursor' => $request->get_param( 'cursor' ) ) ), 200, true ); }
-	public function submit_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->submit( isset( $p['doctor_key'] ) ? $p['doctor_key'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['evidence'] ) && is_array( $p['evidence'] ) ? $p['evidence'] : array() ), 201 ); }
-	public function own_doctor_appeals() { return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'appeals' => $this->doctor_appeals->own() ) ); }
-	public function review_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->review( $request['appeal'], isset( $p['decision'] ) ? $p['decision'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['expected_version'] ) ? $p['expected_version'] : 0 ) ); }
-	public function health() { return $this->respond( $this->health->snapshot() ); }
-	public function reindex( \WP_REST_Request $request ) { $job = $this->indexer->enqueue_reindex( sanitize_key( $request->get_param( 'connector' ) ), (array) $request->get_param( 'scope' ) ); return is_wp_error( $job ) ? $job : $this->respond( array( 'job_uuid' => $job ), 202 ); }
-	public function reconcile() { $this->indexer->reconcile(); return $this->respond( array( 'reconciled' => true ) ); }
-	public function create_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->create( (array) $request->get_json_params() ), 201 ); }
-	public function submit_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->submit( $request['term'] ) ); }
-	public function approve_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->approve( $request['term'] ) ); }
-	public function deprecate_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->deprecate( $request['term'], $request->get_param( 'redirect_uuid' ), $request->get_param( 'reason' ) ) ); }
-	public function merge_preview( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->merge_preview( $request['term'], $request->get_param( 'target_uuid' ) ) ); }
-	public function merge_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->merge( $request['term'], $request->get_param( 'target_uuid' ), $request->get_param( 'reason' ) ) ); }
-	public function split_preview( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->split_preview( $request['term'], (array) $request->get_param( 'targets' ) ) ); }
-	public function split_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->split( $request['term'], (array) $request->get_param( 'targets' ), $request->get_param( 'reason' ) ), 201 ); }
-	public function create_edge( \WP_REST_Request $request ) { $edge = $this->graph->create_edge( (array) $request->get_json_params() ); return is_wp_error( $edge ) ? $edge : $this->respond( array( 'edge_uuid' => $edge ), 201 ); }
-	public function transition_connector( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_connector( $request['slug'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
-	public function stage_ranking( \WP_REST_Request $request ) { $uuid = $this->governance->stage_ranking_policy( (array) $request->get_json_params() ); return is_wp_error( $uuid ) ? $uuid : $this->respond( array( 'policy_uuid' => $uuid ), 201 ); }
-	public function second_approve_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->second_approve_ranking_policy( $request['policy'] ) ); }
-	public function activate_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->activate_ranking_policy( $request['policy'], $request->get_param( 'second_approver_id' ), $request->get_param( 'reason' ) ) ); }
-	public function second_approve_ranking_rollback( \WP_REST_Request $request ) { return $this->respond( $this->governance->second_approve_ranking_rollback( $request['policy'] ) ); }
-	public function rollback_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->rollback_ranking_policy( $request['policy'], $request->get_param( 'reason' ), $request->get_param( 'second_approver_id' ) ) ); }
-	public function review_classification( \WP_REST_Request $request ) { return $this->respond( $this->governance->review_classification( $request->get_param( 'object_key' ), $request->get_param( 'term_uuid' ), $request->get_param( 'decision' ), $request->get_param( 'reason' ), (int) $request->get_param( 'expected_version' ) ) ); }
-	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
-	public function reports() { return $this->respond( $this->governance->reports() ); }
-
-	public function logged_in() { return is_user_logged_in(); }
-	public function can_operate() { return $this->security->can_operate(); }
-	public function can_curate() { return $this->security->can_curate(); }
-	public function can_approve_ranking() { return $this->security->can_approve_ranking(); }
-	public function can_audit() { return $this->security->can_audit(); }
-
-	private function respond( $data, $status = 200, $public_cache = false ) {
-		if ( is_wp_error( $data ) ) { return $data; }
-		$response = new \WP_REST_Response( $data, $status );
-		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
-		$response->header( 'X-Content-Type-Options', 'nosniff' );
-		if ( $public_cache && ! is_user_logged_in() ) { $response->header( 'Cache-Control', 'public, max-age=60, stale-while-revalidate=120' ); $response->header( 'ETag', '"' . hash( 'sha256', wp_json_encode( $data ) ) . '"' ); }
-		else { $response->header( 'Cache-Control', 'private, no-store' ); }
-		return $response;
-	}
+	private function respond($data,$status=200,$public_cache=false){if(is_wp_error($data)){return $data;}$response=new \WP_REST_Response($data,$status);$response->header('X-Sabri-File26-Contract',SABRI_FILE26_CONTRACT_VERSION);$response->header('X-Content-Type-Options','nosniff');if($public_cache&&!is_user_logged_in()){$response->header('Cache-Control','public, max-age=60, stale-while-revalidate=120');$response->header('ETag','"'.hash('sha256',wp_json_encode($data)).'"');}else{$response->header('Cache-Control','private, no-store');}return $response;}
 }
