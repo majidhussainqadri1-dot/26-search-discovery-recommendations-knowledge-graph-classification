@@ -7,7 +7,9 @@ trait Future_Multimodal_Trait {
 		$params = $this->params( $request );
 		$asset = isset( $params['asset'] ) && is_array( $params['asset'] ) ? $params['asset'] : array();
 		$asset_kind = isset( $asset['kind'] ) ? sanitize_key( (string) $asset['kind'] ) : '';
-		if ( ! empty( $asset['patient_image'] ) || ! empty( $params['diagnose'] ) || in_array( $asset_kind, array( 'patient_image', 'clinical_image', 'patient_photo' ), true ) ) {
+		$patient_image = isset( $asset['patient_image'] ) && $this->security->normalize_authorization( $asset['patient_image'] );
+		$diagnose = isset( $params['diagnose'] ) && $this->security->normalize_authorization( $params['diagnose'] );
+		if ( $patient_image || $diagnose || in_array( $asset_kind, array( 'patient_image', 'clinical_image', 'patient_photo' ), true ) ) {
 			return new \WP_Error( 'file26_multimodal_clinical_diagnosis_prohibited', 'Patient-image diagnosis is outside File 26 multimodal search scope.', array( 'status' => 400 ) );
 		}
 		$reference = array(
@@ -32,6 +34,7 @@ trait Future_Multimodal_Trait {
 		$provider = 'client_transcript';
 		if ( '' === $transcript && ! empty( $params['audio_ref'] ) ) {
 			$audio_ref = substr( sanitize_text_field( (string) $params['audio_ref'] ), 0, 191 );
+			if ( '' === $audio_ref ) { return array( 'state' => 'transcription_unavailable_or_not_authorized', 'audio_retained_by_file26' => false, 'results' => array() ); }
 			$adapter = apply_filters( 'sabri_file26_voice_transcription_adapter', null, $audio_ref, isset( $params['locale'] ) ? substr( sanitize_text_field( (string) $params['locale'] ), 0, 20 ) : '', get_current_user_id(), array( 'authorization_attestation_required' => true ) );
 			if ( is_array( $adapter ) && 'owner_authorized' === ( isset( $adapter['authorization_attestation'] ) ? $adapter['authorization_attestation'] : '' ) && ! empty( $adapter['transcript'] ) ) { $transcript = $this->security->sanitize_query( (string) $adapter['transcript'] ); $provider = 'owner_adapter'; }
 		}
