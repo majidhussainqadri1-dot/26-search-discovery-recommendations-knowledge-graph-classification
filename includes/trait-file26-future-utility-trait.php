@@ -92,7 +92,8 @@ trait Future_Utility_Trait {
 				return true;
 			}
 		}
-		return $this->security->contains_sensitive_query( $query ) || (bool) apply_filters( 'sabri_file26_future_sensitive_query', false, $query );
+		$extension = $this->security->normalize_authorization( apply_filters( 'sabri_file26_future_sensitive_query', false, $query ) );
+		return $this->security->contains_sensitive_query( $query ) || $extension;
 	}
 
 	private function autonomous_clinical_intent( $query ) {
@@ -231,5 +232,4 @@ trait Future_Utility_Trait {
 		}
 		return $response;
 	}
-
 }
