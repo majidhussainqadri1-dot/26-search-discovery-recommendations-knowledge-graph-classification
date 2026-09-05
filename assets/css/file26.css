@@ -211,9 +211,9 @@
   box-shadow: var(--sabri-f26-shadow);
 }
 .sabri-f26__search-field { position: relative; min-inline-size: 0; }
-.sabri-f26__suggestions a { display: block; padding: .65rem; border-radius: 8px; color: inherit; text-decoration: none; }
-.sabri-f26__suggestions a:hover,
-.sabri-f26__suggestions a:focus { background: var(--sabri-f26-muted); }
+.sabri-f26__suggestions [role="option"] { display: block; padding: .65rem; border-radius: 8px; color: inherit; cursor: pointer; }
+.sabri-f26__suggestions [role="option"]:hover,
+.sabri-f26__suggestions [role="option"][aria-selected="true"] { background: var(--sabri-f26-muted); }
 
 .sabri-f26__controls { display: flex; flex-wrap: wrap; gap: .6rem; margin-block-start: .8rem; }
 .sabri-f26__why { margin-block-start: .75rem; color: var(--sabri-f26-subtle); font-size: .9rem; }
