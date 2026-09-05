@@ -34,9 +34,10 @@ trait Future_Advanced_Trait {
 		$params = $this->params( $request ); $q = $this->query( $params );
 		if ( '' === $q ) { return new \WP_Error( 'file26_query_required', 'A query is required.', array( 'status' => 400 ) ); }
 		if ( $this->sensitive_query( $q ) ) { return array( 'state' => 'sensitive_query_external_disclosure_blocked', 'results' => array(), 'merged_into_organic_ranking' => false ); }
-		if ( empty( $params['external_consent'] ) ) { return new \WP_Error( 'file26_external_evidence_consent_required', 'Explicit per-request consent is required before sending a query to an external evidence provider.', array( 'status' => 400 ) ); }
+		if ( ! $this->security->normalize_authorization( isset( $params['external_consent'] ) ? $params['external_consent'] : false ) ) { return new \WP_Error( 'file26_external_evidence_consent_required', 'Explicit per-request consent is required before sending a query to an external evidence provider.', array( 'status' => 400 ) ); }
 		$connector = isset( $params['connector'] ) ? sanitize_key( (string) $params['connector'] ) : '';
-		if ( '' === $connector || ! apply_filters( 'sabri_file26_external_evidence_connector_approved', false, $connector ) ) { return array( 'state' => 'external_connector_not_approved', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false ); }
+		$approved = '' !== $connector && $this->security->normalize_authorization( apply_filters( 'sabri_file26_external_evidence_connector_approved', false, $connector ) );
+		if ( ! $approved ) { return array( 'state' => 'external_connector_not_approved', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false ); }
 		$provided = apply_filters( 'sabri_file26_external_evidence_provider', null, $connector, $q, array( 'limit' => 20, 'must_label_external' => true, 'rights_required' => true, 'provenance_required' => true, 'eligibility_attestation_required' => true, 'explicit_request_consent' => true ) );
 		if ( ! is_array( $provided ) || 'approved_external_public' !== ( isset( $provided['eligibility_attestation'] ) ? $provided['eligibility_attestation'] : '' ) || ! isset( $provided['results'] ) || ! is_array( $provided['results'] ) ) { return array( 'state' => 'external_provider_unavailable_or_not_attested', 'connector' => $connector, 'results' => array(), 'merged_into_organic_ranking' => false ); }
 		$out = array();
