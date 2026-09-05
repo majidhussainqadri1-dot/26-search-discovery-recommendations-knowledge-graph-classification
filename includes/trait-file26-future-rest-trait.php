@@ -51,7 +51,8 @@ trait Future_Rest_Trait {
 		if ( 'member' === $auth ) { return true; }
 		if ( 'audit' === $auth ) { return $this->security->can_audit() ? true : new \WP_Error( 'file26_forbidden', 'Search audit capability is required.', array( 'status' => 403 ) ); }
 		if ( 'step_up' === $auth ) {
-			$verified = $this->security->require_step_up( 'future_' . $slug ) || (bool) apply_filters( 'sabri_file26_future_step_up_verified', false, $slug, get_current_user_id() );
+			$fallback = $this->security->normalize_authorization( apply_filters( 'sabri_file26_future_step_up_verified', false, $slug, get_current_user_id() ) );
+			$verified = $this->security->require_step_up( 'future_' . $slug ) || $fallback;
 			return $verified ? true : new \WP_Error( 'file26_step_up_required', 'Recent step-up verification is required.', array( 'status' => 403 ) );
 		}
 		return new \WP_Error( 'file26_forbidden', 'The capability is not available for this request.', array( 'status' => 403 ) );
@@ -67,8 +68,7 @@ trait Future_Rest_Trait {
 		if ( 'external-evidence' === $slug ) {
 			$q = $this->query( $params );
 			if ( $this->sensitive_query( $q ) || $this->autonomous_clinical_intent( $q ) ) { return new \WP_Error( 'file26_external_query_not_eligible', 'This query is not eligible for an external evidence request.', array( 'status' => 400 ) ); }
-			$consent = isset( $params['external_consent'] ) ? strtolower( trim( (string) $params['external_consent'] ) ) : '';
-			if ( ! in_array( $consent, array( '1', 'true', 'yes', 'consent' ), true ) ) { return new \WP_Error( 'file26_external_consent_required', 'Explicit per-request consent is required for external evidence.', array( 'status' => 400 ) ); }
+			if ( ! $this->security->normalize_authorization( isset( $params['external_consent'] ) ? $params['external_consent'] : false ) ) { return new \WP_Error( 'file26_external_consent_required', 'Explicit per-request consent is required for external evidence.', array( 'status' => 400 ) ); }
 		}
 
 		$handler = $manifest[ $slug ]['handler'];
