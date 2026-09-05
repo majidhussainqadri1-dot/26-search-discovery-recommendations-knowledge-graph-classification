@@ -117,7 +117,7 @@ trait Future_Knowledge_Trait {
 		$format = false !== strpos( $as_of, 'T' ) ? ( 19 === strlen( $as_of ) ? '!Y-m-d\TH:i:s' : '!Y-m-d\TH:i' ) : '!Y-m-d';
 		$parsed = \DateTimeImmutable::createFromFormat( $format, $as_of, new \DateTimeZone( 'UTC' ) );
 		$errors = \DateTimeImmutable::getLastErrors();
-		if ( false === $parsed || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) || $parsed->format( ltrim( $format, '!' ) ) !== $as_of ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date/time is invalid.', array( 'status' => 400 ) ); }
+		if ( false === $parsed || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) || $parsed->format( ltrim( $format, '!' ) ) !== $as_of ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date/time is invalid.', array( 'status' => 400 ) ); }
 		if ( $this->sensitive_query( $q ) ) { return array( 'state' => 'historical_provider_bypassed_for_sensitive_query', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
 		$provider_context = array(
 			'eligibility_attestation_required' => true,
