@@ -29,6 +29,7 @@
     let requestSequence = 0;
     let activeIndex = -1;
     const listId = input.getAttribute('aria-controls') || ('sabri-f26-suggestions-' + inputIndex);
+    input.setAttribute('role', 'combobox');
     input.setAttribute('aria-controls', listId);
     input.setAttribute('aria-autocomplete', 'list');
 
@@ -37,6 +38,11 @@
       return host && host.querySelector('.sabri-f26__suggestions');
     };
     const options = () => Array.from((currentList() || {querySelectorAll: () => []}).querySelectorAll('[role="option"]'));
+    const optionUrl = (item) => item && item.getAttribute('data-url') || '';
+    const activate = (item) => {
+      const url = optionUrl(item);
+      if (url) window.location.assign(url);
+    };
     const setActive = (index) => {
       const items = options();
       if (!items.length) {
@@ -70,11 +76,8 @@
         event.preventDefault();
         setActive(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
       } else if (event.key === 'Enter' && activeIndex >= 0 && items[activeIndex]) {
-        const link = items[activeIndex].querySelector('a[href]');
-        if (link) {
-          event.preventDefault();
-          link.click();
-        }
+        event.preventDefault();
+        activate(items[activeIndex]);
       }
     });
 
@@ -98,7 +101,20 @@
           list.id = listId;
           list.className = 'sabri-f26__suggestions';
           list.setAttribute('role', 'listbox');
-          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false"><a href="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</a></li>').join('');
+          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false" tabindex="-1" data-url="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</li>').join('');
+          list.addEventListener('mousedown', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option) return;
+            event.preventDefault();
+            activate(option);
+          });
+          list.addEventListener('mousemove', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option) return;
+            const items = options();
+            const index = items.indexOf(option);
+            if (index >= 0) setActive(index);
+          });
           host.appendChild(list);
           activeIndex = -1;
           input.setAttribute('aria-expanded', 'true');
