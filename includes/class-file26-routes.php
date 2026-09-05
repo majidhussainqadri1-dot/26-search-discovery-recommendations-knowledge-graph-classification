@@ -40,10 +40,12 @@ final class Routes {
 	public function template_redirect() {
 		$route = get_query_var( 'sabri_f26_route' ); if ( ! $route ) { return; }
 		$this->enqueue_assets(); status_header( 200 );
+		// All File 26 route HTML remains no-store until visibility-aware mutation-bound
+		// cache invalidation/epoch support exists. Public indexability is separate from caching.
+		nocache_headers();
 		if ( 'topic' !== $route ) {
-			nocache_headers();
 			add_filter( 'wp_robots', static function ( $robots ) { $robots['noindex'] = true; $robots['follow'] = true; return $robots; } );
-		} else { header( 'Cache-Control: public, max-age=300, stale-while-revalidate=600' ); }
+		}
 		get_header(); echo '<main id="primary" class="sabri-f26-page" tabindex="-1">';
 		if ( 'search' === $route ) { echo $this->search_shortcode(); }
 		elseif ( 'discover' === $route ) { echo $this->discover_shortcode(); }
