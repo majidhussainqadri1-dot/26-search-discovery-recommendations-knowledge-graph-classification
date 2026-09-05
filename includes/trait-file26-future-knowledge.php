@@ -54,8 +54,36 @@ trait Future_Knowledge_Trait {
 		$raw_edges = array_values( (array) $path['edges'] );
 		if ( count( $raw_edges ) > 6 ) { return new \WP_Error( 'file26_graph_depth_exceeded', 'The verified graph path exceeds the maximum depth of six edges.', array( 'status' => 409 ) ); }
 		$edges = array();
-		foreach ( $raw_edges as $edge ) { if ( ! is_array( $edge ) || empty( $edge['provenance'] ) ) { return new \WP_Error( 'file26_graph_provenance_required', 'Every graph edge must carry provenance.', array( 'status' => 409 ) ); } $clean = $this->sanitize_graph_edge( $edge ); if ( '' === $clean['provenance'] ) { return new \WP_Error( 'file26_graph_provenance_required', 'Every graph edge must retain provenance after sanitization.', array( 'status' => 409 ) ); } if ( '' === $clean['from'] || '' === $clean['to'] || ! isset( $node_ids[ $clean['from'] ], $node_ids[ $clean['to'] ] ) ) { return new \WP_Error( 'file26_graph_referential_integrity', 'Every graph edge must reference returned graph nodes.', array( 'status' => 409 ) ); } $edges[] = $clean; }
+		foreach ( $raw_edges as $edge ) {
+			if ( ! is_array( $edge ) || empty( $edge['provenance'] ) ) { return new \WP_Error( 'file26_graph_provenance_required', 'Every graph edge must carry provenance.', array( 'status' => 409 ) ); }
+			$clean = $this->sanitize_graph_edge( $edge );
+			if ( '' === $clean['provenance'] ) { return new \WP_Error( 'file26_graph_provenance_required', 'Every graph edge must retain provenance after sanitization.', array( 'status' => 409 ) ); }
+			if ( '' === $clean['owner'] || '' === $clean['type'] ) { return new \WP_Error( 'file26_graph_edge_owner_type_required', 'Every graph edge must retain owner and type identity after sanitization.', array( 'status' => 409 ) ); }
+			if ( '' === $clean['from'] || '' === $clean['to'] || ! isset( $node_ids[ $clean['from'] ], $node_ids[ $clean['to'] ] ) ) { return new \WP_Error( 'file26_graph_referential_integrity', 'Every graph edge must reference returned graph nodes.', array( 'status' => 409 ) ); }
+			$edges[] = $clean;
+		}
+		if ( ! $this->graph_path_connected( $from, $to, $edges, 6 ) ) { return new \WP_Error( 'file26_graph_path_not_connected', 'The provider response does not contain a connected path between the requested endpoints.', array( 'status' => 409 ) ); }
 		return array( 'state' => 'ok', 'from' => $from, 'to' => $to, 'nodes' => $nodes, 'edges' => $edges, 'inferred_sensitive_relationships' => false );
+	}
+
+	private function graph_path_connected( $from, $to, array $edges, $max_depth ) {
+		if ( $from === $to ) { return true; }
+		$adjacency = array();
+		foreach ( $edges as $edge ) {
+			$a = isset( $edge['from'] ) ? (string) $edge['from'] : ''; $b = isset( $edge['to'] ) ? (string) $edge['to'] : '';
+			if ( '' === $a || '' === $b ) { continue; }
+			$adjacency[ $a ][] = $b; $adjacency[ $b ][] = $a;
+		}
+		$queue = array( array( $from, 0 ) ); $seen = array( $from => true );
+		while ( $queue ) {
+			$current = array_shift( $queue ); $node = $current[0]; $depth = (int) $current[1];
+			if ( $depth >= $max_depth ) { continue; }
+			foreach ( isset( $adjacency[ $node ] ) ? array_unique( $adjacency[ $node ] ) : array() as $next ) {
+				if ( $next === $to ) { return true; }
+				if ( ! isset( $seen[ $next ] ) ) { $seen[ $next ] = true; $queue[] = array( $next, $depth + 1 ); }
+			}
+		}
+		return false;
 	}
 
 	public function evidence_map( \WP_REST_Request $request ) {
@@ -65,7 +93,13 @@ trait Future_Knowledge_Trait {
 		$map = apply_filters( 'sabri_file26_evidence_map_provider', null, $claim, array( 'allowed_relations' => array( 'supports', 'discusses', 'contradicts', 'corrects', 'retracts' ), 'public_only' => true, 'provenance_required' => true, 'eligibility_attestation_required' => true ) );
 		if ( ! is_array( $map ) || 'owner_revalidated_for_request' !== ( isset( $map['eligibility_attestation'] ) ? $map['eligibility_attestation'] : '' ) ) { return array( 'state' => 'provider_unavailable', 'claim' => $claim, 'relations' => array() ); }
 		$relations = array();
-		foreach ( array_slice( isset( $map['relations'] ) ? (array) $map['relations'] : array(), 0, 100 ) as $relation ) { if ( ! is_array( $relation ) || empty( $relation['type'] ) || empty( $relation['provenance'] ) || ! in_array( $relation['type'], array( 'supports', 'discusses', 'contradicts', 'corrects', 'retracts' ), true ) ) { continue; } $clean = $this->sanitize_evidence_relation( $relation ); if ( 64 !== strlen( $clean['source_key'] ) || '' === $clean['owner'] || '' === $clean['provenance'] ) { continue; } $relations[] = $clean; }
+		foreach ( array_slice( isset( $map['relations'] ) ? (array) $map['relations'] : array(), 0, 100 ) as $relation ) {
+			if ( ! is_array( $relation ) || empty( $relation['type'] ) || empty( $relation['provenance'] ) || ! in_array( $relation['type'], array( 'supports', 'discusses', 'contradicts', 'corrects', 'retracts' ), true ) ) { continue; }
+			$clean = $this->sanitize_evidence_relation( $relation );
+			$canonical_url = $this->security->safe_resource_url( isset( $clean['canonical_url'] ) ? $clean['canonical_url'] : '', 'evidence_map_canonical_url' );
+			if ( 64 !== strlen( $clean['source_key'] ) || '' === $clean['owner'] || '' === $clean['provenance'] || '' === $canonical_url ) { continue; }
+			$clean['canonical_url'] = $canonical_url; $relations[] = $clean;
+		}
 		return array( 'state' => 'ok', 'claim' => $claim, 'relations' => $relations, 'hidden_inference_presented_as_fact' => false );
 	}
 
@@ -83,7 +117,7 @@ trait Future_Knowledge_Trait {
 		$format = false !== strpos( $as_of, 'T' ) ? ( 19 === strlen( $as_of ) ? '!Y-m-d\TH:i:s' : '!Y-m-d\TH:i' ) : '!Y-m-d';
 		$parsed = \DateTimeImmutable::createFromFormat( $format, $as_of, new \DateTimeZone( 'UTC' ) );
 		$errors = \DateTimeImmutable::getLastErrors();
-		if ( false === $parsed || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) || $parsed->format( ltrim( $format, '!' ) ) !== $as_of ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date/time is invalid.', array( 'status' => 400 ) ); }
+		if ( false === $parsed || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) || $parsed->format( ltrim( $format, '!' ) ) !== $as_of ) { return new \WP_Error( 'file26_historical_date_invalid', 'The as_of calendar date/time is invalid.', array( 'status' => 400 ) ); }
 		if ( $this->sensitive_query( $q ) ) { return array( 'state' => 'historical_provider_bypassed_for_sensitive_query', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
 		$provider_context = array(
 			'eligibility_attestation_required' => true,
@@ -93,7 +127,8 @@ trait Future_Knowledge_Trait {
 		);
 		$snapshot = apply_filters( 'sabri_file26_historical_snapshot_search', null, $q, $as_of, $provider_context );
 		$snapshot_id = is_array( $snapshot ) && isset( $snapshot['snapshot_id'] ) ? substr( sanitize_text_field( (string) $snapshot['snapshot_id'] ), 0, 191 ) : '';
-		if ( ! is_array( $snapshot ) || '' === $snapshot_id || 'owner_revalidated_for_request' !== ( isset( $snapshot['eligibility_attestation'] ) ? $snapshot['eligibility_attestation'] : '' ) ) { return array( 'state' => 'historical_snapshot_unavailable', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
-		return array( 'state' => 'ok', 'query' => $q, 'as_of' => $as_of, 'snapshot_id' => $snapshot_id, 'results' => $this->safe_results( isset( $snapshot['results'] ) ? (array) $snapshot['results'] : array() ), 'current_results_substituted' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
+		$provenance = is_array( $snapshot ) && isset( $snapshot['provenance'] ) ? substr( sanitize_text_field( (string) $snapshot['provenance'] ), 0, 600 ) : '';
+		if ( ! is_array( $snapshot ) || '' === $snapshot_id || '' === $provenance || 'owner_revalidated_for_request' !== ( isset( $snapshot['eligibility_attestation'] ) ? $snapshot['eligibility_attestation'] : '' ) ) { return array( 'state' => 'historical_snapshot_unavailable', 'query' => $q, 'as_of' => $as_of, 'results' => array(), 'current_results_substituted' => false ); }
+		return array( 'state' => 'ok', 'query' => $q, 'as_of' => $as_of, 'snapshot_id' => $snapshot_id, 'snapshot_provenance' => $provenance, 'results' => $this->safe_results( isset( $snapshot['results'] ) ? (array) $snapshot['results'] : array() ), 'current_results_substituted' => false, 'eligibility_attestation' => 'owner_revalidated_for_request' );
 	}
 }
