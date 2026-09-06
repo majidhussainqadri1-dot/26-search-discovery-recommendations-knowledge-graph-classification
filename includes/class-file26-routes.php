@@ -38,16 +38,26 @@ final class Routes {
 	}
 
 	public function template_redirect() {
-		$route = get_query_var( 'sabri_f26_route' ); if ( ! $route ) { return; }
-		$this->enqueue_assets(); status_header( 200 );
-		if ( 'topic' !== $route ) {
+		$route = get_query_var( 'sabri_f26_route' );
+		if ( ! $route || ! in_array( $route, array( 'search', 'discover', 'topic' ), true ) ) { return; }
+		$this->enqueue_assets();
+		status_header( 200 );
+
+		// Topic HTML is shared-cacheable only for anonymous users. Authenticated topic
+		// retrieval can legitimately include member/entitled results and must never enter a shared cache.
+		if ( 'topic' === $route && ! is_user_logged_in() ) {
+			header( 'Cache-Control: public, max-age=300, stale-while-revalidate=600' );
+		} else {
 			nocache_headers();
+		}
+		if ( 'topic' !== $route ) {
 			add_filter( 'wp_robots', static function ( $robots ) { $robots['noindex'] = true; $robots['follow'] = true; return $robots; } );
-		} else { header( 'Cache-Control: public, max-age=300, stale-while-revalidate=600' ); }
+		}
+
 		get_header(); echo '<main id="primary" class="sabri-f26-page" tabindex="-1">';
 		if ( 'search' === $route ) { echo $this->search_shortcode(); }
 		elseif ( 'discover' === $route ) { echo $this->discover_shortcode(); }
-		elseif ( 'topic' === $route ) { echo $this->topic_shortcode( array( 'term' => get_query_var( 'sabri_f26_term' ) ) ); }
+		else { echo $this->topic_shortcode( array( 'term' => get_query_var( 'sabri_f26_term' ) ) ); }
 		echo '</main>'; get_footer(); exit;
 	}
 
