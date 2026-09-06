@@ -49,6 +49,7 @@ final class Connectors {
 		global $wpdb;
 		$table = DB::table( 'connectors' ); $now = DB::now();
 		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT owner_file,contract_version,status FROM $table WHERE slug=%s", $manifest['slug'] ), ARRAY_A );
+		if ( null === $existing && '' !== $wpdb->last_error ) { return new \WP_Error( 'file26_connector_governance_read_failed', 'Existing connector governance state could not be verified; registration failed closed.' ); }
 		if ( $existing && $existing['owner_file'] === $manifest['owner_file'] && $existing['contract_version'] === $manifest['contract_version'] ) { $manifest['status'] = $existing['status']; } else { $manifest['status'] = 'proposed'; }
 		$sql = $wpdb->prepare(
 			"INSERT INTO $table (slug,owner_file,contract_version,status,manifest,last_event_version,health_state,last_health,created_at,updated_at)
