@@ -17,11 +17,13 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 6 | DEFECT | Feedback/undo idempotency made operation-bound and replay-safe. GREEN `3fa9e285877be2ea057b9738b91e6937da89f5ad`. |
 | 7 | DEFECT | Blocked/restricted ranking exclusion and hard first-page concentration boundary enforced. GREEN `8186bdcba8e93ffcc49223c2ce65520381ec8e0c`. |
 | 8 | DEFECT | Taxonomy create/alias transfer/merge read/high-impact-review integrity hardened. GREEN `ded988a25e24ee93a8b2657874fa271bd5ad5482`. |
-| 9 | DEFECT | Graph traversal edge/node DB read failures could be treated as empty/revoked output. Added checked reads, audited `file26_graph_read_failed` 503 paths, and regression `tests/review-round-09-graph-read-truth-second-cycle.php`. Exact-head CI pending on this closure head. |
+| 9 | DEFECT | Graph traversal edge/node DB read failures could be treated as empty/revoked output. Added checked reads, audited `file26_graph_read_failed` 503 paths, and regression `tests/review-round-09-graph-read-truth-second-cycle.php`. Exact-head GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
+| 10 | DEFECT — FROZEN | Operation-truth defects: own doctor-appeals can wrap backend `WP_Error` inside a 200 response; governance report DB reads can fail into success-shaped payloads; health count DB failures can be cast to zero; saved-query/content-gap persistence writes can report success despite failed storage. Correction/regression/exact-head CI pending. |
 
 ## Status
 
 - Completed reviews/corrections: **9/20**
-- Defect rounds: **2, 3, 4, 5, 6, 7, 8, 9**
+- Round 10 review: **FROZEN — correction pending**
+- Defect rounds through frozen Round 10: **2, 3, 4, 5, 6, 7, 8, 9, 10**
 - Clean rounds: **1**
-- Round 10 must not begin until this exact head is GREEN.
+- Round 11 must not begin until Round 10 correction, regression and exact-head CI are GREEN.
