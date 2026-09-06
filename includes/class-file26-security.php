@@ -34,7 +34,8 @@ final class Security {
 
 	private function normalize_claim_bool($value){
 		if(is_bool($value)){return $value;}
-		if(is_int($value)||is_float($value)){if(1===(int)$value){return true;}if(0===(int)$value){return false;}return null;}
+		if(is_int($value)){if(1===$value){return true;}if(0===$value){return false;}return null;}
+		if(is_float($value)){if(1.0===$value){return true;}if(0.0===$value){return false;}return null;}
 		if(is_string($value)){$value=strtolower(trim($value));if(in_array($value,array('1','true','yes','on'),true)){return true;}if(in_array($value,array('0','false','no','off',''),true)){return false;}}
 		return null;
 	}
