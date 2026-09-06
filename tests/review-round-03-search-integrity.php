@@ -12,7 +12,7 @@ $checks = array(
 $failures = 0;
 foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
 $plugin_checks = array(
-	"add_action( 'sabri_file26_event', array( $this, 'invalidate_public_search_cache' ), 1, 2 )" => 'governed File 26 mutations invalidate shared anonymous search cache',
+	'add_action( \'sabri_file26_event\', array( $this, \'invalidate_public_search_cache\' ), 1, 2 )' => 'governed File 26 mutations invalidate shared anonymous search cache',
 	"wp_cache_flush_group( 'sabri_file26' )" => 'File 26 cache group is invalidated when supported',
 	'wp_cache_flush();' => 'older WordPress/object-cache implementations still fail safe by invalidating cache',
 );
