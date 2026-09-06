@@ -54,10 +54,10 @@ if grep -RInE --include='*.php' '(10% commission|donation_score|payment_score|fo
 if grep -RInE --include='*.php' '(SELECT|UPDATE|DELETE|INSERT).*(smc_|clinical_|message_body|payment_card)' "$ROOT/includes"; then echo 'FAIL: direct sensitive foreign-table access'; exit 1; fi
 
 printf '[11/15] Required release files and current-cycle evidence\n'
-for file in README.md readme.txt CHANGELOG.md DECISION-LOG.md LICENSE docs/ARCHITECTURE.md docs/CONNECTOR-CONTRACT.md docs/REST-CONTRACT.md docs/SECURITY-THREAT-MODEL.md docs/PRIVACY-RETENTION.md docs/MIGRATION.md docs/ROLLBACK.md docs/STAGING-ACCEPTANCE.md docs/REQUIREMENTS-TRACEABILITY.md docs/REVIEW-AND-CORRECTION-1.0.0.md docs/REVIEW-AND-CORRECTION-1.1.0.md docs/NEW-GOVERNING-PLANS-COMPLETION-1.2.0.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-2.md docs/FILE26-R62-R81-SEQUENTIAL-REVIEW-2026-08-29.md docs/QA-REPORT.md docs/SBOM.md tests/review-round-77-regressions.php tests/review-round-78-regressions.php tests/review-round-79-regressions.php tests/review-round-80-regressions.php tests/review-round-81-regressions.php; do test -s "$ROOT/$file" || { echo "FAIL: required release evidence missing: $file" >&2; exit 1; }; done
-for round in 82 83 84 85 87 88 89 90 91 92 93 94 95 96 97 98 99 100; do
+for file in README.md readme.txt CHANGELOG.md DECISION-LOG.md LICENSE docs/ARCHITECTURE.md docs/CONNECTOR-CONTRACT.md docs/REST-CONTRACT.md docs/SECURITY-THREAT-MODEL.md docs/PRIVACY-RETENTION.md docs/MIGRATION.md docs/ROLLBACK.md docs/STAGING-ACCEPTANCE.md docs/REQUIREMENTS-TRACEABILITY.md docs/REVIEW-AND-CORRECTION-1.0.0.md docs/REVIEW-AND-CORRECTION-1.1.0.md docs/NEW-GOVERNING-PLANS-COMPLETION-1.2.0.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-2.md docs/FILE26-R62-R81-SEQUENTIAL-REVIEW-2026-08-29.md docs/FILE26-R82-R101-SEQUENTIAL-REVIEW-2026-09-06.md docs/QA-REPORT.md docs/SBOM.md tests/review-round-77-regressions.php tests/review-round-78-regressions.php tests/review-round-79-regressions.php tests/review-round-80-regressions.php tests/review-round-81-regressions.php; do test -s "$ROOT/$file" || { echo "FAIL: required release evidence missing: $file" >&2; exit 1; }; done
+for round in 82 83 84 85 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101; do
     file="tests/review-round-${round}-regressions.php"
-    test -s "$ROOT/$file" || { echo "FAIL: current R82-R100 regression evidence missing: $file" >&2; exit 1; }
+    test -s "$ROOT/$file" || { echo "FAIL: current R82-R101 regression evidence missing: $file" >&2; exit 1; }
 done
 if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 && git -C "$ROOT" ls-files --error-unmatch MANIFEST.sha256 >/dev/null 2>&1; then
     echo 'FAIL: MANIFEST.sha256 must be generated from the exact build tree, not tracked as stale source evidence' >&2
@@ -72,6 +72,7 @@ grep -q 'Stable tag: 1.3.0' "$ROOT/readme.txt"
 grep -q 'F26-FUT-24' "$ROOT/docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md"
 grep -q 'R62–R81' "$ROOT/docs/QA-REPORT.md"
 grep -q 'R82–R101' "$ROOT/docs/QA-REPORT.md"
+grep -q '20/20 rounds completed' "$ROOT/docs/QA-REPORT.md"
 grep -qi '#087a4e' "$ROOT/assets/css/file26.css"
 
 printf '[13/15] Deterministic double build\n'
