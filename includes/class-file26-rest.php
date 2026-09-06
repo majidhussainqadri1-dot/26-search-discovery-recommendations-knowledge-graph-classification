@@ -103,7 +103,10 @@ final class REST {
 	public function graph( \WP_REST_Request $request ) { return $this->respond( $this->graph->query( $request['key'], $request->get_param( 'depth' ) ?: 1, $request->get_param( 'degree' ) ?: 10, (array) $request->get_param( 'types' ) ), 200, true ); }
 	public function doctor_ranking( \WP_REST_Request $request ) { return $this->respond( $this->doctor_ranking->directory( array( 'context' => $request->get_param( 'context' ) ?: 'global', 'value' => $request->get_param( 'value' ), 'tier' => $request->get_param( 'tier' ) ?: 'all_verified', 'limit' => $request->get_param( 'limit' ) ?: 20, 'cursor' => $request->get_param( 'cursor' ) ) ), 200, true ); }
 	public function submit_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->submit( isset( $p['doctor_key'] ) ? $p['doctor_key'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['evidence'] ) && is_array( $p['evidence'] ) ? $p['evidence'] : array() ), 201 ); }
-	public function own_doctor_appeals() { return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'appeals' => $this->doctor_appeals->own() ) ); }
+	public function own_doctor_appeals() {
+		$appeals = $this->doctor_appeals->own();
+		return is_wp_error( $appeals ) ? $appeals : $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'appeals' => $appeals ) );
+	}
 	public function review_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->review( $request['appeal'], isset( $p['decision'] ) ? $p['decision'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['expected_version'] ) ? $p['expected_version'] : 0 ) ); }
 	public function health() { return $this->respond( $this->health->snapshot() ); }
 	public function reindex( \WP_REST_Request $request ) { $job = $this->indexer->enqueue_reindex( sanitize_key( $request->get_param( 'connector' ) ), (array) $request->get_param( 'scope' ) ); return is_wp_error( $job ) ? $job : $this->respond( array( 'job_uuid' => $job ), 202 ); }
@@ -125,7 +128,16 @@ final class REST {
 	public function rollback_ranking( \WP_REST_Request $request ) { return $this->respond( $this->governance->rollback_ranking_policy( $request['policy'], $request->get_param( 'reason' ), $request->get_param( 'second_approver_id' ) ) ); }
 	public function review_classification( \WP_REST_Request $request ) { return $this->respond( $this->governance->review_classification( $request->get_param( 'object_key' ), $request->get_param( 'term_uuid' ), $request->get_param( 'decision' ), $request->get_param( 'reason' ), (int) $request->get_param( 'expected_version' ) ) ); }
 	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
-	public function reports() { return $this->respond( $this->governance->reports() ); }
+	public function reports() {
+		$reports = $this->governance->reports();
+		if ( is_wp_error( $reports ) ) { return $reports; }
+		foreach ( array( 'connector_health', 'jobs', 'zero_results', 'active_policies' ) as $key ) {
+			if ( ! isset( $reports[ $key ] ) || ! is_array( $reports[ $key ] ) ) {
+				return new \WP_Error( 'file26_reports_read_failed', 'Governance reports could not be read safely.', array( 'status' => 503 ) );
+			}
+		}
+		return $this->respond( $reports );
+	}
 
 	public function logged_in() { return is_user_logged_in(); }
 	public function can_operate() { return $this->security->can_operate(); }
