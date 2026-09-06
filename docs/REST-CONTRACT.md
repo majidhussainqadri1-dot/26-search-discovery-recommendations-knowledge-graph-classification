@@ -31,10 +31,10 @@ Sensitive saved-query text requires an approved encryption provider and is never
 ## Restricted operational/governance endpoints
 
 - health, reindex and reconciliation;
-- taxonomy create/submit/approve/deprecate/split;
+- taxonomy create/submit/approve/deprecate/merge/split;
 - graph-edge lifecycle;
 - connector lifecycle;
-- ranking policy stage/activate/rollback;
+- ranking policy stage/second-approve/activate/rollback;
 - classification review;
 - doctor-ranking appeal review;
 - reports;
@@ -43,8 +43,16 @@ Sensitive saved-query text requires an approved encryption provider and is never
 
 ## Response and cache law
 
-Responses use `X-Sabri-File26-Contract: 1.2` and `X-Content-Type-Options: nosniff` where File 26 builds the response. Ordinary public anonymous query responses use bounded public caching only where their eligibility context is public-safe. Personalized, authenticated, saved-query, content-gap and admin responses are `private, no-store`. The public ranking constitution may use a bounded anonymous public cache because it contains only public policy configuration.
+File 26 responses carry the versioned contract and safe content-type headers where File 26 builds the response. Dynamic eligibility-sensitive public responses are **`no-store` by default**. Public HTTP/object caching is permitted only when an explicitly approved revocation/cache-purge integration proves that access revocation, deletion, connector suspension and policy changes can invalidate stale derivatives; a separate explicit cache-allow gate must also approve the surface and TTL. Authenticated, personalized, saved-query, content-gap and admin responses remain private/no-store.
 
-Search results preserve the canonical owner reference and require owner click-time revalidation. File 26 does not convert endpoint availability, cache state or a derivative index record into authorization. Unknown/stale freshness remains explicit and never broadens access.
+The ranking constitution contains public policy data, but it is still subject to the same late File 26 cache-safety gate; public cacheability is never inferred merely from the data being public.
 
-Errors use safe WordPress REST error codes/messages and trace IDs where applicable. No API response may expose secrets, raw clinical notes, identity evidence, private-message text or unapproved raw sensitive query history.
+Search results preserve the canonical owner reference and require owner click/action-time revalidation. File 26 does not convert endpoint availability, cache state, a successful prior authorization, or a derivative index record into current authorization. Unknown/stale freshness remains explicit and never broadens access.
+
+## Error law
+
+- Database/read failures are not converted into empty-success, false 404, or partial-success responses.
+- Optimistic-concurrency conflicts remain distinct from persistence failures.
+- Public topic/search/graph/ranking surfaces preserve the underlying safe HTTP error class where available.
+- Errors use safe WordPress REST error codes/messages and trace IDs where applicable.
+- No API response may expose secrets, raw clinical notes, identity evidence, private-message text or unapproved raw sensitive query history.
