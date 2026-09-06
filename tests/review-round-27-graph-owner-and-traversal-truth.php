@@ -13,7 +13,8 @@ foreach ( array(
 ) as $needle ) {
     if ( false === strpos( $code, $needle ) ) { $fail( 'Missing graph safeguard: ' . $needle ); }
 }
-if ( false !== strpos( $code, "'owner_file' => isset( $input['owner_file'] )" ) ) {
+$forbidden_owner_input = "'owner_file' => isset( \$input['owner_file'] )";
+if ( false !== strpos( $code, $forbidden_owner_input ) ) {
     $fail( 'Graph edge ownership must not be accepted from curator input.' );
 }
 echo "PASS: round 27 graph ownership, duplicate prevention and traversal failure truth\n";
