@@ -2,16 +2,17 @@
 /** Round 18 regression: stale-worker recovery and retention DB failures must fail closed and remain observable. */
 $root = dirname( __DIR__ );
 $indexer = file_get_contents( $root . '/includes/class-file26-indexer.php' );
+$normalized = preg_replace( '/\s+/', '', $indexer );
 
 $checks = array(
-	array( $indexer, '$recovered=$wpdb->query', 'stale-worker recovery result is captured' ),
+	array( $normalized, '$recovered=$wpdb->query', 'stale-worker recovery result is captured' ),
 	array( $indexer, 'search_worker_recovery_failed', 'stale-worker recovery failure is audited' ),
 	array( $indexer, 'file26_worker_recovery_failed', 'stale-worker recovery failure stops the queue cycle' ),
-	array( $indexer, 'foreach($queries as $class=>$sql)', 'retention validates every governed deletion class' ),
-	array( $indexer, 'if(false===$result)', 'retention detects DB deletion failure' ),
+	array( $normalized, 'foreach($queriesas$class=>$sql)', 'retention validates every governed deletion class' ),
+	array( $normalized, 'if(false===$result)', 'retention detects DB deletion failure' ),
 	array( $indexer, 'search_retention_failed', 'retention failure is audited' ),
 	array( $indexer, 'file26_retention_failed', 'retention failure is returned explicitly' ),
-	array( $indexer, 'return array(\'retention\'=>true', 'retention success is explicit only after all deletion classes complete' ),
+	array( $normalized, "returnarray('retention'=>true", 'retention success is explicit only after all deletion classes complete' ),
 );
 $failures = 0;
 foreach ( $checks as $check ) {
