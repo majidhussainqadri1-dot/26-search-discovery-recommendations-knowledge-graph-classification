@@ -155,8 +155,13 @@ final class Graph {
 					ORDER BY edge_type,edge_uuid LIMIT %d",
 					$args
 				);
+				$wpdb->last_error = '';
 				$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				foreach ( $rows as $edge ) {
+				if ( null === $rows && ! empty( $wpdb->last_error ) ) {
+					$this->security->audit( 'graph_traversal_read_failed', array( 'object_type' => 'knowledge_graph', 'object_key' => $start_key ) );
+					return new \WP_Error( 'file26_graph_read_failed', 'Knowledge graph traversal could not be read safely.', array( 'status' => 503 ) );
+				}
+				foreach ( (array) $rows as $edge ) {
 					if ( ! $this->public_node_exists( $edge['target_key'] ) ) {
 						continue;
 					}
@@ -178,7 +183,12 @@ final class Graph {
 				WHERE node_key IN ($placeholders) AND state IN ('active','published','corrected') AND visibility='public'",
 				$keys
 			);
+			$wpdb->last_error = '';
 			$nodes = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $nodes && ! empty( $wpdb->last_error ) ) {
+				$this->security->audit( 'graph_node_projection_read_failed', array( 'object_type' => 'knowledge_graph', 'object_key' => $start_key ) );
+				return new \WP_Error( 'file26_graph_read_failed', 'Knowledge graph nodes could not be read safely.', array( 'status' => 503 ) );
+			}
 		}
 		// Final fail-closed recheck: a node can be revoked after traversal but before response assembly.
 		$visible_keys = array();
