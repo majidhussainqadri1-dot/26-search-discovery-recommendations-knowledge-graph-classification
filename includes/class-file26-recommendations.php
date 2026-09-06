@@ -189,6 +189,10 @@ final class Recommendations {
 			if ( ! $stored || $stored_item !== $item_key || (string) $stored['feedback_type'] !== $type || $stored_scope !== $scope_key || (string) $stored['payload'] !== $payload ) {
 				throw new \DomainException( 'idempotency_conflict' );
 			}
+			if ( 0 === (int) $feedback_write ) {
+				if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
+				return array( 'recorded' => true, 'effective_next_request' => true, 'idempotent_replay' => true, 'idempotency_key' => $idempotency_raw );
+			}
 			$rebuilt = $this->rebuild_negative_controls( $user_id );
 			if ( is_wp_error( $rebuilt ) ) { throw new \RuntimeException( 'negative_rebuild_failed' ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
@@ -206,7 +210,7 @@ final class Recommendations {
 			return new \WP_Error( 'file26_feedback_write_failed', 'Recommendation feedback could not be persisted atomically.', array( 'status' => 500 ) );
 		}
 		$this->security->audit( 'recommendation_feedback_recorded', array( 'object_type' => 'recommendation', 'object_key' => $item_key, 'reason' => $type ) );
-		return array( 'recorded' => true, 'effective_next_request' => true, 'idempotent_replay' => 0 === (int) $feedback_write, 'idempotency_key' => $idempotency_raw );
+		return array( 'recorded' => true, 'effective_next_request' => true, 'idempotent_replay' => false, 'idempotency_key' => $idempotency_raw );
 	}
 
 	private function feedback_by_idempotency( $idempotency, $user_id ) {
