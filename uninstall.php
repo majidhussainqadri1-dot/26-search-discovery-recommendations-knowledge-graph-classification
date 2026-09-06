@@ -46,12 +46,7 @@ $appeals_table = $wpdb->prefix . 'f26_ranking_appeals';
 $wpdb->query( "DROP TABLE IF EXISTS `$appeals_table`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 // Central-plan account-owned data lives in WordPress user-meta rather than File 26 tables.
-$wpdb->query(
-	$wpdb->prepare(
-		"DELETE FROM {$wpdb->usermeta} WHERE meta_key=%s",
-		'sabri_file26_saved_queries_v1'
-	)
-);
+delete_metadata( 'user', 0, 'sabri_file26_saved_queries_v1', '', true );
 
 foreach ( array(
 	'sabri_file26_settings',
