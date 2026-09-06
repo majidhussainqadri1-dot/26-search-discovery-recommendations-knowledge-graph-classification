@@ -17,6 +17,11 @@ final class Ranking {
 		return (string) $policy['version'];
 	}
 
+	public function policy_read_failed( $context = 'search', $audience = 'public' ) {
+		$policy = $this->policy( $context, $audience );
+		return ! empty( $policy['policy_read_failed'] );
+	}
+
 	public function policy( $context = 'search', $audience = 'public' ) {
 		global $wpdb;
 		$key = sanitize_key( $context ) . '|' . sanitize_key( $audience );
@@ -25,6 +30,7 @@ final class Ranking {
 		}
 		$defaults = array(
 			'version' => (string) DB::setting( 'policy_version', 'organic-1.0' ),
+			'policy_read_failed' => false,
 			'weights' => array(
 				'exact_phrase' => 18.0,
 				'title_relevance' => 10.0,
@@ -43,6 +49,7 @@ final class Ranking {
 			return $defaults;
 		}
 		$table = DB::table( 'ranking_policies' );
+		$wpdb->last_error = '';
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT version,features_json FROM $table WHERE context_name=%s AND audience=%s AND status='active' ORDER BY effective_at DESC,id DESC LIMIT 1",
@@ -51,6 +58,12 @@ final class Ranking {
 			),
 			ARRAY_A
 		);
+		if ( null === $row && '' !== (string) $wpdb->last_error ) {
+			$defaults['policy_read_failed'] = true;
+			$defaults['version'] = 'policy-unavailable';
+			$this->policy_cache[ $key ] = $defaults;
+			return $defaults;
+		}
 		if ( $row ) {
 			$features = json_decode( $row['features_json'], true );
 			$features = is_array( $features ) ? $features : array();
@@ -65,7 +78,6 @@ final class Ranking {
 					if ( isset( $features['limits'][ $name ] ) ) {
 						$defaults['limits'][ $name ] = min( 100, max( 1, (int) $features['limits'][ $name ] ) );
 					}
-				}
 			}
 			$defaults['version'] = (string) $row['version'];
 		}
