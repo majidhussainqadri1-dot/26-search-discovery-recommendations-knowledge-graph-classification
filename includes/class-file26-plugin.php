@@ -16,7 +16,7 @@ final class Plugin {
 		$this->indexer = new Indexer( $this->connectors, $this->normalizer, $this->security );
 		$this->search = new Search( $this->normalizer, $this->ranking, $this->security, $this->connectors );
 		$this->recommendations = new Recommendations( $this->search, $this->security ); $this->taxonomy = new Taxonomy( $this->normalizer, $this->security );
-		$this->graph = new Graph( $this->security ); $this->governance = new Governance( $this->security, $this->taxonomy, $this->graph );
+		$this->graph = new Graph( $this->security ); $this->governance = new Governance( $this->security, $this->taxonomy, $this->graph, $this->connectors );
 		$this->doctor_ranking = new Doctor_Ranking( $this->security ); $this->doctor_appeals = new Doctor_Appeals( $this->security );
 		$this->health = new Health( $this->connectors, $this->owner_contracts ); $this->central_plan = new Central_Plan( $this->search, $this->normalizer, $this->security, $this->ranking, $this->doctor_ranking, $this->health );
 		$this->rest = new REST( $this->search, $this->recommendations, $this->taxonomy, $this->graph, $this->indexer, $this->health, $this->security, $this->connectors, $this->governance, $this->doctor_ranking, $this->doctor_appeals );
@@ -59,17 +59,11 @@ final class Plugin {
 
 	/** Shared anonymous search responses must never survive a governed data/status mutation. */
 	public function invalidate_public_search_cache( $event = '', $payload = array() ) {
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'sabri_file26' );
-		} else {
-			wp_cache_flush();
-		}
+		if ( function_exists( 'wp_cache_flush_group' ) ) { wp_cache_flush_group( 'sabri_file26' ); } else { wp_cache_flush(); }
 	}
 
 	/** Return true only when every required table, column and index is physically present. */
-	private function physical_schema_complete() {
-		return Schema_Integrity::complete();
-	}
+	private function physical_schema_complete() { return Schema_Integrity::complete(); }
 
 	/** Serialize and complete schema changes before connectors/routes/search are exposed. */
 	private function ensure_schema_current() {
@@ -85,17 +79,14 @@ final class Plugin {
 			if ( SABRI_FILE26_SCHEMA_VERSION !== get_option( DB::OPTION_SCHEMA ) || empty( $shape['main_complete'] ) ) { DB::install_schema(); }
 			$shape = Schema_Integrity::snapshot();
 			if ( Doctor_Appeals::SCHEMA_VERSION !== get_option( Doctor_Appeals::OPTION_SCHEMA ) || empty( $shape['appeals_complete'] ) ) {
-				delete_option( Doctor_Appeals::OPTION_SCHEMA );
-				Doctor_Appeals::install_schema();
+				delete_option( Doctor_Appeals::OPTION_SCHEMA ); Doctor_Appeals::install_schema();
 			}
 			$shape = Schema_Integrity::snapshot();
 			if ( empty( $shape['complete'] ) ) { return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table, column or index is missing after migration.' ); }
 			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
 			update_option( Doctor_Appeals::OPTION_SCHEMA, Doctor_Appeals::SCHEMA_VERSION, false );
 			return true;
-		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
-		}
+		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); }
 	}
 
 	public function maybe_upgrade() { return $this->ensure_schema_current(); }
@@ -113,8 +104,7 @@ final class Plugin {
 			if ( false === $deleted ) { throw new \RuntimeException( 'Final appeal retention delete failed.' ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Appeal retention commit failed.' ); }
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' );
-			return new \WP_Error( 'file26_appeal_retention_failed', 'Doctor-ranking appeal retention could not be completed atomically.' );
+			$wpdb->query( 'ROLLBACK' ); return new \WP_Error( 'file26_appeal_retention_failed', 'Doctor-ranking appeal retention could not be completed atomically.' );
 		}
 		if ( $withdrawn || $deleted ) { $this->security->audit( 'doctor_ranking_appeal_retention', array( 'object_type' => 'ranking_appeal', 'object_key' => 'retention', 'metadata' => array( 'withdrawn_count' => max( 0, (int) $withdrawn ), 'deleted_count' => max( 0, (int) $deleted ), 'final_retention_days' => $final_days, 'open_retention_days' => $open_days ) ) ); }
 		return array( 'withdrawn' => max( 0, (int) $withdrawn ), 'deleted' => max( 0, (int) $deleted ) );
