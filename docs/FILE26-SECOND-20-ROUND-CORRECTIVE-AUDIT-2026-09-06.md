@@ -16,12 +16,12 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 | Round | Result | Frozen findings | Corrective closure |
 |---:|---|---|---|
 | 1 | CLEAN | Deterministic package build, source/package manifest parity, path safety, immutable workflow action pins, PHP 7.4/8.3 matrix, artifact generation and release/source separation are internally consistent. No new proven defect. | No production change. Exact-head CI GREEN `ef41d8337fc84ee9fab35e27bb4df22153299337`. |
-| 2 | DEFECT | `Schema_Integrity` verifies only column names and index names. It does not verify safety-critical column data types/nullability or index uniqueness/column order, so a physically incompatible schema can still be reported complete when names survive drift. | Pending correction after this frozen ledger. |
+| 2 | DEFECT | `Schema_Integrity` verified only column names and index names. It did not verify safety-critical column data types/nullability or index uniqueness/column order, so a physically incompatible schema could still be reported complete when names survived drift. | Added safety-critical `DATA_TYPE`/`COLUMN_TYPE`/nullability/length signatures and exact index uniqueness/ordered-column signatures across File 26 tables including ranking appeals. Incompatible columns/indexes now make the structural snapshot incomplete and force the existing migration fail-closed path. `tests/review-round-02-schema-signatures-second-cycle.php` protects the new invariant. Exact-head CI pending on this closure head. |
 
 ## Round status
 
-- Completed reviews: **2/20**
+- Completed reviews/corrections: **2/20**
 - Defect rounds: **2**
 - Clean rounds: **1**
 
-Round 3 must not begin until Round 2 correction, regression and exact-head CI are green.
+Round 3 must not begin until this exact head is green.
