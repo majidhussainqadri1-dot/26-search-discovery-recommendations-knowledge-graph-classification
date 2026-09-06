@@ -51,7 +51,14 @@ corrective_assert( false === strpos( $security, 'WP_CLI' ) && false !== strpos( 
 foreach ( array( 'sabri_search_operator', 'sabri_taxonomy_curator', 'sabri_ranking_approver', 'sabri_search_auditor' ) as $role ) {
 	corrective_assert( false !== strpos( $roles, $role ), "Dedicated separation-of-duties role exists: $role" );
 }
-corrective_assert( false !== strpos( $recommendations, 'session_contextual' ) && false !== strpos( $recommendations, 'never persisted by File 26' ), 'Guest/session discovery is request-bound and non-persistent.' );
+corrective_assert(
+	false !== strpos( $recommendations, "\$session_topics = isset( \$request['session_topics'] )" ) &&
+	false !== strpos( $recommendations, '} elseif ( $session_topics ) {' ) &&
+	false !== strpos( $recommendations, '$session_contextual = true;' ) &&
+	false !== strpos( $recommendations, '$interests = $session_topics;' ) &&
+	false === strpos( $recommendations, 'session_topics_json' ),
+	'Guest/session discovery is request-bound and non-persistent.'
+);
 foreach ( array( 'hide_item', 'hide_author', 'hide_topic', 'undo', 'opt_out', 'set_interests' ) as $control ) {
 	corrective_assert( false !== strpos( $recommendations, $control ), "Recommendation control is implemented: $control" );
 }
