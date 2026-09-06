@@ -30,7 +30,7 @@ This ledger is repository evidence only. Staging/live deployment, deployed datab
 | 15 | DEFECT | Migration checked tables but not physical columns/indexes. | Structural verification/repair/Health added. Final CI GREEN `e1265a13e738f46e9623e642ad1017f53fdf2eed`. |
 | 16 | DEFECT | Authenticated topic HTML could enter shared public cache; unknown route identities were intercepted. | Canonical route validation + anonymous-only public topic caching. CI GREEN `7ac7c8330e78cd8038c13117bc7d211eb78fd2b6`. |
 | 17 | DEFECT | Reconcile transaction start unchecked; admin settings success lacked persistence read-back. | Reconcile verifies START/COMMIT; admin settings verify exact persisted state. First CI caught only an interpolation-prone regression literal; literal was corrected. Final exact-head CI GREEN `bd97dc260619dcc5af59c5fb2d90e095f69d6da9`. |
-| 18 | DEFECT | Stale-worker recovery UPDATE failure was ignored and queue processing could continue with recovery state unknown. `Indexer::retention()` ignored DB failures for expired tombstone, feedback, rate-limit and audit deletion, allowing bounded-retention failure to remain silent. | Pending correction after this frozen ledger. |
+| 18 | DEFECT | Stale-worker recovery UPDATE failure was ignored and queue processing could continue with recovery state unknown. `Indexer::retention()` ignored DB failures for expired tombstone, feedback, rate-limit and audit deletion, allowing bounded-retention failure to remain silent. | Queue processing now stops with explicit audited `WP_Error` if stale-worker recovery cannot persist. Retention now checks every governed deletion class, audits/returns explicit failure, and reports counts only after all classes succeed. `tests/review-round-18-operation-durability.php` protects both durability boundaries. Exact-head CI pending on this closure head. |
 
 ## First-ten-round checkpoint
 
@@ -39,7 +39,7 @@ This ledger is repository evidence only. Staging/live deployment, deployed datab
 
 ## Round status
 
-- Completed rounds: **17/20**
-- Round 18 review: **FROZEN — correction pending**
+- Completed reviews/corrections: **18/20**
+- Round 18 exact-head CI: **PENDING on this closure head**
 
-Round 19 must not begin until Round 18 correction, regression and exact-head CI are green.
+Round 19 must not begin until this exact head is green.
