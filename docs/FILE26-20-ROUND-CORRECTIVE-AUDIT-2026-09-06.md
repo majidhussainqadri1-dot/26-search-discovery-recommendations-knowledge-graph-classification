@@ -32,16 +32,21 @@ This ledger is repository evidence only. Staging/live deployment, deployed datab
 | 17 | DEFECT | Reconcile transaction start unchecked; admin settings success lacked persistence read-back. | Reconcile verifies START/COMMIT; admin settings verify exact persisted state. First CI caught only an interpolation-prone regression literal; literal was corrected. Final exact-head CI GREEN `bd97dc260619dcc5af59c5fb2d90e095f69d6da9`. |
 | 18 | DEFECT | Stale-worker recovery UPDATE failure was ignored and queue processing could continue with recovery state unknown. `Indexer::retention()` ignored DB failures for expired tombstone, feedback, rate-limit and audit deletion, allowing bounded-retention failure to remain silent. | Queue processing now stops with explicit audited `WP_Error` if stale-worker recovery cannot persist. Retention now checks every governed deletion class, audits/returns explicit failure, and reports counts only after all classes succeed. `tests/review-round-18-operation-durability.php` protects both durability boundaries. Exact-head CI GREEN `ed07b1983ac0f9d4cb611c7ec001991f7e0e5b11`. |
 | 19 | DEFECT | Search/Discover/Topic shortcode templates used fixed DOM IDs, so multiple instances on one document could duplicate IDs and break `aria-labelledby`/label ownership. Front-end status announcements targeted the first document-wide live region instead of the initiating component. Autocomplete blur did not invalidate/abort an in-flight request, allowing a late response to reopen the list after focus left the combobox. | Rendered shortcodes now receive unique instance IDs; Search/Discover/Topic labels/headings derive IDs from the instance; search input declares combobox/listbox semantics; live-region updates are component-scoped; blur invalidates and aborts pending suggestions and late responses require active focus. `tests/review-round-19-autocomplete-accessibility.php` protects these boundaries. Exact-head CI GREEN `7224d7ac8ef3823586c49e50013ab779c148d09e`. |
-| 20 | DEFECT | Final release-evidence regression still treated the historical `docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md` as authoritative and asserted its old `17 defect / 3 clean` summary. The current 2026-09-06 ledger was only required to exist, so current 20/20 completion semantics could drift or remain incomplete while CI stayed green. | Pending correction after this frozen ledger. |
+| 20 | DEFECT | Final release-evidence regression still treated the historical `docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md` as authoritative and asserted its old `17 defect / 3 clean` summary. The current 2026-09-06 ledger was only required to exist, so current 20/20 completion semantics could drift or remain incomplete while CI stayed green. | Final release-evidence regression now binds to the current 2026-09-06 ledger, current QA-report provenance, explicit current 20/20 round sets, required current corrective regression files, immutable workflow pins, source/package review-test execution and the repository/live evidence boundary. |
 
 ## First-ten-round checkpoint
 
 - Defect rounds 1–10: **1, 2, 3, 4, 5, 6, 8, 9, 10**
 - Clean rounds 1–10: **7**
 
-## Round status
+## Final 20-round result
 
-- Completed reviews/corrections: **19/20**
-- Round 20 review: **FROZEN — correction pending**
+Review/correction count: **20/20 rounds completed**.
 
-No 20/20 completion claim is valid until Round 20 correction, regression and final exact-head CI are green.
+Defect rounds: **1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20**
+
+Clean rounds: **7, 13**
+
+All defects frozen in this audit were corrected before moving to the next round. The final exact-head GitHub Actions run for this ledger head is the authoritative automated-QA result; this document does not self-assert CI status.
+
+Repository QA does not prove Hostinger staging, live deployed code, deployed database/schema, migration execution, real connector behavior, browser/accessibility behavior, production load, restore/rollback rehearsal or monitoring. Those remain separate evidence layers.
