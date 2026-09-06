@@ -73,7 +73,8 @@ final class Indexer {
 
 	public function process_queue(){
 		global $wpdb;$table=DB::table('jobs');$timeout=max(300,min(DAY_IN_SECONDS,(int)DB::setting('job_lock_timeout_seconds',1800)));$stale_before=gmdate('Y-m-d H:i:s',time()-$timeout);$now=DB::now();
-		$wpdb->query($wpdb->prepare("UPDATE $table SET status=IF(attempts>=8,'dead_letter','retry'),error_code='worker_timeout',lock_token=NULL,available_at=%s,finished_at=IF(attempts>=8,%s,NULL),updated_at=%s WHERE status='running' AND started_at<%s",$now,$now,$now,$stale_before));
+		$recovered=$wpdb->query($wpdb->prepare("UPDATE $table SET status=IF(attempts>=8,'dead_letter','retry'),error_code='worker_timeout',lock_token=NULL,available_at=%s,finished_at=IF(attempts>=8,%s,NULL),updated_at=%s WHERE status='running' AND started_at<%s",$now,$now,$now,$stale_before));
+		if(false===$recovered){$this->security->audit('search_worker_recovery_failed',array('object_type'=>'job','object_key'=>'stale-recovery','reason'=>'db_update_failed'));return new \WP_Error('file26_worker_recovery_failed','Stale search workers could not be recovered safely.');}
 		$job=$wpdb->get_row("SELECT * FROM $table WHERE status IN ('pending','retry') AND available_at <= UTC_TIMESTAMP() ORDER BY id ASC LIMIT 1",ARRAY_A);if(!$job){return;}$token=hash('sha256',$job['job_uuid'].'|'.microtime(true));$locked=$wpdb->query($wpdb->prepare("UPDATE $table SET status='running',lock_token=%s,started_at=%s,attempts=attempts+1,updated_at=%s WHERE id=%d AND status IN ('pending','retry')",$token,DB::now(),DB::now(),$job['id']));if(1!==(int)$locked){return;}$scope=json_decode($job['scope_json'],true);$connector=is_array($scope)&&isset($scope['connector'])?$this->connectors->get($scope['connector']):null;if(!$connector||empty($connector['list_batch'])||!is_callable($connector['list_batch'])){$this->fail_job($job['id'],$token,'connector_unavailable',(int)$job['attempts']+1);return;}
 		try{$batch=call_user_func($connector['list_batch'],$job['cursor_value'],100,$scope);if(!is_array($batch)||!isset($batch['items'])||!is_array($batch['items'])){throw new \RuntimeException('Invalid connector batch.');}$counts=json_decode($job['counts_json'],true);$counts=is_array($counts)?$counts:array('processed'=>0,'failed'=>0);foreach($batch['items'] as $document){$result=$this->upsert($document);if(is_wp_error($result)){$counts['failed']++;}else{$counts['processed']++;}}$done=!empty($batch['done']);$saved=$wpdb->update($table,array('status'=>$done?'completed':'pending','cursor_value'=>isset($batch['next_cursor'])?sanitize_text_field($batch['next_cursor']):'','counts_json'=>wp_json_encode($counts),'lock_token'=>null,'available_at'=>DB::now(),'finished_at'=>$done?DB::now():null,'updated_at'=>DB::now()),array('id'=>$job['id'],'lock_token'=>$token),array('%s','%s','%s','%s','%s','%s','%s'),array('%d','%s'));if(1!==(int)$saved){$this->security->audit('search_job_lock_lost',array('object_type'=>'job','object_key'=>$job['job_uuid'],'reason'=>'completion_cas_failed'));}}
 		catch(\Throwable $e){$this->fail_job($job['id'],$token,'job_exception',(int)$job['attempts']+1);}
@@ -99,5 +100,17 @@ final class Indexer {
 		}catch(\Throwable $e){$wpdb->query('ROLLBACK');return new \WP_Error('file26_reconcile_failed','Deletion and graph reconciliation failed atomically.');}
 	}
 
-	public function retention(){global $wpdb;$wpdb->query('DELETE FROM '.DB::table('tombstones').' WHERE expires_at < UTC_TIMESTAMP()');$wpdb->query('DELETE FROM '.DB::table('feedback').' WHERE expires_at < UTC_TIMESTAMP()');$wpdb->query('DELETE FROM '.DB::table('rate_limits').' WHERE expires_at < UTC_TIMESTAMP()');$audit_days=max(365,(int)DB::setting('audit_retention_days',760));$wpdb->query($wpdb->prepare('DELETE FROM '.DB::table('audit').' WHERE created_at < %s',gmdate('Y-m-d H:i:s',time()-($audit_days*DAY_IN_SECONDS))));}
+	public function retention(){
+		global $wpdb;
+		$audit_days=max(365,(int)DB::setting('audit_retention_days',760));
+		$queries=array(
+			'tombstones'=>'DELETE FROM '.DB::table('tombstones').' WHERE expires_at < UTC_TIMESTAMP()',
+			'feedback'=>'DELETE FROM '.DB::table('feedback').' WHERE expires_at < UTC_TIMESTAMP()',
+			'rate_limits'=>'DELETE FROM '.DB::table('rate_limits').' WHERE expires_at < UTC_TIMESTAMP()',
+			'audit'=>$wpdb->prepare('DELETE FROM '.DB::table('audit').' WHERE created_at < %s',gmdate('Y-m-d H:i:s',time()-($audit_days*DAY_IN_SECONDS))),
+		);
+		$deleted=array();
+		foreach($queries as $class=>$sql){$result=$wpdb->query($sql);if(false===$result){$this->security->audit('search_retention_failed',array('object_type'=>'retention','object_key'=>$class,'reason'=>'db_delete_failed'));return new \WP_Error('file26_retention_failed','File 26 retention could not complete all required deletion classes.');}$deleted[$class]=(int)$result;}
+		return array('retention'=>true,'deleted'=>$deleted,'timestamp_utc'=>DB::now());
+	}
 }
