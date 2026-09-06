@@ -107,7 +107,7 @@ final class REST {
 	public function review_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->review( $request['appeal'], isset( $p['decision'] ) ? $p['decision'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['expected_version'] ) ? $p['expected_version'] : 0 ) ); }
 	public function health() { return $this->respond( $this->health->snapshot() ); }
 	public function reindex( \WP_REST_Request $request ) { $job = $this->indexer->enqueue_reindex( sanitize_key( $request->get_param( 'connector' ) ), (array) $request->get_param( 'scope' ) ); return is_wp_error( $job ) ? $job : $this->respond( array( 'job_uuid' => $job ), 202 ); }
-	public function reconcile() { $this->indexer->reconcile(); return $this->respond( array( 'reconciled' => true ) ); }
+	public function reconcile() { $result = $this->indexer->reconcile(); return is_wp_error( $result ) ? $result : $this->respond( array( 'reconciled' => true ) ); }
 	public function create_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->create( (array) $request->get_json_params() ), 201 ); }
 	public function submit_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->submit( $request['term'] ) ); }
 	public function approve_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->approve( $request['term'] ) ); }
