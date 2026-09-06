@@ -127,7 +127,9 @@ final class Taxonomy {
 		if ( ! $this->domain_owner_approved( 'merge', array( $source, $target ), $preview ) ) {
 			return new \WP_Error( 'file26_domain_owner_approval_required', 'Affected domain-owner approval is required for this taxonomy merge.', array( 'status' => 403 ) );
 		}
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new \WP_Error( 'file26_merge_failed', 'Taxonomy merge transaction could not start.', array( 'status' => 500 ) );
+		}
 		try {
 			$current_target = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'terms' ) . ' WHERE term_uuid=%s FOR UPDATE', $target['term_uuid'] ), ARRAY_A );
 			if ( ! $current_target || 'active' !== $current_target['status'] || (int) $current_target['version'] !== (int) $target['version'] ) {
@@ -162,7 +164,7 @@ final class Taxonomy {
 			if ( ! $this->add_alias( $target['term_uuid'], $source['preferred_label'], $source['language'] ) ) {
 				throw new \RuntimeException( 'Source label redirect alias failed.' );
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Taxonomy merge commit failed.' ); }
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_merge_failed', 'Taxonomy merge failed or changed concurrently.' );
@@ -240,7 +242,9 @@ final class Taxonomy {
 			return new \WP_Error( 'file26_domain_owner_approval_required', 'Affected domain-owner approval is required for this taxonomy split.', array( 'status' => 403 ) );
 		}
 		$created = array();
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new \WP_Error( 'file26_split_failed', 'Taxonomy split transaction could not start.', array( 'status' => 500 ) );
+		}
 		try {
 			$current_source = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'terms' ) . ' WHERE term_uuid=%s FOR UPDATE', $source['term_uuid'] ), ARRAY_A );
 			if ( ! $current_source || (int) $current_source['version'] !== (int) $source['version'] || ! in_array( $current_source['status'], array( 'active', 'corrected' ), true ) ) {
@@ -257,7 +261,7 @@ final class Taxonomy {
 			$ids = array_column( $created, 'term_uuid' );
 			$updated = $wpdb->update( DB::table( 'terms' ), array( 'status' => 'split', 'redirect_uuid' => $ids[0], 'related_json' => wp_json_encode( array( 'split_targets' => $ids ) ), 'version' => (int) $source['version'] + 1, 'updated_at' => DB::now() ), array( 'term_uuid' => $source['term_uuid'], 'version' => (int) $source['version'] ) );
 			if ( 1 !== $updated ) { throw new \RuntimeException( 'Source term changed concurrently.' ); }
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Taxonomy split commit failed.' ); }
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_split_failed', 'Taxonomy split failed or changed concurrently.', array( 'status' => 409 ) );
