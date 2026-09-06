@@ -17,6 +17,24 @@ final class Taxonomy {
 		if ( ! $this->security->can_curate() ) {
 			return new \WP_Error( 'file26_forbidden', 'Taxonomy capability is required.', array( 'status' => 403 ) );
 		}
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new \WP_Error( 'file26_term_write_failed', 'Taxonomy term transaction could not start.', array( 'status' => 500 ) );
+		}
+		$result = $this->create_in_transaction( $input );
+		if ( is_wp_error( $result ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return $result;
+		}
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_term_write_failed', 'Taxonomy term could not be committed atomically.', array( 'status' => 500 ) );
+		}
+		$this->security->audit( 'taxonomy_term_created', array( 'object_type' => 'taxonomy_term', 'object_key' => $result['term_uuid'] ) );
+		return $result;
+	}
+
+	private function create_in_transaction( array $input ) {
+		global $wpdb;
 		$label = isset( $input['preferred_label'] ) ? sanitize_text_field( $input['preferred_label'] ) : '';
 		$language = isset( $input['language'] ) ? substr( sanitize_text_field( $input['language'] ), 0, 20 ) : 'en-US';
 		$slug = isset( $input['slug'] ) ? sanitize_title( $input['slug'] ) : sanitize_title( $label );
@@ -49,8 +67,8 @@ final class Taxonomy {
 				return new \WP_Error( 'file26_alias_write_failed', 'A taxonomy alias could not be stored.' );
 			}
 		}
-		$this->security->audit( 'taxonomy_term_created', array( 'object_type' => 'taxonomy_term', 'object_key' => $uuid ) );
-		return $this->get( $uuid );
+		$created = $this->get( $uuid );
+		return $created ? $created : new \WP_Error( 'file26_term_write_failed', 'Taxonomy term could not be read after creation.', array( 'status' => 500 ) );
 	}
 
 	public function approve( $uuid ) {
@@ -141,8 +159,10 @@ final class Taxonomy {
 				array( 'term_uuid' => $source['term_uuid'], 'version' => (int) $source['version'] )
 			);
 			if ( 1 !== $term_updated ) { throw new \RuntimeException( 'Concurrent term update.' ); }
+			$wpdb->last_error = '';
 			$assignments = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'classifications' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ), ARRAY_A );
-			foreach ( $assignments as $assignment ) {
+			if ( null === $assignments && ! empty( $wpdb->last_error ) ) { throw new \RuntimeException( 'Classification source read failed.' ); }
+			foreach ( (array) $assignments as $assignment ) {
 				$sql = $wpdb->prepare(
 					'INSERT INTO ' . DB::table( 'classifications' ) . ' (object_key,term_uuid,confidence,method,method_version,reviewer_id,status,provenance,version,created_at,updated_at) VALUES (%s,%s,%f,%s,%s,%d,%s,%s,%d,%s,%s) ON DUPLICATE KEY UPDATE confidence=GREATEST(confidence,VALUES(confidence)),status=IF(status=\'approved\',status,VALUES(status)),provenance=VALUES(provenance),version=version+1,updated_at=VALUES(updated_at)',
 					$assignment['object_key'], $target['term_uuid'], (float) $assignment['confidence'], $assignment['method'], $assignment['method_version'], (int) $assignment['reviewer_id'], $assignment['status'], $assignment['provenance'], (int) $assignment['version'] + 1, $assignment['created_at'], DB::now()
@@ -152,14 +172,8 @@ final class Taxonomy {
 			if ( false === $wpdb->delete( DB::table( 'classifications' ), array( 'term_uuid' => $source['term_uuid'] ), array( '%s' ) ) ) {
 				throw new \RuntimeException( 'Source classification cleanup failed.' );
 			}
-			$aliases = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT alias_label,language FROM ' . DB::table( 'term_aliases' ) . ' WHERE term_uuid=%s', $source['term_uuid'] ),
-				ARRAY_A
-			);
-			foreach ( $aliases as $alias ) {
-				if ( ! $this->add_alias( $target['term_uuid'], $alias['alias_label'], $alias['language'] ) ) {
-					throw new \RuntimeException( 'Alias merge failed.' );
-				}
+			if ( ! $this->transfer_aliases( $source['term_uuid'], $target['term_uuid'] ) ) {
+				throw new \RuntimeException( 'Alias merge failed.' );
 			}
 			if ( ! $this->add_alias( $target['term_uuid'], $source['preferred_label'], $source['language'] ) ) {
 				throw new \RuntimeException( 'Source label redirect alias failed.' );
@@ -254,7 +268,7 @@ final class Taxonomy {
 				$target = is_array( $target ) ? $target : array( 'preferred_label' => $target );
 				$target['language'] = isset( $target['language'] ) ? $target['language'] : $source['language'];
 				$target['owner_file'] = isset( $target['owner_file'] ) ? $target['owner_file'] : $source['owner_file'];
-				$result = $this->create( $target );
+				$result = $this->create_in_transaction( $target );
 				if ( is_wp_error( $result ) ) { throw new \RuntimeException( 'Split target creation failed.' ); }
 				$created[] = $result;
 			}
@@ -331,6 +345,9 @@ final class Taxonomy {
 			return $provenance;
 		}
 		$high_impact = ! empty( $provenance['high_impact'] );
+		if ( $high_impact && 'approved' === $status && ! apply_filters( 'sabri_file26_classification_domain_reviewer_approved', false, $object_key, $term_uuid, $provenance, get_current_user_id() ) ) {
+			return new \WP_Error( 'file26_domain_review_required', 'High-impact classification requires an independent domain reviewer approval.', array( 'status' => 403 ) );
+		}
 		if ( $high_impact && $confidence < 0.95 && 'approved' === $status ) {
 			return new \WP_Error( 'file26_human_review_required', 'Low-confidence high-impact labels cannot be auto-approved.', array( 'status' => 409 ) );
 		}
@@ -393,21 +410,56 @@ final class Taxonomy {
 		global $wpdb;
 		$alias = sanitize_text_field( $alias );
 		$normalized = $this->normalizer->normalize( $alias );
+		$language = substr( sanitize_text_field( $language ), 0, 20 );
 		if ( ! $alias || ! $normalized ) {
 			return false;
 		}
+		$wpdb->last_error = '';
+		$existing = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT term_uuid FROM ' . DB::table( 'term_aliases' ) . ' WHERE alias_normalized=%s AND language=%s LIMIT 1', $normalized, $language ),
+			ARRAY_A
+		);
+		if ( null === $existing && ! empty( $wpdb->last_error ) ) { return false; }
+		if ( $existing ) { return (string) $existing['term_uuid'] === (string) $term_uuid; }
 		$sql = $wpdb->prepare(
-			'INSERT IGNORE INTO ' . DB::table( 'term_aliases' ) . '
+			'INSERT INTO ' . DB::table( 'term_aliases' ) . '
 			(term_uuid,alias_label,alias_normalized,language,status,created_at)
 			VALUES (%s,%s,%s,%s,%s,%s)',
 			$term_uuid,
 			$alias,
 			$normalized,
-			substr( sanitize_text_field( $language ), 0, 20 ),
+			$language,
 			'active',
 			DB::now()
 		);
-		return false !== $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return 1 === (int) $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	private function transfer_aliases( $source_uuid, $target_uuid ) {
+		global $wpdb;
+		$wpdb->last_error = '';
+		$aliases = $wpdb->get_results(
+			$wpdb->prepare( 'SELECT id,alias_normalized,language FROM ' . DB::table( 'term_aliases' ) . ' WHERE term_uuid=%s ORDER BY id ASC', $source_uuid ),
+			ARRAY_A
+		);
+		if ( null === $aliases && ! empty( $wpdb->last_error ) ) { return false; }
+		foreach ( (array) $aliases as $alias ) {
+			$wpdb->last_error = '';
+			$existing = $wpdb->get_row(
+				$wpdb->prepare( 'SELECT id,term_uuid FROM ' . DB::table( 'term_aliases' ) . ' WHERE alias_normalized=%s AND language=%s AND term_uuid<>%s LIMIT 1', $alias['alias_normalized'], $alias['language'], $source_uuid ),
+				ARRAY_A
+			);
+			if ( null === $existing && ! empty( $wpdb->last_error ) ) { return false; }
+			if ( $existing ) {
+				if ( (string) $existing['term_uuid'] !== (string) $target_uuid ) { return false; }
+				$deleted = $wpdb->delete( DB::table( 'term_aliases' ), array( 'id' => (int) $alias['id'], 'term_uuid' => $source_uuid ), array( '%d', '%s' ) );
+				if ( 1 !== $deleted ) { return false; }
+				continue;
+			}
+			$updated = $wpdb->update( DB::table( 'term_aliases' ), array( 'term_uuid' => $target_uuid ), array( 'id' => (int) $alias['id'], 'term_uuid' => $source_uuid ), array( '%s' ), array( '%d', '%s' ) );
+			if ( 1 !== $updated ) { return false; }
+		}
+		return true;
 	}
 
 	private function domain_owner_approved( $action, array $terms, array $preview ) {
