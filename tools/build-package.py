@@ -1,51 +1,67 @@
 #!/usr/bin/env python3
-"""Build a deterministic WordPress ZIP and source manifest."""
+"""Build a deterministic, runtime-only WordPress ZIP without mutating source."""
 from __future__ import annotations
 import argparse
 import hashlib
-import os
 from pathlib import Path
 import zipfile
 
 TOP = "sabri-file26-search-discovery"
-EXCLUDED_PARTS = {".git", "release", "__pycache__", ".pytest_cache"}
-EXCLUDED_NAMES = {"CHECKSUMS.sha256", "MANIFEST.sha256"}
+ROOT_FILES = {
+    "file-26-search-discovery.php",
+    "readme.txt",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+}
+RUNTIME_DIRS = {"includes", "assets", "templates", "languages"}
 
 
 def files(root: Path):
-    for path in sorted(root.rglob("*")):
-        rel = path.relative_to(root)
-        if path.is_dir() or any(part in EXCLUDED_PARTS for part in rel.parts):
+    """Yield the strict runtime package allowlist in stable path order."""
+    candidates = []
+    for name in sorted(ROOT_FILES):
+        path = root / name
+        if path.is_file():
+            candidates.append((path, Path(name)))
+    for dirname in sorted(RUNTIME_DIRS):
+        base = root / dirname
+        if not base.is_dir():
             continue
-        if path.name in EXCLUDED_NAMES or path.suffix in {".pyc", ".zip"}:
-            continue
-        yield path, rel
+        for path in sorted(base.rglob("*")):
+            if path.is_file() and path.suffix not in {".pyc", ".zip"}:
+                candidates.append((path, path.relative_to(root)))
+    for item in sorted(candidates, key=lambda pair: pair[1].as_posix()):
+        yield item
 
 
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
-def write_manifest(root: Path) -> None:
-    lines = [f"{sha256(path)}  ./{rel.as_posix()}" for path, rel in files(root)]
-    (root / "MANIFEST.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def manifest_bytes(root: Path) -> bytes:
+    lines = []
+    for path, rel in files(root):
+        lines.append(f"{sha256_bytes(path.read_bytes())}  ./{rel.as_posix()}")
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def write_entry(archive: zipfile.ZipFile, rel: Path, data: bytes) -> None:
+    info = zipfile.ZipInfo(f"{TOP}/{rel.as_posix()}", date_time=(2026, 8, 5, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.external_attr = 0o644 << 16
+    info.create_system = 3
+    archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
 def build(root: Path, output: Path) -> None:
-    write_manifest(root)
     output.parent.mkdir(parents=True, exist_ok=True)
-    candidates = list(files(root)) + [(root / "MANIFEST.sha256", Path("MANIFEST.sha256"))]
+    entries = [(path, rel, path.read_bytes()) for path, rel in files(root)]
+    manifest = manifest_bytes(root)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path, rel in sorted(candidates, key=lambda item: item[1].as_posix()):
-            info = zipfile.ZipInfo(f"{TOP}/{rel.as_posix()}", date_time=(2026, 8, 5, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = (0o755 if os.access(path, os.X_OK) else 0o644) << 16
-            info.create_system = 3
-            archive.writestr(info, path.read_bytes())
+        for _path, rel, data in entries:
+            write_entry(archive, rel, data)
+        write_entry(archive, Path("MANIFEST.sha256"), manifest)
 
 
 if __name__ == "__main__":
