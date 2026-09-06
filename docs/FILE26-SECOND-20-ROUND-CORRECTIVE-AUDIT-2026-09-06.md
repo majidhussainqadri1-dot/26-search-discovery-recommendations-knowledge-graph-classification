@@ -18,12 +18,12 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 | 1 | CLEAN | Deterministic package build, source/package manifest parity, path safety, immutable workflow action pins, PHP 7.4/8.3 matrix, artifact generation and release/source separation are internally consistent. No new proven defect. | No production change. Exact-head CI GREEN `ef41d8337fc84ee9fab35e27bb4df22153299337`. |
 | 2 | DEFECT | `Schema_Integrity` verified only column names and index names; safety-critical type/nullability and index uniqueness/order drift could pass. | Added safety-critical column signatures and exact index signatures. Regression: `tests/review-round-02-schema-signatures-second-cycle.php`. Exact-head CI GREEN `a176c9cbbcbde5fce23e63f471500f0b6ca087a3`. |
 | 3 | DEFECT | Canonical identity normalization differed between upsert and revocation; normalized identity and monotonic versions could be invalid/coerced. | Unified normalized identity/key semantics and strict version/sequence validation. Regression: `tests/review-round-03-identity-version-second-cycle.php`. Exact-head CI GREEN `4247d116f879b668eee34acae7b4d0f63994e49e`. |
-| 4 | DEFECT | Connector registration could persist an index/production lifecycle status before proving the current runtime callbacks required by that status. Governance could promote a persisted connector to `shadow`/`approved`/`active` without proving a compatible current runtime adapter, and DB status could diverge from the in-memory registry. Connector health callback results were returned as authoritative even when persistence of `health_state/last_health` failed. | Pending correction after this frozen ledger. |
+| 4 | DEFECT | Connector registration could persist an index/production lifecycle status before proving current runtime callbacks; governance could promote persisted rows without a compatible runtime adapter and leave DB/in-memory state divergent; health callback state could be reported despite failed persistence. | Registration now resolves effective status, proves required callbacks before persistence, then registers. Governance receives the live registry, gates `shadow/approved/active` promotions on runtime capability and synchronizes successful status transitions. Health persistence failure is audited and returned as degraded. Regression: `tests/review-round-04-connector-runtime-truth-second-cycle.php`. Exact-head CI pending on this closure head. |
 
 ## Round status
 
-- Completed reviews: **4/20**
+- Completed reviews/corrections: **4/20**
 - Defect rounds: **2, 3, 4**
 - Clean rounds: **1**
 
-Round 5 must not begin until Round 4 correction, regression and exact-head CI are green.
+Round 5 must not begin until this exact head is green.
