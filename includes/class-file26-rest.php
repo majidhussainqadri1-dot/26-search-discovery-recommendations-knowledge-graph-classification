@@ -66,7 +66,9 @@ final class REST {
 
 	public function search( \WP_REST_Request $request ) {
 		$filters = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to' ) as $key ) { if ( null !== $request->get_param( $key ) ) { $filters[ $key ] = $request->get_param( $key ); } }
+		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'author', 'language', 'date_from', 'date_to' ) as $key ) {
+			if ( null !== $request->get_param( $key ) ) { $filters[ $key ] = $request->get_param( $key ); }
+		}
 		$query = $request->get_param( 'q' );
 		$data = $this->search->run( array( 'q' => $query, 'locale' => $request->get_param( 'locale' ), 'cursor' => $request->get_param( 'cursor' ), 'limit' => $request->get_param( 'limit' ), 'filters' => $filters ) );
 		return $this->respond( $data, 200, ! $this->security->contains_sensitive_query( $query ) );
@@ -92,24 +94,42 @@ final class REST {
 	public function opt_out() { return $this->respond( $this->recommendations->opt_out() ); }
 
 	public function topic( \WP_REST_Request $request ) {
+		global $wpdb;
 		$term = $this->taxonomy->get( $request['term'] );
-		if ( ! $term || ! in_array( $term['status'], array( 'active', 'merged' ), true ) ) { return new \WP_Error( 'file26_topic_not_found', 'Topic not found.', array( 'status' => 404 ) ); }
-		if ( 'merged' === $term['status'] && ! empty( $term['redirect_uuid'] ) ) {
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'file26_topic_read_failed', 'Topic state could not be read safely.', array( 'status' => 503 ) );
+		}
+		if ( ! $term || ! in_array( $term['status'], array( 'active', 'merged' ), true ) ) {
+			return new \WP_Error( 'file26_topic_not_found', 'Topic not found.', array( 'status' => 404 ) );
+		}
+		if ( 'merged' === $term['status'] ) {
+			if ( empty( $term['redirect_uuid'] ) ) {
+				return new \WP_Error( 'file26_topic_not_found', 'Topic redirect is no longer available.', array( 'status' => 404 ) );
+			}
 			$redirect = $this->taxonomy->get( $term['redirect_uuid'] );
-			if ( $redirect && 'active' === $redirect['status'] ) { $term = $redirect; } else { return new \WP_Error( 'file26_topic_not_found', 'Topic redirect is no longer available.', array( 'status' => 404 ) ); }
+			if ( ! empty( $wpdb->last_error ) ) {
+				return new \WP_Error( 'file26_topic_read_failed', 'Topic redirect state could not be read safely.', array( 'status' => 503 ) );
+			}
+			if ( $redirect && 'active' === $redirect['status'] ) { $term = $redirect; }
+			else { return new \WP_Error( 'file26_topic_not_found', 'Topic redirect is no longer available.', array( 'status' => 404 ) ); }
 		}
 		$results = $this->search->run( array( 'q' => '', 'locale' => $term['language'], 'limit' => 20, 'filters' => array( 'topic' => $term['term_uuid'] ) ) );
-		return $this->respond( array( 'term' => $term, 'related' => is_wp_error( $results ) ? array() : $results['results'], 'partial' => is_wp_error( $results ) ? true : $results['partial'], 'partial_domains' => is_wp_error( $results ) ? array( array( 'health' => 'search_unavailable' ) ) : $results['partial_domains'], 'contract_version' => SABRI_FILE26_CONTRACT_VERSION ), 200, true );
+		if ( is_wp_error( $results ) ) { return $results; }
+		return $this->respond( array( 'term' => $term, 'related' => $results['results'], 'partial' => $results['partial'], 'partial_domains' => $results['partial_domains'], 'contract_version' => SABRI_FILE26_CONTRACT_VERSION ), 200, true );
 	}
 
 	public function graph( \WP_REST_Request $request ) { return $this->respond( $this->graph->query( $request['key'], $request->get_param( 'depth' ) ?: 1, $request->get_param( 'degree' ) ?: 10, (array) $request->get_param( 'types' ) ), 200, true ); }
 	public function doctor_ranking( \WP_REST_Request $request ) { return $this->respond( $this->doctor_ranking->directory( array( 'context' => $request->get_param( 'context' ) ?: 'global', 'value' => $request->get_param( 'value' ), 'tier' => $request->get_param( 'tier' ) ?: 'all_verified', 'limit' => $request->get_param( 'limit' ) ?: 20, 'cursor' => $request->get_param( 'cursor' ) ) ), 200, true ); }
 	public function submit_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->submit( isset( $p['doctor_key'] ) ? $p['doctor_key'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['evidence'] ) && is_array( $p['evidence'] ) ? $p['evidence'] : array() ), 201 ); }
-	public function own_doctor_appeals() { return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'appeals' => $this->doctor_appeals->own() ) ); }
+	public function own_doctor_appeals() {
+		$appeals = $this->doctor_appeals->own();
+		if ( is_wp_error( $appeals ) ) { return $appeals; }
+		return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'appeals' => $appeals ) );
+	}
 	public function review_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->review( $request['appeal'], isset( $p['decision'] ) ? $p['decision'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['expected_version'] ) ? $p['expected_version'] : 0 ) ); }
 	public function health() { return $this->respond( $this->health->snapshot() ); }
 	public function reindex( \WP_REST_Request $request ) { $job = $this->indexer->enqueue_reindex( sanitize_key( $request->get_param( 'connector' ) ), (array) $request->get_param( 'scope' ) ); return is_wp_error( $job ) ? $job : $this->respond( array( 'job_uuid' => $job ), 202 ); }
-	public function reconcile() { $result = $this->indexer->reconcile(); return $this->respond( $result ); }
+	public function reconcile() { return $this->respond( $this->indexer->reconcile() ); }
 	public function create_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->create( (array) $request->get_json_params() ), 201 ); }
 	public function submit_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->submit( $request['term'] ) ); }
 	public function approve_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->approve( $request['term'] ) ); }
@@ -129,19 +149,27 @@ final class REST {
 	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
 	public function reports() { return $this->respond( $this->governance->reports() ); }
 
-	public function logged_in() { return is_user_logged_in(); }
-	public function can_operate() { return $this->security->can_operate(); }
-	public function can_curate() { return $this->security->can_curate(); }
-	public function can_approve_ranking() { return $this->security->can_approve_ranking(); }
-	public function can_audit() { return $this->security->can_audit(); }
+	public function logged_in() { return is_user_logged_in() ? true : new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) ); }
+	public function can_operate() { return $this->security->can_operate() ? true : new \WP_Error( 'file26_forbidden', 'Search operator capability is required.', array( 'status' => 403 ) ); }
+	public function can_curate() { return $this->security->can_curate() ? true : new \WP_Error( 'file26_forbidden', 'Taxonomy curator capability is required.', array( 'status' => 403 ) ); }
+	public function can_approve_ranking() { return $this->security->can_approve_ranking() ? true : new \WP_Error( 'file26_forbidden', 'Ranking approval capability is required.', array( 'status' => 403 ) ); }
+	public function can_audit() { return $this->security->can_audit() ? true : new \WP_Error( 'file26_forbidden', 'Search audit capability is required.', array( 'status' => 403 ) ); }
 
 	private function respond( $data, $status = 200, $public_cache = false ) {
 		if ( is_wp_error( $data ) ) { return $data; }
 		$response = new \WP_REST_Response( $data, $status );
 		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
 		$response->header( 'X-Content-Type-Options', 'nosniff' );
-		if ( $public_cache && ! is_user_logged_in() ) { $response->header( 'Cache-Control', 'public, max-age=60, stale-while-revalidate=120' ); $response->header( 'ETag', '"' . hash( 'sha256', wp_json_encode( $data ) ) . '"' ); }
-		else { $response->header( 'Cache-Control', 'private, no-store' ); }
+		$purge_ready = (bool) apply_filters( 'sabri_file26_revocation_cache_purge_ready', false, $data );
+		$cache_allowed = $public_cache && ! is_user_logged_in() && $purge_ready && (bool) apply_filters( 'sabri_file26_public_http_cache_allowed', false, $data );
+		if ( $cache_allowed ) {
+			$ttl = max( 1, min( 60, (int) apply_filters( 'sabri_file26_public_http_cache_ttl', 30, $data ) ) );
+			$response->header( 'Cache-Control', 'public, max-age=' . $ttl . ', must-revalidate' );
+			$response->header( 'ETag', '"' . hash( 'sha256', wp_json_encode( $data ) ) . '"' );
+			$response->header( 'Vary', 'Cookie' );
+		} else {
+			$response->header( 'Cache-Control', 'no-store, max-age=0' );
+		}
 		return $response;
 	}
 }
