@@ -1,5 +1,5 @@
 <?php
-/** Round 09 regression: sensitive/session-bound REST responses must not be publicly cacheable and taxonomy governance surfaces must be reachable. */
+/** Round 09 regression: sensitive/session-bound REST responses must not be publicly cacheable, taxonomy governance surfaces must be reachable, and admin reconciliation errors must be truthful. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-rest.php' );
 $checks = array(
@@ -9,6 +9,8 @@ $checks = array(
 	'\'merge_term\'' => 'taxonomy merge execution route exists',
 	'/split-preview' => 'taxonomy split preview route exists',
 	'\'active\' === $redirect[\'status\']' => 'merged topic redirect target must still be active',
+	'$result = $this->indexer->reconcile()' => 'REST reconciliation captures the backend result',
+	'is_wp_error( $result ) ? $result' => 'REST reconciliation surfaces backend failure instead of false success',
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
