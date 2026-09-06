@@ -28,8 +28,8 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 13 | CLEAN | Doctor-ranking appeal ownership, serialization, bounds, CAS/final-state/membership controls consistent. | No production change. CI GREEN `73af6d5c54c4477c8a2dba51a8e9c2e99008e4ee`. |
 | 14 | DEFECT | Current QA report presented stale 2026-08-13 provenance as current. | QA evidence aligned to current cycle. CI GREEN `dc4bb37b0a3d307b6e26beef163674d61c033a16`. |
 | 15 | DEFECT | Migration checked table existence but not physical columns/indexes. | Structural schema verification/repair/fail-closed Health. Final CI GREEN `e1265a13e738f46e9623e642ad1017f53fdf2eed`. |
-| 16 | DEFECT | Authenticated topic HTML could include non-public visibility classes while response was shared-public cacheable; unknown injected route values were also intercepted after a 200 claim. | Canonical route validation added; only anonymous topic HTML is public-cacheable and authenticated topic/non-topic responses are no-cache. Exact-head CI GREEN `7ac7c8330e78cd8038c13117bc7d211eb78fd2b6`. |
-| 17 | DEFECT | `Indexer::reconcile()` did not verify `START TRANSACTION`, so an unavailable transaction could allow destructive reconciliation statements to autocommit despite atomic-rollback semantics. Admin settings persistence was not read back before redirecting with `updated=1`, allowing a DB persistence failure to look successful. | Pending correction after this frozen ledger. |
+| 16 | DEFECT | Authenticated topic HTML could include non-public visibility classes while shared-public cacheable; unknown injected route values were intercepted after a 200 claim. | Canonical route validation and anonymous-only public topic caching. CI GREEN `7ac7c8330e78cd8038c13117bc7d211eb78fd2b6`. |
+| 17 | DEFECT | `Indexer::reconcile()` did not verify `START TRANSACTION`; admin settings could redirect `updated=1` without read-back proof that requested state persisted. | Reconciliation now refuses to execute destructive queries when transaction start fails and still verifies commit/rollback. Admin settings now build an explicit requested state, persist it, read it back, compare every key/value, and fail with HTTP 500 instead of success when persistence cannot be verified. `tests/review-round-17-operation-atomicity.php` protects both boundaries. Exact-head CI pending on this closure head. |
 
 ## First-ten-round checkpoint
 
@@ -38,7 +38,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 
 ## Round status
 
-- Completed rounds: **16/20**
-- Round 17 review: **FROZEN — correction pending**
+- Completed reviews/corrections: **17/20**
+- Round 17 exact-head CI: **PENDING on this closure head**
 
-Round 18 must not begin until Round 17 correction, regression and exact-head CI are green.
+Round 18 must not begin until this exact head is green.
