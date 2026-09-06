@@ -14,7 +14,7 @@ $checks = array(
 	array( $health, 'database_read_failed', 'health exposes database read-failure state' ),
 	array( $health, 'private function table_state', 'health table probes distinguish DB error from missing table' ),
 	array( $health, 'private function count_value', 'health count reads are checked' ),
-	array( $health, "$database_read_failed || $unknown || $schema_drift ? 'unavailable'", 'health fails closed on database read failure' ),
+	array( $health, '$database_read_failed || $unknown || $schema_drift ? \'unavailable\'', 'health fails closed on database read failure' ),
 	array( $truth, "add_filter( 'rest_pre_dispatch'", 'operation-truth guard captures pre-state' ),
 	array( $truth, "add_filter( 'rest_post_dispatch'", 'operation-truth guard verifies post-state' ),
 	array( $truth, 'file26_saved_query_persistence_failed', 'saved-query write truth is enforced' ),
