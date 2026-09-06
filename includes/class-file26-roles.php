@@ -13,7 +13,7 @@ final class Roles {
 	const VERSION = '1.1.0';
 
 	public static function install( $force = false ) {
-		if ( ! $force && self::VERSION === get_option( self::OPTION_VERSION ) ) {
+		if ( ! $force && self::VERSION === get_option( self::OPTION_VERSION ) && self::integrity_ok() ) {
 			return;
 		}
 
@@ -42,6 +42,37 @@ final class Roles {
 			'audit_sabri_search' => true,
 		) );
 		update_option( self::OPTION_VERSION, self::VERSION, false );
+	}
+
+	private static function integrity_ok() {
+		$privileged = array( 'manage_sabri_search', 'operate_sabri_search', 'curate_sabri_taxonomy', 'approve_sabri_ranking', 'audit_sabri_search' );
+		$administrator = get_role( 'administrator' );
+		if ( ! $administrator || ! $administrator->has_cap( 'manage_sabri_search' ) ) {
+			return false;
+		}
+		foreach ( array( 'operate_sabri_search', 'curate_sabri_taxonomy', 'approve_sabri_ranking', 'audit_sabri_search' ) as $cap ) {
+			if ( $administrator->has_cap( $cap ) ) {
+				return false;
+			}
+		}
+		$expected = array(
+			'sabri_search_operator' => 'operate_sabri_search',
+			'sabri_taxonomy_curator' => 'curate_sabri_taxonomy',
+			'sabri_ranking_approver' => 'approve_sabri_ranking',
+			'sabri_search_auditor' => 'audit_sabri_search',
+		);
+		foreach ( $expected as $slug => $required_cap ) {
+			$role = get_role( $slug );
+			if ( ! $role || ! $role->has_cap( 'read' ) || ! $role->has_cap( $required_cap ) ) {
+				return false;
+			}
+			foreach ( $privileged as $cap ) {
+				if ( $cap !== $required_cap && $role->has_cap( $cap ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	private static function ensure_role( $slug, $label, array $capabilities ) {
