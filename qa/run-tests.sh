@@ -27,7 +27,7 @@ php "$ROOT/tests/corrective-contract-tests.php"
 printf '[6/14] New governing-plan completion regressions\n'
 php "$ROOT/tests/central-plan-contract-tests.php"
 
-printf '[7/14] Sequential 20-round review regressions\n'
+printf '[7/14] Sequential review regressions\n'
 shopt -s nullglob
 ROUND_TESTS=("$ROOT"/tests/review-round-*.php)
 for test_file in "${ROUND_TESTS[@]}"; do php "$test_file"; done
@@ -80,6 +80,9 @@ for test_file in "$PACKAGE"/tests/review-round-*.php; do php "$test_file" >/dev/
 
 mkdir -p "$ROOT/release"
 cp "$TMP/a.zip" "$ROOT/release/26-sabri-file26-search-discovery-1.2.0.zip"
-sha256sum "$ROOT/release/26-sabri-file26-search-discovery-1.2.0.zip" > "$ROOT/release/CHECKSUMS.sha256"
+(
+  cd "$ROOT/release"
+  sha256sum "26-sabri-file26-search-discovery-1.2.0.zip" > CHECKSUMS.sha256
+)
 printf 'ALL LOCAL QA CHECKS PASSED\n'
 cat "$ROOT/release/CHECKSUMS.sha256"
