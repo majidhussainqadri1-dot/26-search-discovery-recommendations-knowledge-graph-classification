@@ -12,18 +12,32 @@ permissions:
   contents: read
 
 concurrency:
-  group: file26-qa-${{ github.ref }}
+  group: file26-qa-${{ github.ref }}-${{ matrix.php }}
   cancel-in-progress: true
 
 jobs:
   qa:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 / node24
         with:
           persist-credentials: false
+      - name: Verify exact checked-out commit
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Configure PHP
+        uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
+        with:
+          php-version: ${{ matrix.php }}
+      - name: Configure Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 / node24
+        with:
+          node-version: '22'
       - name: Runtime versions
         run: |
           php --version
@@ -32,7 +46,8 @@ jobs:
       - name: Run repository and deterministic package QA
         run: bash qa/run-tests.sh
       - name: Upload exact-head installable package and checksum
-        uses: actions/upload-artifact@v4
+        if: matrix.php == '8.3'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 / node24
         with:
           name: file26-1.2.0-${{ github.sha }}
           if-no-files-found: error
