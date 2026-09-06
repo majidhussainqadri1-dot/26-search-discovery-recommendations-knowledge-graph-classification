@@ -53,13 +53,16 @@ final class Connectors {
 		) {
 			return new \WP_Error( 'file26_invalid_manifest_after_normalization', 'Connector manifest becomes empty or invalid after normalization.' );
 		}
+		if ( 'versioned_tombstone' !== $manifest['deletion_semantics'] ) {
+			return new \WP_Error( 'file26_unsupported_deletion_semantics', 'Unknown connector deletion semantics; File 26 supports only versioned tombstones.' );
+		}
 		$manifest['status'] = isset( $manifest['status'] ) ? sanitize_key( $manifest['status'] ) : 'proposed';
 		$allowed_status = array( 'proposed', 'contract_tested', 'shadow', 'approved', 'active', 'degraded', 'suspended', 'retired' );
 		if ( ! in_array( $manifest['status'], $allowed_status, true ) ) {
 			return new \WP_Error( 'file26_invalid_connector_status', 'Invalid connector lifecycle status.' );
 		}
 		foreach ( array( 'list_batch', 'can_view', 'health', 'fetch_object' ) as $callback ) {
-			if ( isset( $manifest[ $callback ] ) && ! is_callable( $manifest[ $callback ] ) ) {
+			if ( isset( $manifest[ $callback ] ) && null !== $manifest[ $callback ] && ! is_callable( $manifest[ $callback ] ) ) {
 				return new \WP_Error( 'file26_invalid_connector_callback', $callback . ' is not callable.' );
 			}
 		}
@@ -68,7 +71,15 @@ final class Connectors {
 		foreach ( array( 'list_batch', 'can_view', 'health', 'fetch_object', 'secret', 'token', 'credentials' ) as $private_key ) {
 			unset( $public_manifest[ $private_key ] );
 		}
-		$manifest['status'] = $this->persist( $public_manifest );
+		$status = $this->persist( $public_manifest );
+		if ( is_wp_error( $status ) ) { return $status; }
+		$manifest['status'] = $status;
+		if ( in_array( $status, array( 'shadow', 'approved', 'active' ), true ) && ( empty( $manifest['list_batch'] ) || ! is_callable( $manifest['list_batch'] ) ) ) {
+			return new \WP_Error( 'file26_connector_runtime_incomplete', 'Index-eligible connector is missing its bounded list_batch callback.' );
+		}
+		if ( 'active' === $status && ( empty( $manifest['can_view'] ) || ! is_callable( $manifest['can_view'] ) || empty( $manifest['health'] ) || ! is_callable( $manifest['health'] ) ) ) {
+			return new \WP_Error( 'file26_connector_runtime_incomplete', 'Active connector is missing required visibility or health callbacks.' );
+		}
 		$this->registry[ $slug ] = $manifest;
 		return true;
 	}
@@ -95,7 +106,9 @@ final class Connectors {
 			 owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),updated_at=VALUES(updated_at)",
 			$manifest['slug'], $manifest['owner_file'], $manifest['contract_version'], $manifest['status'], wp_json_encode( $manifest ), $now, $now
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			return new \WP_Error( 'file26_connector_persist_failed', 'Connector contract could not be persisted; registry remains fail closed.' );
+		}
 		return $manifest['status'];
 	}
 
@@ -156,11 +169,7 @@ final class Connectors {
 				return false;
 			}
 		}
-		return $this->security->can_view_visibility(
-			isset( $document['visibility'] ) ? $document['visibility'] : 'restricted',
-			$audience,
-			isset( $document['payload'] ) && is_array( $document['payload'] ) ? $document['payload'] : array()
-		);
+		return false;
 	}
 
 	public function health_snapshot() {
