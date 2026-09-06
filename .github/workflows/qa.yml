@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: file26-qa-${{ github.ref }}-${{ matrix.php }}
+  group: file26-qa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
