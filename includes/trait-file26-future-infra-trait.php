@@ -11,8 +11,8 @@ trait Future_Infra_Trait {
 		add_filter( 'sabri_file26_future_capabilities', array( $this, 'expose_capabilities' ) );
 		add_filter( 'sabri_file24_module_manifest', array( $this, 'assurance_manifest' ), 30 );
 		add_filter( 'sabri_file25_search_provider', array( $this, 'visual_provider' ), 30 );
-		add_filter( 'wp_privacy_personal_data_exporters', array( $this, 'register_exporter' ), 30 );
-		add_filter( 'wp_privacy_personal_data_erasers', array( $this, 'register_eraser' ), 30 );
+		// The canonical Privacy service already registers the single WordPress exporter/eraser
+		// and includes all Future Search account-owned meta keys. Do not double-register them here.
 	}
 
 	public function enqueue_assets() {
