@@ -1,33 +1,42 @@
 name: File 26 QA
+
 on:
-  pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches:
+      - main
+      - 'codex/**'
+      - 'review/**'
+  pull_request:
+
 permissions:
   contents: read
+
+concurrency:
+  group: file26-qa-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   qa:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        php: ['7.4', '8.3']
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 / node24
-      - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
         with:
-          php-version: ${{ matrix.php }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 / node24
-        with:
-          node-version: '22'
-      - name: Run complete local QA
+          persist-credentials: false
+      - name: Runtime versions
+        run: |
+          php --version
+          python3 --version
+          node --version
+      - name: Run repository and deterministic package QA
         run: bash qa/run-tests.sh
-      - name: Upload deterministic package and checksum
-        if: matrix.php == '8.3'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 / node24
+      - name: Upload exact-head installable package and checksum
+        uses: actions/upload-artifact@v4
         with:
-          name: file26-wordpress-package-1.2.0
+          name: file26-1.2.0-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
           path: |
             release/26-sabri-file26-search-discovery-1.2.0.zip
             release/CHECKSUMS.sha256
-          if-no-files-found: error
