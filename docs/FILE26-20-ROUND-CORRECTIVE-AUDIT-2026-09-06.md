@@ -24,7 +24,8 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 9 | DEFECT | REST `/admin/reconcile` discarded backend error and always reported success. | REST now surfaces `WP_Error`; CI GREEN `6b2416ea7ec19b33b8bc5290d218bdd65cae0ecd`; ledger-close `d27042a8d35bb26408f816f6eef87ce2a7e45d50` GREEN. |
 | 10 | DEFECT | Role-model version fast-path masked physical role/capability drift. | Physical role/cap integrity is verified before fast-path. CI GREEN `3af3a27adec0279aba7f18eed6c1db420ac0e871`; checkpoint `a5ce1bc56fa9fbc0286ddef6cce57eb601eba159` GREEN. |
 | 11 | DEFECT | Privacy erasure and appeal retention could falsely succeed across failed transaction/DB boundaries. | Both lifecycles now verify START/DB operations/COMMIT and fail closed. CI GREEN `6e844687315afbd98f1cc42db2877e0e99b71568`; ledger-close `dfbb05553ed3dd541d4ab7fe6ca9e6d6b39613f5` GREEN. |
-| 12 | DEFECT | High-risk ranking activation/rollback and taxonomy merge/split had unchecked transaction boundaries; activation also ignored previous-policy demotion DB failure. | Ranking activation/rollback and taxonomy merge/split now verify START/COMMIT; activation checks demotion failure; regression covers all four high-risk paths. Exact-head CI pending on this final closure head. |
+| 12 | DEFECT | High-risk ranking activation/rollback and taxonomy merge/split had unchecked transaction boundaries; activation also ignored previous-policy demotion DB failure. | Ranking activation/rollback and taxonomy merge/split now verify START/COMMIT; activation checks demotion failure; regression covers all four high-risk paths. Exact-head CI GREEN `dc0db18b5485b89c84df84796bb657f413f3666b`. |
+| 13 | CLEAN | Doctor-ranking appeal submission/review was reviewed for ownership, serialization, evidence bounds, reviewer conflict, optimistic concurrency, final-state protection, membership revalidation and corrected-appeal recompute dispatch. No Must-contract requires a corrected appeal to synchronously prove ranking recompute completion; recompute outcome is separately audited. | No production change required. Existing Round 13 regression remains evidence. Exact-head CI pending on this ledger head. |
 
 ## First-ten-round checkpoint
 
@@ -33,7 +34,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 
 ## Round status
 
-- Completed reviews/corrections: **12/20**
-- Round 12 exact-head CI: **PENDING on this closure head**
+- Completed reviews/corrections: **13/20**
+- Round 13 exact-head CI: **PENDING on this ledger head**
 
-Round 13 must not begin until this exact head is green.
+Round 14 must not begin until this exact head is green.
