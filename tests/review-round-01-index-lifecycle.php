@@ -2,19 +2,19 @@
 /** Round 01 regression: index/tombstone lifecycle must be serialized per canonical object. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-indexer.php' );
+$normalized = preg_replace( '/\s+/', '', $source );
 $checks = array(
-	'SELECT GET_LOCK(%s, 5)' => 'per-object advisory lock acquisition',
-	'SELECT RELEASE_LOCK(%s)' => 'per-object advisory lock release',
-	'acquire_object_lock($document[\'canonical_key\'])' => 'normal upsert acquires object lock',
+	'SELECTGET_LOCK(%s,5)' => 'per-object advisory lock acquisition',
+	'SELECTRELEASE_LOCK(%s)' => 'per-object advisory lock release',
+	"acquire_object_lock(\$document['canonical_key'])" => 'normal upsert acquires object lock',
 	'acquire_object_lock($key)' => 'tombstone path acquires same object lock',
 	'finally' => 'lock release is protected by finally',
-	'reason_class=IF(VALUES(object_version) >= object_version' => 'older tombstone cannot overwrite newer tombstone metadata',
+	'reason_class=IF(VALUES(object_version)>=object_version,VALUES(reason_class),reason_class)' => 'older tombstone cannot overwrite newer tombstone metadata',
+	'object_version=GREATEST(object_version,VALUES(object_version))' => 'tombstone version remains monotonic',
 );
-$normalized = preg_replace( '/\s+/', '', $source );
 $failures = 0;
 foreach ( $checks as $needle => $label ) {
-	$haystack = false !== strpos( $needle, 'acquire_object_lock' ) ? $normalized : $source;
-	if ( false === strpos( $haystack, $needle ) ) {
+	if ( false === strpos( $normalized, preg_replace( '/\s+/', '', $needle ) ) ) {
 		fwrite( STDERR, "FAIL: $label\n" );
 		$failures++;
 	}
