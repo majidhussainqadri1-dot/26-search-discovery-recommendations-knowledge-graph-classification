@@ -5,11 +5,15 @@ $future_paths = array_merge( array( $root . '/includes/class-file26-future-intel
 $main_path = $root . '/file-26-search-discovery.php';
 $js_path = $root . '/assets/js/file26-future.js';
 $doc_path = $root . '/docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md';
+$privacy_path = $root . '/includes/class-file26-privacy.php';
+$plugin_path = $root . '/includes/class-file26-plugin.php';
 
 $future = ''; foreach ( $future_paths as $future_path ) { $future .= "\n" . file_get_contents( $future_path ); }
 $main = file_get_contents( $main_path );
 $js = file_get_contents( $js_path );
 $doc = file_get_contents( $doc_path );
+$privacy = file_get_contents( $privacy_path );
+$plugin = file_get_contents( $plugin_path );
 
 $checks = 0;
 function f26_future_assert( $condition, $message ) {
@@ -60,8 +64,10 @@ f26_future_assert( false !== strpos( $future, "'default_network_sync' => false" 
 f26_future_assert( false !== strpos( $js, "policy: 'local_first'" ), 'browser history local-first client implemented' );
 f26_future_assert( false !== strpos( $js, 'Merely loading this script never sends history to the network.' ), 'client documents no automatic history network transfer' );
 f26_future_assert( false !== strpos( $js, 'syncOptIn' ), 'client server sync requires explicit method call' );
-f26_future_assert( false !== strpos( $future, 'wp_privacy_personal_data_exporters' ), 'future account data registered for privacy export' );
-f26_future_assert( false !== strpos( $future, 'wp_privacy_personal_data_erasers' ), 'future account data registered for privacy erasure' );
+f26_future_assert( false !== strpos( $plugin, '$this->privacy->register()' ), 'canonical Privacy service registers WordPress privacy handlers once' );
+f26_future_assert( false !== strpos( $privacy, 'wp_privacy_personal_data_exporters' ) && false !== strpos( $privacy, 'sabri_file26_search_history_sync_v1' ) && false !== strpos( $privacy, 'sabri_file26_discovery_controls_v1' ), 'canonical privacy exporter covers Future account data' );
+f26_future_assert( false !== strpos( $privacy, 'wp_privacy_personal_data_erasers' ) && false !== strpos( $privacy, 'future_meta_keys' ), 'canonical privacy eraser covers Future account data' );
+f26_future_assert( false === strpos( $future, "add_filter( 'wp_privacy_personal_data_exporters'" ) && false === strpos( $future, "add_filter( 'wp_privacy_personal_data_erasers'" ), 'Future orchestration does not double-register privacy handlers' );
 f26_future_assert( false !== strpos( $future, 'private, no-store' ), 'private future routes receive no-store policy' );
 f26_future_assert( false !== strpos( $future, "'result_schema'] = 'sabri.file26.result.v1.3'" ), 'File 25 metadata upgraded to result schema v1.3' );
 f26_future_assert( false !== strpos( $future, "future_capability_count'] = 24" ), 'File 24 assurance advertises 24 future capabilities' );
