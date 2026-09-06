@@ -19,7 +19,9 @@ It does **not** own canonical posts, doctors, clinics, lessons, videos, PDFs, ma
 
 ## Installation
 
-Install the deterministic ZIP from `release/`, activate the plugin, register versioned owner connectors, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, then enable **Approved runtime activation**.
+Build the deterministic ZIP from the exact reviewed source with `bash qa/run-tests.sh`, or use the package artifact produced by the exact-head `File 26 QA` GitHub Actions run. The `release/` directory is generated output and is deliberately not a committed source of truth. Verify the generated `release/CHECKSUMS.sha256`, install the matching `26-sabri-file26-search-discovery-1.2.0.zip`, activate the plugin, register versioned owner connectors, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, then enable **Approved runtime activation**.
+
+The package contains a `MANIFEST.sha256` generated from the exact source snapshot without modifying repository source files.
 
 ## Local QA
 
