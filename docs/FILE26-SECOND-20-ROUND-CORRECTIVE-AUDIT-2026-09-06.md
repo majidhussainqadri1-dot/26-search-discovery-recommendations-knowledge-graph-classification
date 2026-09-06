@@ -21,7 +21,8 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 10 | DEFECT | REST/health operation truth hardened. GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
 | 11 | DEFECT | Privacy/retention truth hardened. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`; ledger-head GREEN `974cefc3d8534243aab8b76ffdbd921a387882d8`. |
 | 12 | DEFECT | Queue/worker operation truth hardened: queue-head read failures, claim/completion/failure-transition write failures and CAS loss now fail closed; stale recovery/backoff retained. Exact-head GREEN `fb0be05360bc6e0c6fb6ef28903280fd4ee6ef2b`; ledger-head GREEN `2feeafb35473e780069cf1061019a8cd9f149c1b`. |
-| 13 | DEFECT | Deletion/replay integrity hardened: precedence reads now fail closed on DB errors; reconciliation protects higher-version live resurrection from stale tombstone derivative purges. Dedicated Round 13 regression passed. Reformatting exposed three stale formatting-bound historical test assertions; those harness assertions were made whitespace-insensitive without weakening their semantics. Exact-head corrective CI GREEN `4d5e617bd45b50f6921fc2ab980d9bf32e9d0b6e`. |
+| 13 | DEFECT | Deletion/replay integrity hardened: precedence reads now fail closed on DB errors; reconciliation protects higher-version live resurrection from stale tombstone derivative purges. Dedicated Round 13 regression passed. Reformatting exposed three stale formatting-bound historical test assertions; those harness assertions were made whitespace-insensitive without weakening their semantics. Exact-head corrective CI GREEN `4d5e617bd45b50f6921fc2ab980d9bf32e9d0b6e`; ledger-head GREEN `cf3e2936f28b44b3d802305b3bf76060c25e14a7`. |
+| 14 | DEFECT — FROZEN | Autocomplete/accessibility operation integrity: (1) composition/IME state is not explicitly guarded, so composing Enter/Arrow input may prematurely operate the listbox; (2) listbox `role="option"` rows contain nested focusable anchors despite the active-descendant combobox model; (3) `/suggest` database read failure is cast/iterated as an empty suggestion set instead of surfaced as an unavailable operation. Correction/regression/exact-head CI pending. |
 
 ## First-ten checkpoint
 
@@ -31,5 +32,5 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 ## Status
 
 - Completed rounds: **13/20**
-- Round 13: **CLOSED — exact-head CI GREEN**
-- Round 14 may begin only after this ledger-head commit is GREEN.
+- Round 14 review: **FROZEN — correction pending**
+- Round 15 must not begin until Round 14 correction, regression and exact-head CI are GREEN.
