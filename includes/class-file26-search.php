@@ -32,6 +32,9 @@ final class Search {
 		$limit = max( 1, min( (int) DB::setting( 'max_results_per_page', 30 ), $limit ) );
 		$filters = $this->sanitize_filters( isset( $request['filters'] ) ? $request['filters'] : array() );
 		$policy_version = $this->ranking->policy_version();
+		if ( $this->ranking->policy_read_failed() ) {
+			return new \WP_Error( 'file26_ranking_policy_read_failed', 'The active ranking policy could not be read safely.', array( 'status' => 503, 'trace_id' => $trace ) );
+		}
 		$cursor_context = hash( 'sha256', wp_json_encode( array(
 			'q' => $this->normalizer->normalize( $query ), 'locale' => $locale, 'filters' => $filters,
 			'limit' => $limit, 'policy' => $policy_version,
