@@ -16,12 +16,13 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 | Round | Result | Frozen findings | Corrective closure |
 |---:|---|---|---|
 | 1 | CLEAN | Deterministic package build, source/package manifest parity, path safety, immutable workflow action pins, PHP 7.4/8.3 matrix, artifact generation and release/source separation are internally consistent. No new proven defect. | No production change. Exact-head CI GREEN `ef41d8337fc84ee9fab35e27bb4df22153299337`. |
-| 2 | DEFECT | `Schema_Integrity` verified only column names and index names. It did not verify safety-critical column data types/nullability or index uniqueness/column order, so a physically incompatible schema could still be reported complete when names survived drift. | Added safety-critical `DATA_TYPE`/`COLUMN_TYPE`/nullability/length signatures and exact index uniqueness/ordered-column signatures across File 26 tables including ranking appeals. Incompatible columns/indexes now make the structural snapshot incomplete and force the existing migration fail-closed path. `tests/review-round-02-schema-signatures-second-cycle.php` protects the new invariant. Exact-head CI pending on this closure head. |
+| 2 | DEFECT | `Schema_Integrity` verified only column names and index names. It did not verify safety-critical column data types/nullability or index uniqueness/column order. | Added safety-critical column signatures and exact index signatures. `tests/review-round-02-schema-signatures-second-cycle.php` protects the invariant. Exact-head CI GREEN `a176c9cbbcbde5fce23e63f471500f0b6ca087a3`. |
+| 3 | DEFECT | Canonical object identity was normalized inconsistently: upsert sanitized `object_id` before key generation while tombstone/restrict could hash the raw ID, allowing a revocation miss. Required `domain`/`object_id` could normalize to empty. Monotonic `object_version` accepted malformed/non-positive input by silently coercing it to `1`. | Pending correction after this frozen ledger. |
 
 ## Round status
 
-- Completed reviews/corrections: **2/20**
-- Defect rounds: **2**
+- Completed reviews: **3/20**
+- Defect rounds: **2, 3**
 - Clean rounds: **1**
 
-Round 3 must not begin until this exact head is green.
+Round 4 must not begin until Round 3 correction, regression and exact-head CI are green.
