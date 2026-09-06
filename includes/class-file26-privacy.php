@@ -35,10 +35,18 @@ final class Privacy {
 			return array( 'data' => array(), 'done' => true );
 		}
 		$offset = ( $page - 1 ) * $this->page_size;
-		$profile = 1 === $page ? $wpdb->get_row(
-			$wpdb->prepare( 'SELECT * FROM ' . DB::table( 'profiles' ) . ' WHERE user_id=%d', $user->ID ),
-			ARRAY_A
-		) : null;
+		$profile = null;
+		if ( 1 === $page ) {
+			$wpdb->last_error = '';
+			$profile = $wpdb->get_row(
+				$wpdb->prepare( 'SELECT * FROM ' . DB::table( 'profiles' ) . ' WHERE user_id=%d', $user->ID ),
+				ARRAY_A
+			);
+			if ( null === $profile && ! empty( $wpdb->last_error ) ) {
+				return $this->export_read_failure();
+			}
+		}
+		$wpdb->last_error = '';
 		$feedback = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT item_key,feedback_type,scope_key,active,created_at,updated_at FROM ' . DB::table( 'feedback' ) . ' WHERE user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d',
@@ -46,6 +54,10 @@ final class Privacy {
 			),
 			ARRAY_A
 		);
+		if ( null === $feedback && ! empty( $wpdb->last_error ) ) {
+			return $this->export_read_failure();
+		}
+		$wpdb->last_error = '';
 		$appeals = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT appeal_uuid,doctor_key,reason_text,evidence_json,status,decision_reason,policy_version,rank_snapshot,submitted_at,updated_at,decided_at FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d',
@@ -53,6 +65,11 @@ final class Privacy {
 			),
 			ARRAY_A
 		);
+		if ( null === $appeals && ! empty( $wpdb->last_error ) ) {
+			return $this->export_read_failure();
+		}
+		$feedback = is_array( $feedback ) ? $feedback : array();
+		$appeals = is_array( $appeals ) ? $appeals : array();
 		$data = array();
 		if ( $profile ) {
 			$data[] = array(
@@ -108,14 +125,19 @@ final class Privacy {
 		global $wpdb;
 		$user = get_user_by( 'email', $email );
 		if ( ! $user || (int) $page > 1 ) {
+			return array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true );
+		}
+		$wpdb->last_error = '';
+		$appeal_count_raw = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d', $user->ID ) );
+		if ( null === $appeal_count_raw && ! empty( $wpdb->last_error ) ) {
 			return array(
 				'items_removed' => false,
 				'items_retained' => false,
-				'messages' => array(),
-				'done' => true,
+				'messages' => array( __( 'File 26 erasure could not verify retained ranking appeals; no success is reported.', 'sabri-file26' ) ),
+				'done' => false,
 			);
 		}
-		$appeal_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d', $user->ID ) );
+		$appeal_count = (int) $appeal_count_raw;
 		$removed_any = false;
 		$retained = false;
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
@@ -138,10 +160,7 @@ final class Privacy {
 				$updated = $wpdb->query(
 					$wpdb->prepare(
 						'UPDATE ' . Doctor_Appeals::table() . " SET appellant_user_id=0,reason_text=%s,evidence_json='[]',decision_reason=CASE WHEN decision_reason IS NULL THEN NULL ELSE %s END,status=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN 'withdrawn' ELSE status END,version=version+1,updated_at=%s WHERE appellant_user_id=%d",
-						$redacted,
-						$redacted,
-						DB::now(),
-						$user->ID
+						$redacted, $redacted, DB::now(), $user->ID
 					)
 				);
 				if ( false === $updated || (int) $updated !== $appeal_count ) {
@@ -166,11 +185,10 @@ final class Privacy {
 		if ( $retained ) {
 			$messages[] = __( 'Ranking appeal text and identity were redacted; a minimal policy, status and fairness record was retained for audit integrity.', 'sabri-file26' );
 		}
-		return array(
-			'items_removed' => $removed_any,
-			'items_retained' => $retained,
-			'messages' => $messages,
-			'done' => true,
-		);
+		return array( 'items_removed' => $removed_any, 'items_retained' => $retained, 'messages' => $messages, 'done' => true );
+	}
+
+	private function export_read_failure() {
+		return array( 'data' => array(), 'done' => false );
 	}
 }
