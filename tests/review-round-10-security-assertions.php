@@ -18,9 +18,9 @@ foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $need
 $role_checks = array(
 	'self::VERSION === get_option( self::OPTION_VERSION ) && self::integrity_ok()' => 'role installer never trusts version alone',
 	'private static function integrity_ok()' => 'physical role integrity verifier exists',
-	"! $administrator->has_cap( 'manage_sabri_search' )" => 'administrator configuration capability is verified',
-	"$administrator->has_cap( $cap )" => 'administrator operational-capability drift is detected',
-	"! $role->has_cap( $required_cap )" => 'dedicated required capabilities are verified',
+	'! $administrator->has_cap( \'manage_sabri_search\' )' => 'administrator configuration capability is verified',
+	'$administrator->has_cap( $cap )' => 'administrator operational-capability drift is detected',
+	'! $role->has_cap( $required_cap )' => 'dedicated required capabilities are verified',
 );
 foreach ( $role_checks as $needle => $label ) { if ( false === strpos( $roles, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
 if ( $failures ) { exit( 1 ); }
