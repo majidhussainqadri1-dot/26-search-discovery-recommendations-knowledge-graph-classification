@@ -16,13 +16,13 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 | Round | Result | Frozen findings | Corrective closure |
 |---:|---|---|---|
 | 1 | CLEAN | Deterministic package build, source/package manifest parity, path safety, immutable workflow action pins, PHP 7.4/8.3 matrix, artifact generation and release/source separation are internally consistent. No new proven defect. | No production change. Exact-head CI GREEN `ef41d8337fc84ee9fab35e27bb4df22153299337`. |
-| 2 | DEFECT | `Schema_Integrity` verified only column names and index names. It did not verify safety-critical column data types/nullability or index uniqueness/column order. | Added safety-critical column signatures and exact index signatures. `tests/review-round-02-schema-signatures-second-cycle.php` protects the invariant. Exact-head CI GREEN `a176c9cbbcbde5fce23e63f471500f0b6ca087a3`. |
-| 3 | DEFECT | Canonical object identity was normalized inconsistently: upsert sanitized `object_id` before key generation while tombstone/restrict could hash the raw ID, allowing a revocation miss. Required `domain`/`object_id` could normalize to empty. Monotonic `object_version` accepted malformed/non-positive input by silently coercing it to `1`. | Pending correction after this frozen ledger. |
+| 2 | DEFECT | `Schema_Integrity` verified only column names and index names; safety-critical type/nullability and index uniqueness/order drift could pass. | Added safety-critical column signatures and exact index signatures. Regression: `tests/review-round-02-schema-signatures-second-cycle.php`. Exact-head CI GREEN `a176c9cbbcbde5fce23e63f471500f0b6ca087a3`. |
+| 3 | DEFECT | Canonical object identity was normalized inconsistently between upsert and tombstone/restrict; normalized `domain/object_id` could become invalid; malformed/non-positive monotonic versions were silently coerced. | Canonical key now normalizes object IDs consistently; upsert rejects normalized-empty/oversized identities, invalid positive versions and invalid non-negative event sequences; tombstone/restrict normalize and validate the same identity/version before hashing. Regression: `tests/review-round-03-identity-version-second-cycle.php`. Exact-head CI pending on this closure head. |
 
 ## Round status
 
-- Completed reviews: **3/20**
+- Completed reviews/corrections: **3/20**
 - Defect rounds: **2, 3**
 - Clean rounds: **1**
 
-Round 4 must not begin until Round 3 correction, regression and exact-head CI are green.
+Round 4 must not begin until this exact head is green.
