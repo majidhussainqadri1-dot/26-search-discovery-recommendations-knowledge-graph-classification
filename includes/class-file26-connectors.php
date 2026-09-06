@@ -11,6 +11,13 @@ final class Connectors {
 
 	public function __construct( Security $security ) { $this->security = $security; }
 
+	private function strict_bool( $value ) {
+		if ( is_bool( $value ) ) { return $value; }
+		if ( is_int( $value ) || is_float( $value ) ) { if ( 1 === (int) $value ) { return true; } if ( 0 === (int) $value ) { return false; } return null; }
+		if ( is_string( $value ) ) { $value = strtolower( trim( $value ) ); if ( in_array( $value, array( '1','true','yes','on' ), true ) ) { return true; } if ( in_array( $value, array( '0','false','no','off','' ), true ) ) { return false; } }
+		return null;
+	}
+
 	public function boot() {
 		$manifests = apply_filters( 'sabri_file26_connector_manifests', array() );
 		foreach ( (array) $manifests as $manifest ) { if ( is_array( $manifest ) ) { $this->register( $manifest ); } }
@@ -84,7 +91,7 @@ final class Connectors {
 	public function can_view( $slug, array $document, array $audience ) {
 		$manifest = $this->get( $slug ); if ( ! $manifest || 'active' !== $manifest['status'] ) { return false; }
 		if ( isset( $manifest['can_view'] ) && is_callable( $manifest['can_view'] ) ) {
-			try { return (bool) call_user_func( $manifest['can_view'], $document, $audience ); }
+			try { $decision = call_user_func( $manifest['can_view'], $document, $audience ); return true === $this->strict_bool( $decision ); }
 			catch ( \Throwable $e ) { $this->security->audit( 'connector_visibility_error', array( 'object_type' => 'connector', 'object_key' => $slug, 'reason' => 'callback_exception', 'metadata' => array( 'error_class' => get_class( $e ) ) ) ); return false; }
 		}
 		return $this->security->can_view_visibility( isset( $document['visibility'] ) ? $document['visibility'] : 'restricted', $audience, isset( $document['payload'] ) && is_array( $document['payload'] ) ? $document['payload'] : array() );
@@ -95,7 +102,12 @@ final class Connectors {
 		foreach ( $this->registry as $slug => $manifest ) {
 			$state = 'unknown'; $detail = array();
 			if ( isset( $manifest['health'] ) && is_callable( $manifest['health'] ) ) {
-				try { $value = call_user_func( $manifest['health'] ); if ( is_array( $value ) ) { $state = isset( $value['state'] ) ? sanitize_key( $value['state'] ) : 'unknown'; $detail = $this->sanitize_health_detail( $value ); } else { $state = $value ? 'healthy' : 'degraded'; } }
+				try {
+					$value = call_user_func( $manifest['health'] );
+					if ( is_wp_error( $value ) ) { $state = 'degraded'; $detail = array( 'error_code' => sanitize_key( $value->get_error_code() ) ); }
+					elseif ( is_array( $value ) ) { $state = isset( $value['state'] ) ? sanitize_key( $value['state'] ) : 'unknown'; $detail = $this->sanitize_health_detail( $value ); }
+					else { $state = true === $this->strict_bool( $value ) ? 'healthy' : 'degraded'; }
+				}
 				catch ( \Throwable $e ) { $state = 'degraded'; $detail = array( 'error_class' => sanitize_text_field( get_class( $e ) ) ); }
 			}
 			$persisted = $wpdb->update( DB::table( 'connectors' ), array( 'health_state' => $state, 'last_health' => DB::now(), 'updated_at' => DB::now() ), array( 'slug' => $slug ), array( '%s', '%s', '%s' ), array( '%s' ) );
@@ -123,7 +135,9 @@ final class Connectors {
 
 	public function degraded_domains() {
 		global $wpdb;
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results( "SELECT slug,owner_file,status,health_state,last_health FROM " . DB::table( 'connectors' ) . " WHERE status IN ('active','degraded') AND health_state NOT IN ('healthy','ok') ORDER BY slug", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $rows && '' !== (string) $wpdb->last_error ) { return array( array( 'connector' => '*', 'owner_file' => 'File 26', 'status' => 'degraded', 'health' => 'connector_health_read_failed', 'last_health' => null ) ); }
 		$output = array(); foreach ( (array) $rows as $row ) { $output[] = array( 'connector' => $row['slug'], 'owner_file' => $row['owner_file'], 'status' => $row['status'], 'health' => $row['health_state'], 'last_health' => $row['last_health'] ); }
 		return $output;
 	}
