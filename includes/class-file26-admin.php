@@ -41,7 +41,20 @@ final class Admin {
 			$connectors = array_filter( $this->connectors->all(), static function ( $connector ) { return in_array( $connector['status'], array( 'approved', 'active' ), true ); } ); $health = $this->health->snapshot(); $approved = (bool) apply_filters( 'sabri_file26_activation_gate_approved', false, $health, $connectors );
 			if ( ! $connectors || ! $approved || ! $this->security->require_step_up( 'runtime_activate' ) ) { wp_die( esc_html__( 'Runtime activation is blocked until an approved owner connector, staging evidence, external gate approval and fresh authorization are present.', 'sabri-file26' ), '', array( 'response' => 403 ) ); }
 		}
-		DB::update_settings( array( 'activated' => $activate_requested, 'public_search_enabled' => ! empty( $_POST['public_search_enabled'] ), 'personalization_enabled' => ! empty( $_POST['personalization_enabled'] ), 'telemetry_enabled' => ! empty( $_POST['telemetry_enabled'] ), 'results_per_page' => isset( $_POST['results_per_page'] ) ? max( 1, min( 30, (int) $_POST['results_per_page'] ) ) : 20 ) );
+		$requested = array(
+			'activated' => $activate_requested,
+			'public_search_enabled' => ! empty( $_POST['public_search_enabled'] ),
+			'personalization_enabled' => ! empty( $_POST['personalization_enabled'] ),
+			'telemetry_enabled' => ! empty( $_POST['telemetry_enabled'] ),
+			'results_per_page' => isset( $_POST['results_per_page'] ) ? max( 1, min( 30, (int) $_POST['results_per_page'] ) ) : 20,
+		);
+		DB::update_settings( $requested );
+		$persisted = DB::settings();
+		foreach ( $requested as $key => $value ) {
+			if ( ! array_key_exists( $key, $persisted ) || $persisted[ $key ] !== $value ) {
+				wp_die( esc_html__( 'File 26 settings could not be verified after persistence. No success state is reported.', 'sabri-file26' ), '', array( 'response' => 500 ) );
+			}
+		}
 		$this->security->audit( 'search_settings_updated', array( 'object_type' => 'settings' ) ); wp_safe_redirect( admin_url( 'admin.php?page=sabri-file26&updated=1' ) ); exit;
 	}
 
