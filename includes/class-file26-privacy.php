@@ -9,7 +9,7 @@ final class Privacy {
 	public function erasers( $erasers ) { $erasers['sabri-file26'] = array( 'eraser_friendly_name'=>__( 'Sabri Search, Recommendations and Ranking Appeals', 'sabri-file26' ), 'callback'=>array( $this, 'erase' ) ); return $erasers; }
 
 	public function export( $email, $page = 1 ) {
-		global $wpdb; $user = get_user_by( 'email', $email ); $page=max(1,(int)$page;
+		global $wpdb; $user = get_user_by( 'email', $email ); $page = max( 1, (int) $page );
 		if ( ! $user ) { return array( 'data'=>array(), 'done'=>true ); }
 		$offset=(($page-1)*$this->page_size); $profile=null;
 		if ( 1 === $page ) {
@@ -46,7 +46,11 @@ final class Privacy {
 		try{
 			$removed_feedback=$wpdb->delete(DB::table('feedback'),array('user_id'=>$user->ID),array('%d'));$removed_profile=$wpdb->delete(DB::table('profiles'),array('user_id'=>$user->ID),array('%d'));
 			if(false===$removed_feedback||false===$removed_profile){throw new \RuntimeException('Recommendation erasure failed.');}$removed_any=(bool)($removed_feedback||$removed_profile);
-			if($appeal_count){$redacted='[redacted after verified data-erasure request]';$updated=$wpdb->query($wpdb->prepare('UPDATE '.Doctor_Appeals::table()." SET appellant_user_id=0,reason_text=%s,evidence_json='[]',decision_reason=CASE WHEN decision_reason IS NULL THEN NULL ELSE %s END,status=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN 'withdrawn' ELSE status END,version=version+1,updated_at=%s,decided_at=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN %s ELSE decided_at END WHERE appellant_user_id=%d",$redacted,$redacted,DB::now(),DB::now(),$user->ID));if(false===$updated||(int)$updated!==$appeal_count){throw new \RuntimeException('Ranking appeal redaction was incomplete.');}$retained=true;$removed_any=true;}
+			if($appeal_count){
+				$redacted='[redacted after verified data-erasure request]';
+				$updated=$wpdb->query($wpdb->prepare('UPDATE '.Doctor_Appeals::table()." SET appellant_user_id=0,reason_text=%s,evidence_json='[]',decision_reason=CASE WHEN decision_reason IS NULL THEN NULL ELSE %s END,decided_at=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN %s ELSE decided_at END,status=CASE WHEN status IN ('submitted','under_review','changes_requested') THEN 'withdrawn' ELSE status END,version=version+1,updated_at=%s WHERE appellant_user_id=%d",$redacted,$redacted,DB::now(),DB::now(),$user->ID));
+				if(false===$updated||(int)$updated!==$appeal_count){throw new \RuntimeException('Ranking appeal redaction was incomplete.');}$retained=true;$removed_any=true;
+			}
 			if(false===$wpdb->query('COMMIT')){throw new \RuntimeException('Privacy erasure commit failed.');}
 		}catch(\Throwable $e){$wpdb->query('ROLLBACK');return $this->erase_failure((bool)$appeal_count,__('File 26 erasure could not be completed atomically; no partial success is reported.','sabri-file26'));}
 		delete_option('sabri_file26_last_privacy_failure');
