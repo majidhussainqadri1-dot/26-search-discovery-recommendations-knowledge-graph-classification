@@ -33,7 +33,9 @@ final class Doctor_Ranking {
 			}
 			$this->sort_scored( $scored );
 			$table = DB::table( 'documents' );
-			$wpdb->query( 'START TRANSACTION' );
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+				return new \WP_Error( 'file26_doctor_ranking_write_failed', 'Doctor ranking transaction could not start.', array( 'status' => 500 ) );
+			}
 			try {
 				$rank = 0;
 				foreach ( $scored as $item ) {
@@ -45,8 +47,12 @@ final class Doctor_Ranking {
 					$updated = $wpdb->update( $table, array( 'payload' => wp_json_encode( $payload ), 'updated_at' => DB::now() ), array( 'canonical_key' => $item['key'] ), array( '%s', '%s' ), array( '%s' ) );
 					if ( false === $updated ) { throw new \RuntimeException( 'Doctor rank projection write failed.' ); }
 				}
-				DB::update_settings( array( 'doctor_ranking_last_run' => DB::now(), 'doctor_ranking_policy_version' => $policy['version'] ) );
-				$wpdb->query( 'COMMIT' );
+				$settings = DB::settings();
+				$settings['doctor_ranking_last_run'] = DB::now();
+				$settings['doctor_ranking_policy_version'] = $policy['version'];
+				$settings_written = update_option( DB::OPTION_SETTINGS, $settings, false );
+				if ( false === $settings_written && $settings !== DB::settings() ) { throw new \RuntimeException( 'Doctor ranking metadata write failed.' ); }
+				if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Doctor ranking commit failed.' ); }
 			} catch ( \Throwable $e ) {
 				$wpdb->query( 'ROLLBACK' );
 				return new \WP_Error( 'file26_doctor_ranking_write_failed', 'Doctor ranking recompute failed atomically.', array( 'status' => 500 ) );
