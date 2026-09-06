@@ -105,8 +105,17 @@ final class Plugin {
 		global $wpdb; $table = Doctor_Appeals::table();
 		$final_days = max( 365, min( 3650, (int) DB::setting( 'ranking_appeal_retention_days', 1095 ) ) ); $open_days = max( $final_days, min( 3650, (int) DB::setting( 'ranking_appeal_open_retention_days', 1460 ) ) );
 		$final_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $final_days * DAY_IN_SECONDS ) ); $open_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $open_days * DAY_IN_SECONDS ) );
-		$withdrawn = $wpdb->query( $wpdb->prepare( "UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s", '[redacted after retention expiry]', 'Closed after the documented maximum open-appeal retention period.', DB::now(), DB::now(), $open_cutoff ) );
-		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s", $final_cutoff ) );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_appeal_retention_failed', 'Doctor-ranking appeal retention transaction could not start.' ); }
+		try {
+			$withdrawn = $wpdb->query( $wpdb->prepare( "UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s", '[redacted after retention expiry]', 'Closed after the documented maximum open-appeal retention period.', DB::now(), DB::now(), $open_cutoff ) );
+			if ( false === $withdrawn ) { throw new \RuntimeException( 'Open appeal retention update failed.' ); }
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s", $final_cutoff ) );
+			if ( false === $deleted ) { throw new \RuntimeException( 'Final appeal retention delete failed.' ); }
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Appeal retention commit failed.' ); }
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_appeal_retention_failed', 'Doctor-ranking appeal retention could not be completed atomically.' );
+		}
 		if ( $withdrawn || $deleted ) { $this->security->audit( 'doctor_ranking_appeal_retention', array( 'object_type' => 'ranking_appeal', 'object_key' => 'retention', 'metadata' => array( 'withdrawn_count' => max( 0, (int) $withdrawn ), 'deleted_count' => max( 0, (int) $deleted ), 'final_retention_days' => $final_days, 'open_retention_days' => $open_days ) ) ); }
 		return array( 'withdrawn' => max( 0, (int) $withdrawn ), 'deleted' => max( 0, (int) $deleted ) );
 	}
