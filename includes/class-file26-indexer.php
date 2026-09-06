@@ -84,7 +84,8 @@ final class Indexer {
 	private function release_object_lock($lock_name){global $wpdb;if(is_string($lock_name)&&''!==$lock_name){$wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)',$lock_name));}}
 
 	public function reconcile(){
-		global $wpdb;$documents=DB::table('documents');$tombstones=DB::table('tombstones');$nodes=DB::table('nodes');$classes=DB::table('classifications');$edges=DB::table('edges');$wpdb->query('START TRANSACTION');
+		global $wpdb;$documents=DB::table('documents');$tombstones=DB::table('tombstones');$nodes=DB::table('nodes');$classes=DB::table('classifications');$edges=DB::table('edges');
+		if(false===$wpdb->query('START TRANSACTION')){return new \WP_Error('file26_reconcile_failed','Deletion and graph reconciliation transaction could not start.');}
 		try{
 			$queries=array(
 				"DELETE e FROM $edges e INNER JOIN $tombstones t ON (e.source_key=t.canonical_key OR e.target_key=t.canonical_key)",
