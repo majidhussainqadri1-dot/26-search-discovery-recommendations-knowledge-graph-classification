@@ -3,8 +3,15 @@
 
   const cfg = window.SabriFile26 || {};
   const root = document;
-  const escapeHtml = (value) => String(value || '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
   const newId = () => (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + '-' + Math.random());
+  const safeSameOriginUrl = (value) => {
+    try {
+      const url = new URL(String(value || ''), window.location.origin);
+      return url.origin === window.location.origin ? url.href : '';
+    } catch (error) {
+      return '';
+    }
+  };
 
   async function api(path, options) {
     const response = await fetch(String(cfg.restUrl || '') + path, Object.assign({
@@ -33,6 +40,7 @@
     let controller;
     let requestSequence = 0;
     let activeIndex = -1;
+    let composing = false;
     const listId = input.getAttribute('aria-controls') || ('sabri-f26-suggestions-' + inputIndex);
     input.setAttribute('aria-controls', listId);
     input.setAttribute('aria-autocomplete', 'list');
@@ -63,8 +71,73 @@
       input.setAttribute('aria-expanded', 'false');
       input.removeAttribute('aria-activedescendant');
     };
+    const cancelPending = () => {
+      window.clearTimeout(timer);
+      requestSequence += 1;
+      if (controller) controller.abort();
+      controller = undefined;
+      close();
+    };
+    const activateOption = (item) => {
+      if (!item) return;
+      const target = safeSameOriginUrl(item.getAttribute('data-url'));
+      if (target) window.location.assign(target);
+    };
+    const scheduleSuggestions = () => {
+      window.clearTimeout(timer);
+      requestSequence += 1;
+      if (controller) controller.abort();
+      close();
+      if (composing) return;
+      const value = input.value.trim();
+      const host = input.closest('.sabri-f26__search-field');
+      if (value.length < 2 || !host) return;
+      const sequence = requestSequence;
+      timer = window.setTimeout(async () => {
+        controller = new AbortController();
+        try {
+          const data = await api('suggest?q=' + encodeURIComponent(value), {signal: controller.signal});
+          if (sequence !== requestSequence || input.value.trim() !== value || document.activeElement !== input || composing) return;
+          const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+          if (!suggestions.length) return;
+          const list = document.createElement('ul');
+          list.id = listId;
+          list.className = 'sabri-f26__suggestions';
+          list.setAttribute('role', 'listbox');
+          suggestions.forEach((item, i) => {
+            const target = safeSameOriginUrl(item && item.url);
+            if (!target) return;
+            const option = document.createElement('li');
+            option.id = listId + '-option-' + i;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.setAttribute('data-url', target);
+            option.textContent = String((item && item.label) || '');
+            option.addEventListener('mousedown', (event) => event.preventDefault());
+            option.addEventListener('click', () => activateOption(option));
+            list.appendChild(option);
+          });
+          if (!list.children.length) return;
+          host.appendChild(list);
+          activeIndex = -1;
+          input.setAttribute('aria-expanded', 'true');
+        } catch (error) {
+          if (error.name !== 'AbortError') console.warn('File 26 suggest:', error.message);
+        }
+      }, 220);
+    };
+
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+      cancelPending();
+    });
+    input.addEventListener('compositionend', () => {
+      composing = false;
+      scheduleSuggestions();
+    });
 
     input.addEventListener('keydown', (event) => {
+      if (event.isComposing || composing || event.keyCode === 229) return;
       const items = options();
       if (event.key === 'Escape') {
         close();
@@ -75,42 +148,18 @@
         event.preventDefault();
         setActive(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
       } else if (event.key === 'Enter' && activeIndex >= 0 && items[activeIndex]) {
-        const link = items[activeIndex].querySelector('a[href]');
-        if (link) {
-          event.preventDefault();
-          link.click();
-        }
+        event.preventDefault();
+        activateOption(items[activeIndex]);
       }
     });
 
-    input.addEventListener('input', () => {
-      window.clearTimeout(timer);
-      requestSequence += 1;
-      if (controller) controller.abort();
-      close();
-      const value = input.value.trim();
-      const host = input.closest('.sabri-f26__search-field');
-      if (value.length < 2 || !host) return;
-      const sequence = requestSequence;
-      timer = window.setTimeout(async () => {
-        controller = new AbortController();
-        try {
-          const data = await api('suggest?q=' + encodeURIComponent(value), {signal: controller.signal});
-          if (sequence !== requestSequence || input.value.trim() !== value || document.activeElement !== input) return;
-          const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
-          if (!suggestions.length) return;
-          const list = document.createElement('ul');
-          list.id = listId;
-          list.className = 'sabri-f26__suggestions';
-          list.setAttribute('role', 'listbox');
-          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false"><a href="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</a></li>').join('');
-          host.appendChild(list);
-          activeIndex = -1;
-          input.setAttribute('aria-expanded', 'true');
-        } catch (error) {
-          if (error.name !== 'AbortError') console.warn('File 26 suggest:', error.message);
-        }
-      }, 220);
+    input.addEventListener('input', (event) => {
+      if (event.isComposing || composing) {
+        cancelPending();
+        composing = true;
+        return;
+      }
+      scheduleSuggestions();
     });
 
     input.addEventListener('blur', () => {
