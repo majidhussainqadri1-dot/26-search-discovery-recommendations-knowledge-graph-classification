@@ -27,7 +27,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 12 | DEFECT | Ranking activation/rollback and taxonomy merge/split had unchecked transaction boundaries. | High-risk transitions verify START/COMMIT and demotion failure. CI GREEN `dc0db18b5485b89c84df84796bb657f413f3666b`. |
 | 13 | CLEAN | Doctor-ranking appeals ownership, serialization, bounds, conflict/CAS, final-state and membership checks were consistent; recompute result is separately audited and no Must-contract equates appeal correction with synchronous recompute completion. | No production change. Exact-head CI GREEN `73af6d5c54c4477c8a2dba51a8e9c2e99008e4ee`. |
 | 14 | DEFECT | Unversioned `docs/QA-REPORT.md` presented stale 2026-08-13 review branch, baseline SHA and prior 20-round ledger as current corrective evidence, creating documentation/evidence provenance drift despite current runtime contracts being present. | Current QA report now names the 2026-09-06 branch/baseline/ledger as current evidence, explicitly labels the 2026-08-13 cycle historical, avoids duplicating mutable round counts, and QA now requires the current corrective ledger. `tests/review-round-14-evidence-truth.php` protects provenance truth. Exact-head CI GREEN `dc4bb37b0a3d307b6e26beef163674d61c033a16`. |
-| 15 | DEFECT | Runtime migration integrity checked stored schema versions and table existence but not required physical columns/indexes. A table could exist with structural drift while the version option remained current, allowing runtime exposure against an incomplete physical schema. Appeals schema and health used the same table-presence-only assumption. | Pending correction after this frozen ledger. |
+| 15 | DEFECT | Runtime migration integrity checked stored schema versions and table existence but not required physical columns/indexes. A table could exist with structural drift while the version option remained current, allowing runtime exposure against an incomplete physical schema. Appeals schema and health used the same table-presence-only assumption. | Added `Schema_Integrity` physical metadata verification for every File 26 table plus ranking appeals, including required columns/indexes. Runtime migration now repairs main/appeals drift under the existing lock and fails closed if shape remains incomplete; Health reports structural drift. `tests/review-round-15-physical-schema-integrity.php` protects the gate. Exact-head CI pending on this closure head. |
 
 ## First-ten-round checkpoint
 
@@ -36,7 +36,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 
 ## Round status
 
-- Completed rounds: **14/20**
-- Round 15 review: **FROZEN — correction pending**
+- Completed reviews/corrections: **15/20**
+- Round 15 exact-head CI: **PENDING on this closure head**
 
-Round 16 must not begin until Round 15 correction, regression and exact-head CI are green.
+Round 16 must not begin until this exact head is green.
