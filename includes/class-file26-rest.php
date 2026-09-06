@@ -74,7 +74,9 @@ final class REST {
 
 	public function suggest( \WP_REST_Request $request ) {
 		$query = $request->get_param( 'q' );
-		return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'suggestions' => $this->search->suggest( $query, $request->get_param( 'locale' ), $request->get_param( 'limit' ) ?: 8 ) ), 200, ! $this->security->contains_sensitive_query( $query ) );
+		$suggestions = $this->search->suggest( $query, $request->get_param( 'locale' ), $request->get_param( 'limit' ) ?: 8 );
+		if ( is_wp_error( $suggestions ) ) { return $suggestions; }
+		return $this->respond( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'suggestions' => $suggestions ), 200, ! $this->security->contains_sensitive_query( $query ) );
 	}
 
 	public function discover( \WP_REST_Request $request ) {
