@@ -8,11 +8,13 @@ final class Governance {
 	private $security;
 	private $taxonomy;
 	private $graph;
+	private $connectors;
 
-	public function __construct( Security $security, Taxonomy $taxonomy, Graph $graph ) {
+	public function __construct( Security $security, Taxonomy $taxonomy, Graph $graph, Connectors $connectors ) {
 		$this->security = $security;
 		$this->taxonomy = $taxonomy;
 		$this->graph = $graph;
+		$this->connectors = $connectors;
 	}
 
 	public function transition_connector( $slug, $target, $reason ) {
@@ -40,6 +42,15 @@ final class Governance {
 		if ( empty( $allowed[ $row['status'] ] ) || ! in_array( $target, $allowed[ $row['status'] ], true ) ) {
 			return new \WP_Error( 'file26_invalid_transition', 'Invalid connector lifecycle transition.', array( 'status' => 409 ) );
 		}
+		$runtime = $this->connectors->get( $slug );
+		if ( in_array( $target, array( 'shadow', 'approved', 'active' ), true ) ) {
+			if ( ! $runtime || empty( $runtime['list_batch'] ) || ! is_callable( $runtime['list_batch'] ) ) {
+				return new \WP_Error( 'file26_connector_runtime_incomplete', 'Connector promotion requires a current bounded runtime adapter.', array( 'status' => 409 ) );
+			}
+			if ( 'active' === $target && ( empty( $runtime['can_view'] ) || ! is_callable( $runtime['can_view'] ) || empty( $runtime['health'] ) || ! is_callable( $runtime['health'] ) ) ) {
+				return new \WP_Error( 'file26_connector_runtime_incomplete', 'Active connector promotion requires current visibility and health callbacks.', array( 'status' => 409 ) );
+			}
+		}
 		if ( in_array( $target, array( 'active', 'retired' ), true ) && ! $this->security->require_step_up( 'connector_' . $target ) ) {
 			return new \WP_Error( 'file26_step_up_required', 'Fresh high-risk authorization is required.', array( 'status' => 403 ) );
 		}
@@ -52,6 +63,7 @@ final class Governance {
 		if ( 1 !== $updated ) {
 			return new \WP_Error( 'file26_transition_conflict', 'Connector state changed concurrently.', array( 'status' => 409 ) );
 		}
+		if ( $runtime ) { $this->connectors->set_runtime_status( $slug, $target ); }
 		$this->security->audit( 'connector_' . $target, array( 'object_type' => 'connector', 'object_key' => $slug, 'reason' => $reason, 'metadata' => array( 'from' => $row['status'], 'to' => $target ) ) );
 		do_action( 'sabri_file26_event', 'SearchConnector' . str_replace( ' ', '', ucwords( str_replace( '_', ' ', $target ) ) ), array( 'connector' => $slug, 'from' => $row['status'], 'to' => $target ) );
 		return true;
@@ -241,15 +253,9 @@ final class Governance {
 		$target = sanitize_key( $target );
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT edge_uuid,state,version FROM ' . DB::table( 'edges' ) . ' WHERE edge_uuid=%s', $edge_uuid ), ARRAY_A );
 		if ( ! $row ) { return new \WP_Error( 'file26_edge_not_found', 'Graph edge not found.', array( 'status' => 404 ) ); }
-		if ( 'active' === $target ) {
-			return $this->graph->approve_edge( $edge_uuid, (int) $row['version'] );
-		}
-		if ( 'removed' === $target ) {
-			return $this->graph->remove_edge( $edge_uuid, (int) $row['version'], $reason );
-		}
-		if ( 'corrected' !== $target || 'active' !== $row['state'] ) {
-			return new \WP_Error( 'file26_invalid_edge_state', 'Invalid graph edge lifecycle transition.', array( 'status' => 409 ) );
-		}
+		if ( 'active' === $target ) { return $this->graph->approve_edge( $edge_uuid, (int) $row['version'] ); }
+		if ( 'removed' === $target ) { return $this->graph->remove_edge( $edge_uuid, (int) $row['version'], $reason ); }
+		if ( 'corrected' !== $target || 'active' !== $row['state'] ) { return new \WP_Error( 'file26_invalid_edge_state', 'Invalid graph edge lifecycle transition.', array( 'status' => 409 ) ); }
 		$updated = $wpdb->query( $wpdb->prepare( 'UPDATE ' . DB::table( 'edges' ) . " SET state='corrected',version=version+1,updated_at=%s WHERE edge_uuid=%s AND state='active' AND version=%d", DB::now(), $edge_uuid, (int) $row['version'] ) );
 		if ( 1 !== (int) $updated ) { return new \WP_Error( 'file26_edge_transition_conflict', 'Graph edge changed concurrently.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'knowledge_edge_corrected', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'from' => $row['state'], 'to' => 'corrected' ) ) );
