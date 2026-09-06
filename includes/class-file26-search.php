@@ -214,6 +214,7 @@ final class Search {
 		$connector_table = DB::table( 'connectors' );
 		$locale = $locale ? substr( sanitize_text_field( $locale ), 0, 20 ) : determine_locale();
 		$limit = max( 1, min( 10, (int) $limit ) );
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT d.* FROM $table d INNER JOIN $connector_table c ON c.slug=d.connector_slug AND c.status='active'
@@ -223,9 +224,13 @@ final class Search {
 				$like, $locale, substr( $locale, 0, 2 ), min( 50, $limit * 5 )
 			), ARRAY_A
 		);
+		if ( ! is_array( $rows ) ) {
+			$this->security->audit( 'search_suggest_read_failed', array( 'object_type' => 'search', 'object_key' => 'suggest-read', 'reason' => 'db_read_failed' ) );
+			return new \WP_Error( 'file26_suggest_read_failed', 'Search suggestions could not be read safely. Please retry.', array( 'status' => 503 ) );
+		}
 		$output = array();
 		$audience = array( 'authenticated' => false, 'valid' => true, 'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array() );
-		foreach ( (array) $rows as $row ) {
+		foreach ( $rows as $row ) {
 			$row = $this->hydrate_row( $row );
 			if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) { continue; }
 			$output[] = array( 'key' => $row['canonical_key'], 'label' => $row['title'], 'entity_type' => $row['entity_type'], 'url' => $row['canonical_url'] );
