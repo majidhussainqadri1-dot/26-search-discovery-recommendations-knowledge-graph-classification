@@ -25,11 +25,15 @@ final class DB {
 	}
 
 	public static function activate() {
-		self::install_schema();
-		self::install_defaults();
+		$schema = self::install_schema();
+		if ( is_wp_error( $schema ) ) { return $schema; }
+		$defaults = self::install_defaults();
+		if ( is_wp_error( $defaults ) ) { return $defaults; }
 		self::install_capabilities();
-		self::schedule();
+		$schedule = self::schedule();
+		if ( is_wp_error( $schedule ) ) { return $schedule; }
 		flush_rewrite_rules( false );
+		return true;
 	}
 
 	public static function deactivate() {
@@ -40,8 +44,8 @@ final class DB {
 		flush_rewrite_rules( false );
 	}
 
-	private static function install_defaults() {
-		$defaults = array(
+	private static function default_settings() {
+		return array(
 			'activated' => false,
 			'public_search_enabled' => true,
 			'personalization_enabled' => false,
@@ -51,12 +55,17 @@ final class DB {
 			'results_per_page' => 20,
 			'max_results_per_page' => 30,
 			'candidate_limit' => 200,
+			'search_scan_batch' => 250,
+			'max_candidate_scan' => 5000,
+			'job_lock_timeout_seconds' => 1800,
 			'graph_max_depth' => 2,
 			'graph_max_degree' => 20,
 			'tombstone_retention_days' => 180,
 			'feedback_retention_days' => 365,
 			'audit_retention_days' => 760,
-			'primary_color' => '#138A36',
+			'ranking_appeal_retention_days' => 1095,
+			'ranking_appeal_open_retention_days' => 1460,
+			'primary_color' => '#087A4E',
 			'policy_version' => 'organic-1.0',
 			'doctor_ranking_policy_version' => 'doctor-global-1.0',
 			'doctor_ranking_last_run' => '',
@@ -64,47 +73,51 @@ final class DB {
 			'synonyms' => array(),
 			'transliteration_aliases' => array(),
 		);
+	}
+
+	private static function install_defaults() {
+		$defaults = self::default_settings();
 		$current = get_option( self::OPTION_SETTINGS, array() );
-		update_option( self::OPTION_SETTINGS, array_merge( $defaults, is_array( $current ) ? $current : array() ), false );
-		update_option( self::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
+		$merged = array_merge( $defaults, is_array( $current ) ? $current : array() );
+		$written = update_option( self::OPTION_SETTINGS, $merged, false );
+		if ( ! $written && self::settings() !== $merged ) {
+			return new \WP_Error( 'file26_settings_install_failed', 'File 26 settings defaults could not be persisted.' );
+		}
+		return true;
 	}
 
 	private static function install_capabilities() {
 		$role = get_role( 'administrator' );
-		if ( ! $role ) {
-			return;
-		}
-		foreach ( array(
-			'manage_sabri_search',
-			'operate_sabri_search',
-			'curate_sabri_taxonomy',
-			'approve_sabri_ranking',
-			'audit_sabri_search',
-		) as $cap ) {
+		if ( ! $role ) { return; }
+		foreach ( array( 'manage_sabri_search', 'operate_sabri_search', 'curate_sabri_taxonomy', 'approve_sabri_ranking', 'audit_sabri_search' ) as $cap ) {
 			$role->add_cap( $cap );
 		}
 	}
 
 	public static function schedule() {
-		if ( ! wp_next_scheduled( self::CRON_QUEUE ) ) {
-			wp_schedule_event( time() + 300, 'hourly', self::CRON_QUEUE );
+		$events = array(
+			array( self::CRON_QUEUE, time() + 300, 'hourly' ),
+			array( self::CRON_RECONCILE, time() + HOUR_IN_SECONDS, 'twicedaily' ),
+			array( self::CRON_RETENTION, time() + DAY_IN_SECONDS, 'daily' ),
+		);
+		foreach ( $events as $event ) {
+			if ( ! wp_next_scheduled( $event[0] ) ) {
+				$result = wp_schedule_event( $event[1], $event[2], $event[0], array(), true );
+				if ( is_wp_error( $result ) ) { return $result; }
+			}
 		}
-		if ( ! wp_next_scheduled( self::CRON_RECONCILE ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', self::CRON_RECONCILE );
+		$schedules = wp_get_schedules();
+		if ( isset( $schedules['sabri_file26_monthly'] ) && ! wp_next_scheduled( self::CRON_DOCTOR_RANKING ) ) {
+			$result = wp_schedule_event( time() + DAY_IN_SECONDS, 'sabri_file26_monthly', self::CRON_DOCTOR_RANKING, array(), true );
+			if ( is_wp_error( $result ) ) { return $result; }
 		}
-		if ( ! wp_next_scheduled( self::CRON_RETENTION ) ) {
-			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', self::CRON_RETENTION );
-		}
-		if ( ! wp_next_scheduled( self::CRON_DOCTOR_RANKING ) ) {
-			wp_schedule_event( time() + DAY_IN_SECONDS, 'sabri_file26_monthly', self::CRON_DOCTOR_RANKING );
-		}
+		return true;
 	}
 
 	public static function install_schema() {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$charset = $wpdb->get_charset_collate();
-
 		$sql = array();
 		$sql[] = 'CREATE TABLE ' . self::table( 'connectors' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -118,11 +131,8 @@ final class DB {
 			last_health datetime NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY slug (slug),
-			KEY status (status)
+			PRIMARY KEY  (id), UNIQUE KEY slug (slug), KEY status (status)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'documents' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			canonical_key char(64) NOT NULL,
@@ -155,15 +165,8 @@ final class DB {
 			checksum char(64) NOT NULL,
 			indexed_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY canonical_key (canonical_key),
-			KEY eligible (state,visibility,entity_type),
-			KEY connector_slug (connector_slug),
-			KEY domain_name (domain_name),
-			KEY locale (locale),
-			KEY freshness_at (freshness_at)
+			PRIMARY KEY  (id), UNIQUE KEY canonical_key (canonical_key), KEY eligible (state,visibility,entity_type), KEY connector_slug (connector_slug), KEY domain_name (domain_name), KEY locale (locale), KEY freshness_at (freshness_at)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'tombstones' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			canonical_key char(64) NOT NULL,
@@ -175,11 +178,8 @@ final class DB {
 			received_at datetime NOT NULL,
 			purged_at datetime NULL,
 			expires_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY canonical_key (canonical_key),
-			KEY expires_at (expires_at)
+			PRIMARY KEY  (id), UNIQUE KEY canonical_key (canonical_key), KEY expires_at (expires_at)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'terms' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			term_uuid char(36) NOT NULL,
@@ -195,13 +195,8 @@ final class DB {
 			redirect_uuid char(36) NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY term_uuid (term_uuid),
-			UNIQUE KEY slug_language (slug,language),
-			KEY status (status),
-			KEY parent_uuid (parent_uuid)
+			PRIMARY KEY  (id), UNIQUE KEY term_uuid (term_uuid), UNIQUE KEY slug_language (slug,language), KEY status (status), KEY parent_uuid (parent_uuid)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'term_aliases' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			term_uuid char(36) NOT NULL,
@@ -210,11 +205,8 @@ final class DB {
 			language varchar(20) NOT NULL DEFAULT 'en-US',
 			status varchar(24) NOT NULL DEFAULT 'active',
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY alias_language (alias_normalized,language),
-			KEY term_uuid (term_uuid)
+			PRIMARY KEY  (id), UNIQUE KEY alias_language (alias_normalized,language), KEY term_uuid (term_uuid)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'classifications' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			object_key char(64) NOT NULL,
@@ -228,12 +220,8 @@ final class DB {
 			version bigint unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY object_term (object_key,term_uuid),
-			KEY status (status),
-			KEY term_uuid (term_uuid)
+			PRIMARY KEY  (id), UNIQUE KEY object_term (object_key,term_uuid), KEY status (status), KEY term_uuid (term_uuid)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'nodes' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			node_key char(64) NOT NULL,
@@ -246,11 +234,8 @@ final class DB {
 			title text NOT NULL,
 			payload longtext NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY node_key (node_key),
-			KEY eligible (state,visibility,node_type)
+			PRIMARY KEY  (id), UNIQUE KEY node_key (node_key), KEY eligible (state,visibility,node_type)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'edges' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			edge_uuid char(36) NOT NULL,
@@ -265,13 +250,8 @@ final class DB {
 			version bigint unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY edge_uuid (edge_uuid),
-			KEY source_lookup (source_key,state,visibility),
-			KEY target_lookup (target_key,state,visibility),
-			KEY edge_type (edge_type)
+			PRIMARY KEY  (id), UNIQUE KEY edge_uuid (edge_uuid), KEY source_lookup (source_key,state,visibility), KEY target_lookup (target_key,state,visibility), KEY edge_type (edge_type)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'ranking_policies' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			policy_uuid char(36) NOT NULL,
@@ -285,12 +265,8 @@ final class DB {
 			effective_at datetime NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY policy_uuid (policy_uuid),
-			UNIQUE KEY context_version (context_name,audience,version),
-			KEY active_policy (context_name,audience,status)
+			PRIMARY KEY  (id), UNIQUE KEY policy_uuid (policy_uuid), UNIQUE KEY context_version (context_name,audience,version), KEY active_policy (context_name,audience,status)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'feedback' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			idempotency_key char(64) NOT NULL,
@@ -303,12 +279,8 @@ final class DB {
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			expires_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY idempotency_key (idempotency_key),
-			KEY user_active (user_id,active),
-			KEY expires_at (expires_at)
+			PRIMARY KEY  (id), UNIQUE KEY idempotency_key (idempotency_key), KEY user_active (user_id,active), KEY expires_at (expires_at)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'profiles' ) . " (
 			user_id bigint unsigned NOT NULL,
 			consent tinyint(1) NOT NULL DEFAULT 0,
@@ -319,7 +291,6 @@ final class DB {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (user_id)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'jobs' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			job_uuid char(36) NOT NULL,
@@ -336,12 +307,8 @@ final class DB {
 			finished_at datetime NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY job_uuid (job_uuid),
-			KEY runnable (status,available_at),
-			KEY job_type (job_type)
+			PRIMARY KEY  (id), UNIQUE KEY job_uuid (job_uuid), KEY runnable (status,available_at), KEY job_type (job_type)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'audit' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			action_name varchar(96) NOT NULL,
@@ -352,12 +319,8 @@ final class DB {
 			trace_id char(32) NOT NULL,
 			metadata longtext NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			KEY action_name (action_name),
-			KEY object_lookup (object_type,object_key),
-			KEY created_at (created_at)
+			PRIMARY KEY  (id), KEY action_name (action_name), KEY object_lookup (object_type,object_key), KEY created_at (created_at)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'metrics' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			metric_date date NOT NULL,
@@ -367,25 +330,57 @@ final class DB {
 			count_value bigint unsigned NOT NULL DEFAULT 0,
 			sum_value decimal(18,4) NOT NULL DEFAULT 0,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY metric_bucket (metric_date,metric_key,bucket_hash,locale),
-			KEY metric_date (metric_date)
+			PRIMARY KEY  (id), UNIQUE KEY metric_bucket (metric_date,metric_key,bucket_hash,locale), KEY metric_date (metric_date)
 		) $charset;";
-
 		$sql[] = 'CREATE TABLE ' . self::table( 'rate_limits' ) . " (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
 			bucket_key char(64) NOT NULL,
 			window_start bigint unsigned NOT NULL,
 			count_value int unsigned NOT NULL DEFAULT 0,
 			expires_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY bucket_window (bucket_key,window_start),
-			KEY expires_at (expires_at)
+			PRIMARY KEY  (id), UNIQUE KEY bucket_window (bucket_key,window_start), KEY expires_at (expires_at)
 		) $charset;";
 
-		foreach ( $sql as $statement ) {
-			dbDelta( $statement );
+		foreach ( $sql as $statement ) { dbDelta( $statement ); }
+		$verified = self::verify_schema( true );
+		if ( is_wp_error( $verified ) ) { return $verified; }
+		$written = update_option( self::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
+		if ( ! $written && SABRI_FILE26_SCHEMA_VERSION !== get_option( self::OPTION_SCHEMA ) ) {
+			return new \WP_Error( 'file26_schema_pointer_failed', 'File 26 schema version could not be persisted after verification.' );
 		}
+		return true;
+	}
+
+	public static function verify_schema( $deep = false ) {
+		global $wpdb;
+		$required = array( 'connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits' );
+		$pattern = $wpdb->esc_like( $wpdb->prefix . 'f26_' ) . '%';
+		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $pattern ) );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $tables ) ) {
+			return new \WP_Error( 'file26_schema_read_failed', 'File 26 database tables could not be verified.' );
+		}
+		foreach ( $required as $name ) {
+			if ( ! in_array( self::table( $name ), $tables, true ) ) {
+				return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing: ' . $name . '.' );
+			}
+		}
+		if ( $deep ) {
+			$critical = array(
+				'documents' => array( 'canonical_key','connector_slug','object_version','state','visibility','payload','checksum' ),
+				'jobs' => array( 'job_uuid','status','lock_token','attempts','available_at' ),
+				'ranking_policies' => array( 'policy_uuid','context_name','audience','version','status','approval_one','approval_two' ),
+				'feedback' => array( 'idempotency_key','user_id','feedback_type','active','expires_at' ),
+				'profiles' => array( 'user_id','consent','opted_out','version' ),
+			);
+			foreach ( $critical as $name => $columns_required ) {
+				$table = self::table( $name );
+				$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				if ( ! empty( $wpdb->last_error ) || ! is_array( $columns ) || array_diff( $columns_required, $columns ) ) {
+					return new \WP_Error( 'file26_schema_columns_incomplete', 'Critical columns are missing from File 26 table: ' . $name . '.' );
+				}
+			}
+		}
+		return true;
 	}
 
 	public static function settings() {
@@ -399,34 +394,26 @@ final class DB {
 	}
 
 	public static function update_settings( array $new ) {
-		$current = self::settings();
-		$allowed = array_keys( $current );
+		$current = array_merge( self::default_settings(), self::settings() );
+		$allowed = array_keys( self::default_settings() );
 		$clean = array();
-		foreach ( $new as $key => $value ) {
-			if ( in_array( $key, $allowed, true ) ) {
-				$clean[ $key ] = $value;
-			}
-		}
+		foreach ( $new as $key => $value ) { if ( in_array( $key, $allowed, true ) ) { $clean[ $key ] = $value; } }
 		$merged = array_merge( $current, $clean );
-		update_option( self::OPTION_SETTINGS, $merged, false );
+		$written = update_option( self::OPTION_SETTINGS, $merged, false );
+		if ( ! $written && self::settings() !== $merged ) {
+			return new \WP_Error( 'file26_settings_write_failed', 'File 26 settings could not be persisted.' );
+		}
 		return $merged;
 	}
 
-	public static function now() {
-		return current_time( 'mysql', true );
-	}
+	public static function now() { return current_time( 'mysql', true ); }
 
 	public static function uuid() {
 		return function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : sprintf(
 			'%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-			wp_rand( 0, 0xffff ),
-			wp_rand( 0, 0xffff ),
-			wp_rand( 0, 0xffff ),
-			wp_rand( 0, 0x0fff ) | 0x4000,
-			wp_rand( 0, 0x3fff ) | 0x8000,
-			wp_rand( 0, 0xffff ),
-			wp_rand( 0, 0xffff ),
-			wp_rand( 0, 0xffff )
+			wp_rand( 0, 0xffff ), wp_rand( 0, 0xffff ), wp_rand( 0, 0xffff ),
+			wp_rand( 0, 0x0fff ) | 0x4000, wp_rand( 0, 0x3fff ) | 0x8000,
+			wp_rand( 0, 0xffff ), wp_rand( 0, 0xffff ), wp_rand( 0, 0xffff )
 		);
 	}
 }
