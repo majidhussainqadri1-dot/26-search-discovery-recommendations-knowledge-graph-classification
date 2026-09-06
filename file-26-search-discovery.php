@@ -44,6 +44,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-health.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-central-plan.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-operation-truth.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-privacy-truth.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-queue-truth.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
 
 register_activation_hook( __FILE__, static function () {
@@ -58,45 +59,20 @@ add_action(
 	static function () {
 		\Sabri\File26\Operation_Truth::boot();
 		\Sabri\File26\Privacy_Truth::boot();
-		\Sabri\File26\Plugin::instance()->boot();
+		$plugin = \Sabri\File26\Plugin::instance();
+		$plugin->boot();
+		remove_action( \Sabri\File26\DB::CRON_QUEUE, array( $plugin->indexer(), 'process_queue' ) );
+		$queue_truth = new \Sabri\File26\Queue_Truth( $plugin->indexer(), $plugin->connectors(), new \Sabri\File26\Security() );
+		add_action( \Sabri\File26\DB::CRON_QUEUE, array( $queue_truth, 'run' ) );
 	},
 	5
 );
 
-/**
- * Documented compatibility contracts. These wrappers are intentionally thin:
- * they never bypass connector validation, authorization or lifecycle rules.
- */
-function sabri_file26_register_connector( array $manifest ) {
-	return \Sabri\File26\Plugin::instance()->connectors()->register( $manifest );
-}
-
-function sabri_file26_upsert_document( array $document ) {
-	return \Sabri\File26\Plugin::instance()->indexer()->upsert( $document );
-}
-
-function sabri_file26_restrict_document( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) {
-	return \Sabri\File26\Plugin::instance()->indexer()->restrict( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason );
-}
-
-function sabri_file26_tombstone_document( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) {
-	return \Sabri\File26\Plugin::instance()->indexer()->tombstone( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason );
-}
-
-function sabri_file26_search( array $request ) {
-	$plugin = \Sabri\File26\Plugin::instance();
-	$result = $plugin->search()->run( $request );
-	return $plugin->central_plan()->augment_search_result( $result, $request );
-}
-
-function sabri_file26_recommendations( array $request = array() ) {
-	return \Sabri\File26\Plugin::instance()->recommendations()->get( $request );
-}
-
-function sabri_file26_ranking_constitution() {
-	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
-}
-
-function sabri_file26_recompute_doctor_ranking( $reason = 'manual' ) {
-	return \Sabri\File26\Plugin::instance()->doctor_ranking()->recompute( (string) $reason );
-}
+function sabri_file26_register_connector( array $manifest ) { return \Sabri\File26\Plugin::instance()->connectors()->register( $manifest ); }
+function sabri_file26_upsert_document( array $document ) { return \Sabri\File26\Plugin::instance()->indexer()->upsert( $document ); }
+function sabri_file26_restrict_document( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) { return \Sabri\File26\Plugin::instance()->indexer()->restrict( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason ); }
+function sabri_file26_tombstone_document( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return \Sabri\File26\Plugin::instance()->indexer()->tombstone( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason ); }
+function sabri_file26_search( array $request ) { $plugin = \Sabri\File26\Plugin::instance(); $result = $plugin->search()->run( $request ); return $plugin->central_plan()->augment_search_result( $result, $request ); }
+function sabri_file26_recommendations( array $request = array() ) { return \Sabri\File26\Plugin::instance()->recommendations()->get( $request ); }
+function sabri_file26_ranking_constitution() { return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution(); }
+function sabri_file26_recompute_doctor_ranking( $reason = 'manual' ) { return \Sabri\File26\Plugin::instance()->doctor_ranking()->recompute( (string) $reason ); }
