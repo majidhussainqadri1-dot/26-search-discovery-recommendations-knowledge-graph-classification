@@ -34,6 +34,9 @@ final class Governance {
 			'retired' => array(),
 		);
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'connectors' ) . ' WHERE slug=%s', $slug ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'file26_connector_state_read_failed', 'Connector governance state could not be read safely.', array( 'status' => 500 ) );
+		}
 		if ( ! $row ) {
 			return new \WP_Error( 'file26_connector_not_found', 'Connector not found.', array( 'status' => 404 ) );
 		}
@@ -43,12 +46,18 @@ final class Governance {
 		if ( in_array( $target, array( 'active', 'retired' ), true ) && ! $this->security->require_step_up( 'connector_' . $target ) ) {
 			return new \WP_Error( 'file26_step_up_required', 'Fresh high-risk authorization is required.', array( 'status' => 403 ) );
 		}
+		if ( 'active' === $target && ! apply_filters( 'sabri_file26_connector_activation_approved', false, $row, get_current_user_id(), $reason ) ) {
+			return new \WP_Error( 'file26_connector_activation_approval_required', 'Explicit approved activation evidence is required before a connector can enter the production lane.', array( 'status' => 403 ) );
+		}
 		$updated = $wpdb->update(
 			DB::table( 'connectors' ),
 			array( 'status' => $target, 'updated_at' => DB::now() ),
 			array( 'slug' => $slug, 'status' => $row['status'] ),
 			array( '%s', '%s' ), array( '%s', '%s' )
 		);
+		if ( false === $updated ) {
+			return new \WP_Error( 'file26_connector_state_write_failed', 'Connector lifecycle state could not be persisted.', array( 'status' => 500 ) );
+		}
 		if ( 1 !== $updated ) {
 			return new \WP_Error( 'file26_transition_conflict', 'Connector state changed concurrently.', array( 'status' => 409 ) );
 		}
@@ -65,6 +74,9 @@ final class Governance {
 		$context = sanitize_key( isset( $input['context'] ) ? $input['context'] : 'search' );
 		$audience = sanitize_key( isset( $input['audience'] ) ? $input['audience'] : 'public' );
 		$version = sanitize_text_field( isset( $input['version'] ) ? $input['version'] : '' );
+		if ( ! in_array( $context, array( 'search', 'discover' ), true ) || ! in_array( $audience, array( 'public', 'member', 'minor_guarded' ), true ) ) {
+			return new \WP_Error( 'file26_invalid_policy_scope', 'Ranking policy context or audience is not an implemented runtime scope.', array( 'status' => 400 ) );
+		}
 		$features = isset( $input['features'] ) && is_array( $input['features'] ) ? $this->sanitize_policy_features( $input['features'] ) : array();
 		if ( is_wp_error( $features ) ) { return $features; }
 		if ( ! $version || ! $features ) {
@@ -81,6 +93,7 @@ final class Governance {
 			'approval_one' => get_current_user_id(), 'approval_two' => null, 'effective_at' => null,
 			'created_at' => DB::now(), 'updated_at' => DB::now(),
 		) );
+		if ( false === $ok ) { return new \WP_Error( 'file26_policy_write_failed', 'The ranking policy could not be persisted.', array( 'status' => 500 ) ); }
 		if ( ! $ok ) { return new \WP_Error( 'file26_policy_conflict', 'The ranking policy version already exists.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'ranking_policy_staged', array( 'object_type' => 'ranking_policy', 'object_key' => $uuid, 'metadata' => array( 'context' => $context, 'audience' => $audience, 'version' => $version ) ) );
 		return $uuid;
@@ -94,6 +107,7 @@ final class Governance {
 		}
 		$uuid = sanitize_text_field( $uuid );
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . ' WHERE policy_uuid=%s', $uuid ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_policy_read_failed', 'Ranking policy state could not be read safely.', array( 'status' => 500 ) ); }
 		$current = get_current_user_id();
 		if ( ! $row || 'staged' !== $row['status'] || ! $current || $current === (int) $row['approval_one'] || ! empty( $row['approval_two'] ) ) {
 			return new \WP_Error( 'file26_dual_approval_required', 'A distinct unrecorded second approval is required.', array( 'status' => 409 ) );
@@ -103,6 +117,7 @@ final class Governance {
 			array( 'policy_uuid' => $uuid, 'status' => 'staged', 'approval_two' => null ),
 			array( '%d', '%s' ), array( '%s', '%s', '%d' )
 		);
+		if ( false === $updated ) { return new \WP_Error( 'file26_policy_write_failed', 'Ranking approval could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== $updated ) {
 			return new \WP_Error( 'file26_policy_conflict', 'Ranking policy changed concurrently.', array( 'status' => 409 ) );
 		}
@@ -117,6 +132,7 @@ final class Governance {
 		}
 		$uuid = sanitize_text_field( $uuid );
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . ' WHERE policy_uuid=%s', $uuid ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_policy_read_failed', 'Ranking policy state could not be read safely.', array( 'status' => 500 ) ); }
 		$second = $row ? (int) $row['approval_two'] : 0;
 		if ( ! $row || 'staged' !== $row['status'] || ! $second || $second === (int) $row['approval_one'] || ( $second_approver_id && $second !== absint( $second_approver_id ) ) ) {
 			return new \WP_Error( 'file26_dual_approval_required', 'A separately recorded distinct second approval is required.', array( 'status' => 409 ) );
@@ -126,7 +142,8 @@ final class Governance {
 		}
 		$wpdb->query( 'START TRANSACTION' );
 		try {
-			$wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'context_name' => $row['context_name'], 'audience' => $row['audience'], 'status' => 'active' ) );
+			$rolled = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'context_name' => $row['context_name'], 'audience' => $row['audience'], 'status' => 'active' ) );
+			if ( false === $rolled || $rolled > 1 ) { throw new \RuntimeException( 'Active policy invariant failed.' ); }
 			$updated = $wpdb->update(
 				DB::table( 'ranking_policies' ),
 				array( 'status' => 'active', 'effective_at' => DB::now(), 'updated_at' => DB::now() ),
@@ -134,11 +151,14 @@ final class Governance {
 				array( '%s', '%s', '%s' ), array( '%s', '%s', '%d' )
 			);
 			if ( 1 !== $updated ) { throw new \RuntimeException( 'Concurrent policy transition.' ); }
-			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) { DB::update_settings( array( 'policy_version' => $row['version'] ) ); }
+			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) {
+				DB::update_settings( array( 'policy_version' => $row['version'] ) );
+				if ( (string) DB::setting( 'policy_version', '' ) !== (string) $row['version'] ) { throw new \RuntimeException( 'Policy pointer update failed.' ); }
+			}
 			$wpdb->query( 'COMMIT' );
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
-			return new \WP_Error( 'file26_policy_activation_failed', 'Ranking policy activation failed.', array( 'status' => 409 ) );
+			return new \WP_Error( 'file26_policy_activation_failed', 'Ranking policy activation failed atomically.', array( 'status' => 409 ) );
 		}
 		$this->security->audit( 'ranking_policy_activated', array( 'object_type' => 'ranking_policy', 'object_key' => $uuid, 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'second_approver' => $second, 'version' => $row['version'] ) ) );
 		do_action( 'sabri_file26_event', 'RankingPolicyActivated', array( 'policy_uuid' => $uuid, 'version' => $row['version'] ) );
@@ -152,11 +172,14 @@ final class Governance {
 			return new \WP_Error( 'file26_forbidden', 'Fresh ranking rollback approval is required.', array( 'status' => 403 ) );
 		}
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT policy_uuid,status FROM ' . DB::table( 'ranking_policies' ) . ' WHERE policy_uuid=%s', sanitize_text_field( $uuid ) ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_policy_read_failed', 'Ranking policy state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $row || 'active' !== $row['status'] ) {
 			return new \WP_Error( 'file26_policy_not_active', 'The ranking policy is not active.', array( 'status' => 409 ) );
 		}
 		$receipt = array( 'user_id' => get_current_user_id(), 'expires_at' => time() + 600 );
-		set_transient( 'file26_rb_' . hash( 'sha256', $row['policy_uuid'] ), $receipt, 600 );
+		if ( ! set_transient( 'file26_rb_' . hash( 'sha256', $row['policy_uuid'] ), $receipt, 600 ) ) {
+			return new \WP_Error( 'file26_rollback_approval_write_failed', 'Rollback approval receipt could not be persisted.', array( 'status' => 500 ) );
+		}
 		$this->security->audit( 'ranking_policy_rollback_second_approved', array( 'object_type' => 'ranking_policy', 'object_key' => $row['policy_uuid'], 'metadata' => array( 'second_approver' => get_current_user_id() ) ) );
 		return true;
 	}
@@ -167,6 +190,7 @@ final class Governance {
 			return new \WP_Error( 'file26_forbidden', 'Fresh ranking approval is required.', array( 'status' => 403 ) );
 		}
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . ' WHERE policy_uuid=%s', sanitize_text_field( $uuid ) ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_policy_read_failed', 'Ranking policy state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $row || 'active' !== $row['status'] ) {
 			return new \WP_Error( 'file26_policy_not_active', 'The ranking policy is not active.', array( 'status' => 409 ) );
 		}
@@ -179,17 +203,21 @@ final class Governance {
 		$previous = $wpdb->get_row(
 			$wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . " WHERE context_name=%s AND audience=%s AND status='rolled_back' AND policy_uuid<>%s ORDER BY effective_at DESC,id DESC LIMIT 1", $row['context_name'], $row['audience'], $row['policy_uuid'] ), ARRAY_A
 		);
+		if ( null === $previous && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_policy_read_failed', 'Previous ranking policy state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $previous ) { return new \WP_Error( 'file26_no_previous_policy', 'No previously active policy is available to restore.', array( 'status' => 409 ) ); }
 		$wpdb->query( 'START TRANSACTION' );
 		try {
 			$current_updated = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'policy_uuid' => $row['policy_uuid'], 'status' => 'active' ), array( '%s', '%s' ), array( '%s', '%s' ) );
 			$previous_updated = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'active', 'approval_two' => $second, 'effective_at' => DB::now(), 'updated_at' => DB::now() ), array( 'policy_uuid' => $previous['policy_uuid'], 'status' => 'rolled_back' ), array( '%s', '%d', '%s', '%s' ), array( '%s', '%s' ) );
 			if ( 1 !== $current_updated || 1 !== $previous_updated ) { throw new \RuntimeException( 'Concurrent rollback transition.' ); }
-			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) { DB::update_settings( array( 'policy_version' => $previous['version'] ) ); }
+			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) {
+				DB::update_settings( array( 'policy_version' => $previous['version'] ) );
+				if ( (string) DB::setting( 'policy_version', '' ) !== (string) $previous['version'] ) { throw new \RuntimeException( 'Policy pointer update failed.' ); }
+			}
 			$wpdb->query( 'COMMIT' );
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
-			return new \WP_Error( 'file26_policy_rollback_failed', 'Ranking policy rollback failed safely.', array( 'status' => 409 ) );
+			return new \WP_Error( 'file26_policy_rollback_failed', 'Ranking policy rollback failed safely and atomically.', array( 'status' => 409 ) );
 		}
 		delete_transient( $receipt_key );
 		$this->security->audit( 'ranking_policy_rolled_back', array( 'object_type' => 'ranking_policy', 'object_key' => $row['policy_uuid'], 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'restored_policy_uuid' => $previous['policy_uuid'], 'restored_version' => $previous['version'], 'second_approver' => $second ) ) );
@@ -208,14 +236,17 @@ final class Governance {
 			return new \WP_Error( 'file26_invalid_classification_reference', 'Valid classification references and expected version are required.', array( 'status' => 400 ) );
 		}
 		$term = $wpdb->get_row( $wpdb->prepare( 'SELECT term_uuid,status FROM ' . DB::table( 'terms' ) . ' WHERE term_uuid=%s LIMIT 1', $term_uuid ), ARRAY_A );
+		if ( null === $term && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_classification_read_failed', 'Classification term state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $term || ( 'approved' === $decision && 'active' !== $term['status'] ) ) {
 			return new \WP_Error( 'file26_term_not_eligible', 'Classification term is not eligible for this decision.', array( 'status' => 409 ) );
 		}
 		$assignment = $wpdb->get_row( $wpdb->prepare( 'SELECT version,provenance FROM ' . DB::table( 'classifications' ) . ' WHERE object_key=%s AND term_uuid=%s', $object_key, $term_uuid ), ARRAY_A );
+		if ( null === $assignment && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_classification_read_failed', 'Classification assignment state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $assignment || (int) $assignment['version'] !== (int) $expected_version ) {
 			return new \WP_Error( 'file26_classification_conflict', 'Classification changed concurrently.', array( 'status' => 409 ) );
 		}
 		$provenance = json_decode( $assignment['provenance'], true );
+		$provenance = is_array( $provenance ) ? $provenance : array();
 		if ( 'approved' === $decision && ! empty( $provenance['high_impact'] ) && ! apply_filters( 'sabri_file26_classification_domain_reviewer_approved', false, $object_key, $term_uuid, $provenance, get_current_user_id() ) ) {
 			return new \WP_Error( 'file26_domain_review_required', 'High-impact classification requires an independent domain reviewer approval.', array( 'status' => 403 ) );
 		}
@@ -223,6 +254,7 @@ final class Governance {
 			'UPDATE ' . DB::table( 'classifications' ) . ' SET status=%s,reviewer_id=%d,version=version+1,updated_at=%s WHERE object_key=%s AND term_uuid=%s AND version=%d',
 			$decision, get_current_user_id(), DB::now(), $object_key, $term_uuid, (int) $expected_version
 		) );
+		if ( false === $updated ) { return new \WP_Error( 'file26_classification_write_failed', 'Classification decision could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== (int) $updated ) { return new \WP_Error( 'file26_classification_conflict', 'Classification assignment changed concurrently.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'classification_' . $decision, array( 'object_type' => 'classification', 'object_key' => $object_key . ':' . $term_uuid, 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'from_version' => (int) $expected_version ) ) );
 		do_action( 'sabri_file26_event', 'Classification' . ucfirst( $decision ), array( 'object_key' => $object_key, 'term_uuid' => $term_uuid ) );
@@ -235,6 +267,7 @@ final class Governance {
 		$edge_uuid = sanitize_text_field( $edge_uuid );
 		$target = sanitize_key( $target );
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT edge_uuid,state,version FROM ' . DB::table( 'edges' ) . ' WHERE edge_uuid=%s', $edge_uuid ), ARRAY_A );
+		if ( null === $row && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_edge_read_failed', 'Graph edge state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $row ) { return new \WP_Error( 'file26_edge_not_found', 'Graph edge not found.', array( 'status' => 404 ) ); }
 		if ( 'active' === $target ) {
 			return $this->graph->approve_edge( $edge_uuid, (int) $row['version'] );
@@ -246,6 +279,7 @@ final class Governance {
 			return new \WP_Error( 'file26_invalid_edge_state', 'Invalid graph edge lifecycle transition.', array( 'status' => 409 ) );
 		}
 		$updated = $wpdb->query( $wpdb->prepare( 'UPDATE ' . DB::table( 'edges' ) . " SET state='corrected',version=version+1,updated_at=%s WHERE edge_uuid=%s AND state='active' AND version=%d", DB::now(), $edge_uuid, (int) $row['version'] ) );
+		if ( false === $updated ) { return new \WP_Error( 'file26_edge_write_failed', 'Graph edge correction could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== (int) $updated ) { return new \WP_Error( 'file26_edge_transition_conflict', 'Graph edge changed concurrently.', array( 'status' => 409 ) ); }
 		$this->security->audit( 'knowledge_edge_corrected', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'from' => $row['state'], 'to' => 'corrected' ) ) );
 		return true;
@@ -276,13 +310,21 @@ final class Governance {
 	public function reports() {
 		global $wpdb;
 		if ( ! $this->security->can_audit() ) { return new \WP_Error( 'file26_forbidden', 'Audit capability is required.', array( 'status' => 403 ) ); }
-		return array(
-			'connector_health' => $wpdb->get_results( 'SELECT slug,status,health_state,last_health,last_event_version FROM ' . DB::table( 'connectors' ) . ' ORDER BY slug', ARRAY_A ),
-			'jobs' => $wpdb->get_results( 'SELECT job_uuid,job_type,status,attempts,error_code,created_at,finished_at FROM ' . DB::table( 'jobs' ) . ' ORDER BY id DESC LIMIT 100', ARRAY_A ),
-			'zero_results' => $wpdb->get_results( $wpdb->prepare( 'SELECT metric_date,locale,SUM(count_value) count_value FROM ' . DB::table( 'metrics' ) . ' WHERE metric_key=%s GROUP BY metric_date,locale ORDER BY metric_date DESC LIMIT 100', 'search_zero_result' ), ARRAY_A ),
-			'active_policies' => $wpdb->get_results( "SELECT policy_uuid,context_name,audience,version,effective_at FROM " . DB::table( 'ranking_policies' ) . " WHERE status='active' ORDER BY context_name,audience", ARRAY_A ),
-			'policy_version' => DB::setting( 'policy_version', 'organic-1.0' ),
-			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+		$queries = array(
+			'connector_health' => 'SELECT slug,status,health_state,last_health,last_event_version FROM ' . DB::table( 'connectors' ) . ' ORDER BY slug',
+			'jobs' => 'SELECT job_uuid,job_type,status,attempts,error_code,created_at,finished_at FROM ' . DB::table( 'jobs' ) . ' ORDER BY id DESC LIMIT 100',
+			'zero_results' => $wpdb->prepare( 'SELECT metric_date,locale,SUM(count_value) count_value FROM ' . DB::table( 'metrics' ) . ' WHERE metric_key=%s GROUP BY metric_date,locale ORDER BY metric_date DESC LIMIT 100', 'search_zero_result' ),
+			'active_policies' => "SELECT policy_uuid,context_name,audience,version,effective_at FROM " . DB::table( 'ranking_policies' ) . " WHERE status='active' ORDER BY context_name,audience",
 		);
+		$output = array();
+		foreach ( $queries as $key => $sql ) {
+			$output[ $key ] = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $output[ $key ] && ! empty( $wpdb->last_error ) ) {
+				return new \WP_Error( 'file26_report_read_failed', 'Governance report data could not be read safely.', array( 'status' => 500 ) );
+			}
+		}
+		$output['policy_version'] = DB::setting( 'policy_version', 'organic-1.0' );
+		$output['contract_version'] = SABRI_FILE26_CONTRACT_VERSION;
+		return $output;
 	}
 }
