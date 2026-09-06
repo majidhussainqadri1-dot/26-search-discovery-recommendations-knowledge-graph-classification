@@ -34,6 +34,7 @@ final class Plugin {
 			return;
 		}
 		Roles::install();
+		add_action( 'sabri_file26_event', array( $this, 'invalidate_public_search_cache' ), 1, 2 );
 		add_filter( 'sabri_file26_connector_manifests', array( $this->owner_contracts, 'collect' ), 5 );
 		add_filter( 'sabri_file26_activation_gate_approved', array( $this->owner_contracts, 'activation_gate' ), 10, 3 );
 		$this->connectors->boot();
@@ -54,6 +55,15 @@ final class Plugin {
 		add_filter( 'sabri_file24_module_manifest', array( $this, 'assurance_manifest' ) );
 		add_filter( 'sabri_file25_search_provider', array( $this, 'visual_provider' ) );
 		DB::schedule();
+	}
+
+	/** Shared anonymous search responses must never survive a governed data/status mutation. */
+	public function invalidate_public_search_cache( $event = '', $payload = array() ) {
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'sabri_file26' );
+		} else {
+			wp_cache_flush();
+		}
 	}
 
 	/** Return true only when every physical table required by the runtime exists. */
