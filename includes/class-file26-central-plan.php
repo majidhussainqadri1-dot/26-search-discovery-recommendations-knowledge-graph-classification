@@ -13,6 +13,7 @@ final class Central_Plan {
 	const META_SAVED_QUERIES = 'sabri_file26_saved_queries_v1';
 	const OPTION_CONTENT_GAPS = 'sabri_file26_explicit_content_gaps_v1';
 	const OPTION_MIGRATION = 'sabri_file26_central_plan_migration';
+	const OPTION_FAILURES = 'sabri_file26_central_failures';
 	const REST_NAMESPACE = 'sabri-search/v1';
 
 	private $search;
@@ -65,7 +66,10 @@ final class Central_Plan {
 	}
 
 	public function logged_in() {
-		return is_user_logged_in() ? true : new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		if ( ! is_user_logged_in() ) {
+			return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
+		}
+		return $this->security->valid_authenticated_member() ? true : new \WP_Error( 'file26_membership_invalid', 'Current membership assertions are invalid, expired or suspended.', array( 'status' => 403 ) );
 	}
 
 	public function can_audit() {
@@ -105,12 +109,19 @@ final class Central_Plan {
 			'source' => $source,
 		);
 		$limit = max( 1, min( 30, (int) ( $request->get_param( 'limit' ) ?: 20 ) ) );
-		$context_hash = hash( 'sha256', wp_json_encode( array( 'q' => $q, 'locale' => $request->get_param( 'locale' ), 'filters' => $filters, 'extended' => $extended, 'limit' => $limit ) ) );
+		$context_hash = hash( 'sha256', wp_json_encode( array(
+			'q' => $q,
+			'locale' => $request->get_param( 'locale' ),
+			'filters' => $filters,
+			'extended' => $extended,
+			'limit' => $limit,
+			'audience' => $this->audience_fingerprint(),
+		) ) );
 		$offset = 0;
 		if ( $request->get_param( 'cursor' ) ) {
 			$verified = $this->security->verify_cursor( (string) $request->get_param( 'cursor' ) );
 			if ( ! $verified || empty( $verified['h'] ) || ! hash_equals( $context_hash, (string) $verified['h'] ) || ! isset( $verified['ao'] ) ) {
-				return new \WP_Error( 'file26_invalid_advanced_cursor', 'The advanced-search cursor is invalid or expired.', array( 'status' => 400 ) );
+				return new \WP_Error( 'file26_invalid_advanced_cursor', 'The advanced-search cursor is invalid or expired for the current eligibility context.', array( 'status' => 400 ) );
 			}
 			$offset = max( 0, min( 10000, (int) $verified['ao'] ) );
 		}
@@ -143,6 +154,9 @@ final class Central_Plan {
 			$partial_domains = array_merge( $partial_domains, isset( $base['partial_domains'] ) ? (array) $base['partial_domains'] : array() );
 			$rows = (array) $base['results'];
 			$meta = $this->advanced_metadata( wp_list_pluck( $rows, 'key' ) );
+			if ( is_wp_error( $meta ) ) {
+				return $meta;
+			}
 			foreach ( $rows as $item ) {
 				$key = isset( $item['key'] ) ? (string) $item['key'] : '';
 				if ( '' === $key || isset( $seen[ $key ] ) || ! $this->matches_extended( $item, $q, $extended, isset( $meta[ $key ] ) ? $meta[ $key ] : array() ) ) {
@@ -202,8 +216,11 @@ final class Central_Plan {
 		$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
 		$table = DB::table( 'documents' );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT canonical_key,connector_slug,visibility,state,locale,author_key,topic_ids,normalized_title,normalized_body,payload FROM $table WHERE canonical_key IN ($placeholders)", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			return new \WP_Error( 'file26_advanced_metadata_read_failed', 'Advanced-search result metadata could not be read safely.', array( 'status' => 503 ) );
+		}
 		$map = array();
-		foreach ( (array) $rows as $row ) {
+		foreach ( $rows as $row ) {
 			$row['payload_array'] = json_decode( $row['payload'], true );
 			$row['payload_array'] = is_array( $row['payload_array'] ) ? $row['payload_array'] : array();
 			$row['topics_array'] = json_decode( $row['topic_ids'], true );
@@ -301,8 +318,12 @@ final class Central_Plan {
 	/** Explicit, account-owned saved queries. Never used as a hidden ranking signal. */
 	public function saved_queries() {
 		$user_id = get_current_user_id();
+		$stored = $this->load_saved_queries( $user_id );
+		if ( is_wp_error( $stored ) ) {
+			return $stored;
+		}
 		$queries = array();
-		foreach ( $this->load_saved_queries( $user_id ) as $record ) {
+		foreach ( $stored as $record ) {
 			$queries[] = $this->public_saved_record( $record, $user_id );
 		}
 		return rest_ensure_response( array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'queries' => $queries, 'used_for_personalization' => false ) );
@@ -334,36 +355,57 @@ final class Central_Plan {
 				return new \WP_Error( 'file26_sensitive_save_encryption_unavailable', 'Sensitive saved queries require an approved encryption provider and are not stored in plaintext.', array( 'status' => 503 ) );
 			}
 		}
-		$queries = $this->load_saved_queries( $user_id );
-		$id = isset( $params['id'] ) && preg_match( '/^[a-f0-9-]{36}$/', (string) $params['id'] ) ? strtolower( (string) $params['id'] ) : DB::uuid();
-		$existing = isset( $queries[ $id ] ) ? $queries[ $id ] : null;
-		if ( $existing && isset( $params['expected_version'] ) && (int) $params['expected_version'] !== (int) $existing['version'] ) {
-			return new \WP_Error( 'file26_saved_query_version_conflict', 'The saved query changed. Reload before updating.', array( 'status' => 409 ) );
+
+		$lock = $this->acquire_lock( 'saved-query', $user_id );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
-		$now = DB::now();
-		$retention_days = $sensitive ? $this->setting_days( 'sensitive_saved_query_retention_days', 90, 1, 365 ) : $this->setting_days( 'saved_query_retention_days', 365, 7, 1095 );
-		$record = array(
-			'id' => $id,
-			'name' => substr( sanitize_text_field( isset( $params['name'] ) ? $params['name'] : ( $sensitive ? 'Protected saved query' : $q ) ), 0, 120 ),
-			'q' => $sensitive ? '' : $q,
-			'q_encrypted' => $sensitive ? $this->sanitize_envelope( $envelope ) : null,
-			'filters' => $clean_filters,
-			'advanced' => $clean_advanced,
-			'sensitive' => (bool) $sensitive,
-			'used_for_personalization' => false,
-			'version' => $existing ? (int) $existing['version'] + 1 : 1,
-			'created_at' => $existing ? $existing['created_at'] : $now,
-			'updated_at' => $now,
-			'expires_at' => gmdate( 'Y-m-d H:i:s', time() + ( $retention_days * DAY_IN_SECONDS ) ),
-		);
-		$queries[ $id ] = $record;
-		if ( count( $queries ) > 50 ) {
-			uasort( $queries, static function ( $a, $b ) { return strcmp( $a['updated_at'], $b['updated_at'] ); } );
-			$queries = array_slice( $queries, -50, null, true );
+		try {
+			$queries = $this->load_saved_queries( $user_id, true );
+			if ( is_wp_error( $queries ) ) {
+				return $queries;
+			}
+			$id = isset( $params['id'] ) && preg_match( '/^[a-f0-9-]{36}$/', (string) $params['id'] ) ? strtolower( (string) $params['id'] ) : DB::uuid();
+			$existing = isset( $queries[ $id ] ) ? $queries[ $id ] : null;
+			if ( $existing && ! isset( $params['expected_version'] ) ) {
+				return new \WP_Error( 'file26_saved_query_expected_version_required', 'Updating a saved query requires its expected version.', array( 'status' => 409 ) );
+			}
+			if ( $existing && (int) $params['expected_version'] !== (int) $existing['version'] ) {
+				return new \WP_Error( 'file26_saved_query_version_conflict', 'The saved query changed. Reload before updating.', array( 'status' => 409 ) );
+			}
+			$now = DB::now();
+			$retention_days = $sensitive ? $this->setting_days( 'sensitive_saved_query_retention_days', 90, 1, 365 ) : $this->setting_days( 'saved_query_retention_days', 365, 7, 1095 );
+			$record = array(
+				'id' => $id,
+				'name' => substr( sanitize_text_field( isset( $params['name'] ) ? $params['name'] : ( $sensitive ? 'Protected saved query' : $q ) ), 0, 120 ),
+				'q' => $sensitive ? '' : $q,
+				'q_encrypted' => $sensitive ? $this->sanitize_envelope( $envelope ) : null,
+				'filters' => $clean_filters,
+				'advanced' => $clean_advanced,
+				'sensitive' => (bool) $sensitive,
+				'used_for_personalization' => false,
+				'version' => $existing ? (int) $existing['version'] + 1 : 1,
+				'created_at' => $existing ? $existing['created_at'] : $now,
+				'updated_at' => $now,
+				'expires_at' => gmdate( 'Y-m-d H:i:s', time() + ( $retention_days * DAY_IN_SECONDS ) ),
+			);
+			$queries[ $id ] = $record;
+			if ( count( $queries ) > 50 ) {
+				uasort( $queries, static function ( $a, $b ) { return strcmp( $a['updated_at'], $b['updated_at'] ); } );
+				$queries = array_slice( $queries, -50, null, true );
+			}
+			$persisted = $this->persist_saved_queries( $user_id, $queries );
+			if ( is_wp_error( $persisted ) ) {
+				return $persisted;
+			}
+			$audit = $this->security->audit( 'saved_query_changed', array( 'object_type' => 'saved_query', 'object_key' => $id, 'metadata' => array( 'sensitive' => (bool) $sensitive, 'encrypted' => (bool) $sensitive ) ) );
+			$out = $this->public_saved_record( $record, $user_id );
+			$out['audit_recorded'] = ! is_wp_error( $audit );
+			$out['operational_degraded'] = is_wp_error( $audit );
+			return rest_ensure_response( $out );
+		} finally {
+			$this->release_lock( $lock );
 		}
-		update_user_meta( $user_id, self::META_SAVED_QUERIES, $queries );
-		$this->security->audit( 'saved_query_changed', array( 'object_type' => 'saved_query', 'object_key' => $id, 'metadata' => array( 'sensitive' => (bool) $sensitive, 'encrypted' => (bool) $sensitive ) ) );
-		return rest_ensure_response( $this->public_saved_record( $record, $user_id ) );
 	}
 
 	private function sanitize_envelope( array $envelope ) {
@@ -398,14 +440,28 @@ final class Central_Plan {
 	public function delete_query( \WP_REST_Request $request ) {
 		$user_id = get_current_user_id();
 		$id = strtolower( (string) $request['query_id'] );
-		$queries = $this->load_saved_queries( $user_id );
-		if ( ! isset( $queries[ $id ] ) ) {
-			return new \WP_Error( 'file26_saved_query_not_found', 'Saved query not found.', array( 'status' => 404 ) );
+		$lock = $this->acquire_lock( 'saved-query', $user_id );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
-		unset( $queries[ $id ] );
-		update_user_meta( $user_id, self::META_SAVED_QUERIES, $queries );
-		$this->security->audit( 'saved_query_deleted', array( 'object_type' => 'saved_query', 'object_key' => $id ) );
-		return rest_ensure_response( array( 'deleted' => true, 'id' => $id ) );
+		try {
+			$queries = $this->load_saved_queries( $user_id, true );
+			if ( is_wp_error( $queries ) ) {
+				return $queries;
+			}
+			if ( ! isset( $queries[ $id ] ) ) {
+				return new \WP_Error( 'file26_saved_query_not_found', 'Saved query not found.', array( 'status' => 404 ) );
+			}
+			unset( $queries[ $id ] );
+			$persisted = $this->persist_saved_queries( $user_id, $queries );
+			if ( is_wp_error( $persisted ) ) {
+				return $persisted;
+			}
+			$audit = $this->security->audit( 'saved_query_deleted', array( 'object_type' => 'saved_query', 'object_key' => $id ) );
+			return rest_ensure_response( array( 'deleted' => true, 'id' => $id, 'audit_recorded' => ! is_wp_error( $audit ), 'operational_degraded' => is_wp_error( $audit ) ) );
+		} finally {
+			$this->release_lock( $lock );
+		}
 	}
 
 	/** F26-CEN-02 / CV-169: public, versioned and explainable ranking constitution. */
@@ -451,33 +507,50 @@ final class Central_Plan {
 		}
 		$normalized = substr( $this->normalizer->normalize( $query ), 0, 180 );
 		$key = hash_hmac( 'sha256', $normalized, wp_salt( 'auth' ) );
-		$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
-		$registry = is_array( $registry ) ? $registry : array();
-		$now = DB::now();
-		$current = isset( $registry[ $key ] ) && is_array( $registry[ $key ] ) ? $registry[ $key ] : array();
-		$retention_days = $this->setting_days( 'explicit_gap_retention_days', 90, 7, 365 );
-		$registry[ $key ] = array(
-			'key' => $key,
-			'query' => $normalized,
-			'locale' => substr( sanitize_text_field( isset( $params['locale'] ) ? $params['locale'] : determine_locale() ), 0, 20 ),
-			'count' => isset( $current['count'] ) ? min( 1000000, (int) $current['count'] + 1 ) : 1,
-			'first_seen' => isset( $current['first_seen'] ) ? $current['first_seen'] : $now,
-			'last_seen' => $now,
-			'expires_at' => gmdate( 'Y-m-d H:i:s', time() + ( $retention_days * DAY_IN_SECONDS ) ),
-			'status' => 'open',
-			'identity_stored' => false,
-			'source' => 'explicit_user_submission',
-		);
-		if ( count( $registry ) > 200 ) {
-			uasort( $registry, static function ( $a, $b ) { return strcmp( $a['last_seen'], $b['last_seen'] ); } );
-			$registry = array_slice( $registry, -200, null, true );
+		$lock = $this->acquire_lock( 'content-gaps', 'registry' );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
-		update_option( self::OPTION_CONTENT_GAPS, $registry, false );
-		$this->record_aggregate_metric( 'explicit_content_gap', isset( $params['locale'] ) ? $params['locale'] : determine_locale(), 1, 0 );
-		return rest_ensure_response( array( 'accepted' => true, 'identity_stored' => false, 'retention_days' => $retention_days ) );
+		try {
+			$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
+			$registry = is_array( $registry ) ? $registry : array();
+			$now = DB::now();
+			$current = isset( $registry[ $key ] ) && is_array( $registry[ $key ] ) ? $registry[ $key ] : array();
+			$retention_days = $this->setting_days( 'explicit_gap_retention_days', 90, 7, 365 );
+			$registry[ $key ] = array(
+				'key' => $key,
+				'query' => $normalized,
+				'locale' => substr( sanitize_text_field( isset( $params['locale'] ) ? $params['locale'] : determine_locale() ), 0, 20 ),
+				'count' => isset( $current['count'] ) ? min( 1000000, (int) $current['count'] + 1 ) : 1,
+				'first_seen' => isset( $current['first_seen'] ) ? $current['first_seen'] : $now,
+				'last_seen' => $now,
+				'expires_at' => gmdate( 'Y-m-d H:i:s', time() + ( $retention_days * DAY_IN_SECONDS ) ),
+				'status' => 'open',
+				'identity_stored' => false,
+				'source' => 'explicit_user_submission',
+			);
+			if ( count( $registry ) > 200 ) {
+				uasort( $registry, static function ( $a, $b ) { return strcmp( $a['last_seen'], $b['last_seen'] ); } );
+				$registry = array_slice( $registry, -200, null, true );
+			}
+			$persisted = $this->persist_option_array( self::OPTION_CONTENT_GAPS, $registry, 'content_gap_write', 'file26_content_gap_write_failed' );
+			if ( is_wp_error( $persisted ) ) {
+				return $persisted;
+			}
+		} finally {
+			$this->release_lock( $lock );
+		}
+		$metric = $this->record_aggregate_metric( 'explicit_content_gap', isset( $params['locale'] ) ? $params['locale'] : determine_locale(), 1, 0 );
+		return rest_ensure_response( array(
+			'accepted' => true,
+			'identity_stored' => false,
+			'retention_days' => $retention_days,
+			'telemetry_recorded' => ! is_wp_error( $metric ),
+			'operational_degraded' => is_wp_error( $metric ),
+		) );
 	}
 
-	/** CV-172: aggregate search telemetry + explicit gaps only. File 15 remains trend owner. */
+	/** CV-172: aggregate search telemetry + explicit gaps only. File 15 remains canonical trend owner. */
 	public function editorial_radar( \WP_REST_Request $request ) {
 		global $wpdb;
 		$days = max( 1, min( 90, (int) ( $request->get_param( 'days' ) ?: 30 ) ) );
@@ -487,6 +560,11 @@ final class Central_Plan {
 			$wpdb->prepare( "SELECT metric_key,locale,SUM(count_value) AS total_count,SUM(sum_value) AS total_value,MAX(metric_date) AS latest_date FROM $table WHERE metric_date >= %s GROUP BY metric_key,locale ORDER BY total_count DESC LIMIT 250", $from ),
 			ARRAY_A
 		);
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			$this->mark_failure( 'editorial_radar_read' );
+			return new \WP_Error( 'file26_editorial_radar_read_failed', 'Editorial search telemetry could not be read safely.', array( 'status' => 503 ) );
+		}
+		$this->clear_failure( 'editorial_radar_read' );
 		$gaps = get_option( self::OPTION_CONTENT_GAPS, array() );
 		$gaps = is_array( $gaps ) ? array_values( $gaps ) : array();
 		$now = time();
@@ -517,6 +595,7 @@ final class Central_Plan {
 				'brand_primary_fallback' => '#087A4E',
 				'single_free_tier' => true,
 				'live_status_claimed' => false,
+				'central_failures' => array_keys( $this->failures() ),
 			)
 		);
 	}
@@ -575,7 +654,10 @@ final class Central_Plan {
 		$response = $this->augment_freshness( $response );
 		$response['zero_result_recovery'] = empty( $response['results'] ) ? $this->zero_result_recovery( $query, $locale, $safety ) : null;
 		if ( 'general' !== $safety['risk_class'] ) {
-			$this->record_aggregate_metric( 'search_safety_' . $safety['risk_class'], $locale, 1, 0 );
+			$metric = $this->record_aggregate_metric( 'search_safety_' . $safety['risk_class'], $locale, 1, 0 );
+			if ( is_wp_error( $metric ) ) {
+				$response['telemetry_degraded'] = true;
+			}
 		}
 		return $response;
 	}
@@ -598,7 +680,7 @@ final class Central_Plan {
 					$reason = 'matched_' . $class . '_safety_policy';
 					break 2;
 				}
-			}
+		}
 		}
 		$resource = apply_filters( 'sabri_file26_verified_emergency_resource', null, $locale, $risk );
 		$resource = $this->verified_current_resource( $resource );
@@ -662,6 +744,7 @@ final class Central_Plan {
 		}
 		$candidates = array_slice( array_values( array_unique( $candidates ) ), 0, 6 );
 		$related = array();
+		$related_status = 'available';
 		$normalized = $this->normalizer->normalize( $query );
 		if ( $normalized && strlen( $normalized ) >= 2 ) {
 			$terms = DB::table( 'terms' );
@@ -671,13 +754,21 @@ final class Central_Plan {
 				$wpdb->prepare( "SELECT DISTINCT t.term_uuid,t.preferred_label,t.language FROM $terms t LEFT JOIN $aliases a ON a.term_uuid=t.term_uuid AND a.status='active' WHERE t.status='active' AND (t.preferred_label LIKE %s OR a.alias_normalized LIKE %s) ORDER BY t.preferred_label LIMIT 6", $like, $like ),
 				ARRAY_A
 			);
+			if ( ! empty( $wpdb->last_error ) || ! is_array( $related ) ) {
+				$related = array();
+				$related_status = 'unavailable';
+				$this->mark_failure( 'zero_result_topic_read' );
+			} else {
+				$this->clear_failure( 'zero_result_topic_read' );
+			}
 		}
-		$can_submit = is_user_logged_in() && 'general' === $safety['risk_class'] && ! $this->security->contains_sensitive_query( $query );
+		$can_submit = $this->security->valid_authenticated_member() && 'general' === $safety['risk_class'] && ! $this->security->contains_sensitive_query( $query );
 		$help = apply_filters( 'sabri_file26_zero_result_help_destination', null, $locale, $query );
 		$help_url = is_array( $help ) && ! empty( $help['url'] ) ? $this->security->safe_resource_url( $help['url'], 'zero_result_help' ) : '';
 		return array(
 			'spelling_or_transliteration_candidates' => $candidates,
 			'related_topics' => $related,
+			'related_topics_status' => $related_status,
 			'actions' => array(
 				'adjust_filters' => true,
 				'browse_topics' => true,
@@ -694,7 +785,7 @@ final class Central_Plan {
 	private function augment_freshness( array $response ) {
 		global $wpdb;
 		$results = isset( $response['results'] ) && is_array( $response['results'] ) ? $response['results'] : array();
-		$summary = array( 'known' => 0, 'within_slo' => 0, 'stale' => 0, 'unknown' => 0 );
+		$summary = array( 'known' => 0, 'within_slo' => 0, 'stale' => 0, 'unknown' => 0, 'read_failure' => false );
 		if ( ! $results ) {
 			$response['index_freshness'] = $summary;
 			return $response;
@@ -705,7 +796,17 @@ final class Central_Plan {
 			$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
 			$documents = DB::table( 'documents' );
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT canonical_key,connector_slug,entity_type,locale,state,visibility,freshness_at,indexed_at,payload FROM $documents WHERE canonical_key IN ($placeholders)", $keys ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			foreach ( (array) $rows as $row ) {
+			if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+				$summary['read_failure'] = true;
+				$response['partial'] = true;
+				$response['partial_domains'] = isset( $response['partial_domains'] ) && is_array( $response['partial_domains'] ) ? $response['partial_domains'] : array();
+				$response['partial_domains'][] = array( 'connector' => '*', 'owner_file' => 'File 26', 'status' => 'degraded', 'health' => 'freshness_read_failure', 'last_health' => null );
+				$this->mark_failure( 'freshness_read' );
+				$rows = array();
+			} else {
+				$this->clear_failure( 'freshness_read' );
+			}
+			foreach ( $rows as $row ) {
 				$map[ $row['canonical_key'] ] = $row;
 			}
 		}
@@ -788,11 +889,34 @@ final class Central_Plan {
 			"INSERT INTO $table (metric_date,metric_key,bucket_hash,locale,count_value,sum_value,updated_at) VALUES (%s,%s,%s,%s,%d,%f,%s) ON DUPLICATE KEY UPDATE count_value=count_value+VALUES(count_value),sum_value=sum_value+VALUES(sum_value),updated_at=VALUES(updated_at)",
 			gmdate( 'Y-m-d' ), $metric, $bucket, $locale, max( 0, (int) $count ), max( 0, (float) $sum ), DB::now()
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$written = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $written || ! empty( $wpdb->last_error ) ) {
+			$this->mark_failure( 'metric_write' );
+			return new \WP_Error( 'file26_central_metric_write_failed', 'File 26 aggregate telemetry could not be persisted.' );
+		}
+		$this->clear_failure( 'metric_write' );
+		return true;
 	}
 
-	private function load_saved_queries( $user_id ) {
-		$value = get_user_meta( (int) $user_id, self::META_SAVED_QUERIES, true );
+	private function audience_fingerprint() {
+		$audience = $this->security->audience();
+		$entitlements = array_values( array_unique( array_map( 'sanitize_key', isset( $audience['entitlements'] ) ? (array) $audience['entitlements'] : array() ) ) );
+		$roles = array_values( array_unique( array_map( 'sanitize_key', isset( $audience['roles'] ) ? (array) $audience['roles'] : array() ) ) );
+		sort( $entitlements, SORT_STRING );
+		sort( $roles, SORT_STRING );
+		return hash( 'sha256', wp_json_encode( array(
+			'user_id' => ! empty( $audience['authenticated'] ) ? (int) $audience['user_id'] : 0,
+			'authenticated' => ! empty( $audience['authenticated'] ),
+			'valid' => ! empty( $audience['valid'] ),
+			'suspended' => ! empty( $audience['suspended'] ),
+			'is_minor' => ! empty( $audience['is_minor'] ),
+			'guardian_verified' => ! empty( $audience['guardian_verified'] ),
+			'entitlements' => $entitlements,
+			'roles' => $roles,
+		) ) );
+	}
+
+	private function prune_saved_queries( $value, &$changed ) {
 		$value = is_array( $value ) ? $value : array();
 		$now = time();
 		$changed = false;
@@ -802,10 +926,51 @@ final class Central_Plan {
 				$changed = true;
 			}
 		}
-		if ( $changed ) {
-			update_user_meta( (int) $user_id, self::META_SAVED_QUERIES, $value );
-		}
 		return $value;
+	}
+
+	private function load_saved_queries( $user_id, $lock_held = false ) {
+		$raw = get_user_meta( (int) $user_id, self::META_SAVED_QUERIES, true );
+		$value = $this->prune_saved_queries( $raw, $changed );
+		if ( ! $changed ) {
+			return $value;
+		}
+		if ( $lock_held ) {
+			$persisted = $this->persist_saved_queries( $user_id, $value );
+			return is_wp_error( $persisted ) ? $persisted : $value;
+		}
+		$lock = $this->acquire_lock( 'saved-query', $user_id );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		try {
+			$latest = get_user_meta( (int) $user_id, self::META_SAVED_QUERIES, true );
+			$latest = $this->prune_saved_queries( $latest, $latest_changed );
+			if ( $latest_changed ) {
+				$persisted = $this->persist_saved_queries( $user_id, $latest );
+				if ( is_wp_error( $persisted ) ) {
+					return $persisted;
+				}
+			}
+			return $latest;
+		} finally {
+			$this->release_lock( $lock );
+		}
+	}
+
+	private function persist_saved_queries( $user_id, array $queries ) {
+		$written = update_user_meta( (int) $user_id, self::META_SAVED_QUERIES, $queries );
+		$stored = get_user_meta( (int) $user_id, self::META_SAVED_QUERIES, true );
+		if ( false === $written && $stored !== $queries ) {
+			$this->mark_failure( 'saved_query_write' );
+			return new \WP_Error( 'file26_saved_query_write_failed', 'Saved-query state could not be persisted safely.', array( 'status' => 500 ) );
+		}
+		if ( $stored !== $queries ) {
+			$this->mark_failure( 'saved_query_write' );
+			return new \WP_Error( 'file26_saved_query_write_failed', 'Saved-query persistence could not be verified.', array( 'status' => 500 ) );
+		}
+		$this->clear_failure( 'saved_query_write' );
+		return true;
 	}
 
 	private function sanitize_saved_filters( $filters ) {
@@ -903,24 +1068,52 @@ final class Central_Plan {
 			}
 		}
 		if ( $changed ) {
-			update_option( DB::OPTION_SETTINGS, $current, false );
+			$written = update_option( DB::OPTION_SETTINGS, $current, false );
+			if ( false === $written && get_option( DB::OPTION_SETTINGS, array() ) !== $current ) {
+				$this->mark_failure( 'settings_migration' );
+				return new \WP_Error( 'file26_central_settings_migration_failed', 'Central-plan settings migration could not be persisted.' );
+			}
+			if ( get_option( DB::OPTION_SETTINGS, array() ) !== $current ) {
+				$this->mark_failure( 'settings_migration' );
+				return new \WP_Error( 'file26_central_settings_migration_failed', 'Central-plan settings migration could not be verified.' );
+			}
 		}
-		update_option( self::OPTION_MIGRATION, '1.2.0', false );
+		$pointer = update_option( self::OPTION_MIGRATION, '1.2.0', false );
+		if ( false === $pointer && '1.2.0' !== get_option( self::OPTION_MIGRATION ) ) {
+			$this->mark_failure( 'settings_migration' );
+			return new \WP_Error( 'file26_central_migration_pointer_failed', 'Central-plan migration pointer could not be persisted.' );
+		}
+		$this->clear_failure( 'settings_migration' );
+		return true;
 	}
 
 	public function retention() {
-		$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
-		$registry = is_array( $registry ) ? $registry : array();
-		$now = time();
-		$changed = false;
-		foreach ( $registry as $key => $record ) {
-			if ( ! is_array( $record ) || empty( $record['expires_at'] ) || $this->parse_timestamp( $record['expires_at'] ) < $now ) {
-				unset( $registry[ $key ] );
-				$changed = true;
-			}
+		$lock = $this->acquire_lock( 'content-gaps', 'registry' );
+		if ( is_wp_error( $lock ) ) {
+			$this->mark_failure( 'content_gap_retention' );
+			return $lock;
 		}
-		if ( $changed ) {
-			update_option( self::OPTION_CONTENT_GAPS, $registry, false );
+		try {
+			$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
+			$registry = is_array( $registry ) ? $registry : array();
+			$now = time();
+			$changed = false;
+			foreach ( $registry as $key => $record ) {
+				if ( ! is_array( $record ) || empty( $record['expires_at'] ) || $this->parse_timestamp( $record['expires_at'] ) < $now ) {
+					unset( $registry[ $key ] );
+					$changed = true;
+				}
+			}
+			if ( $changed ) {
+				$persisted = $this->persist_option_array( self::OPTION_CONTENT_GAPS, $registry, 'content_gap_retention', 'file26_content_gap_retention_failed' );
+				if ( is_wp_error( $persisted ) ) {
+					return $persisted;
+				}
+			}
+			$this->clear_failure( 'content_gap_retention' );
+			return array( 'content_gaps_pruned' => $changed );
+		} finally {
+			$this->release_lock( $lock );
 		}
 	}
 
@@ -939,8 +1132,22 @@ final class Central_Plan {
 		if ( ! $user || (int) $page > 1 ) {
 			return array( 'data' => array(), 'done' => true );
 		}
+		$stored = $this->load_saved_queries( $user->ID );
+		if ( is_wp_error( $stored ) ) {
+			$this->mark_failure( 'privacy_export' );
+			return array(
+				'data' => array( array(
+					'group_id' => 'sabri-file26-saved-query-export-status',
+					'group_label' => __( 'Saved search export status', 'sabri-file26' ),
+					'item_id' => 'file26-saved-query-export-incomplete',
+					'data' => array( array( 'name' => __( 'Status', 'sabri-file26' ), 'value' => __( 'Export incomplete because saved-query state could not be verified safely.', 'sabri-file26' ) ) ),
+				) ),
+				'done' => true,
+			);
+		}
+		$this->clear_failure( 'privacy_export' );
 		$data = array();
-		foreach ( $this->load_saved_queries( $user->ID ) as $record ) {
+		foreach ( $stored as $record ) {
 			$public = $this->public_saved_record( $record, $user->ID, false );
 			$data[] = array(
 				'group_id' => 'sabri-file26-saved-queries',
@@ -962,8 +1169,78 @@ final class Central_Plan {
 		if ( ! $user || (int) $page > 1 ) {
 			return array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true );
 		}
-		$had = (bool) get_user_meta( $user->ID, self::META_SAVED_QUERIES, true );
-		delete_user_meta( $user->ID, self::META_SAVED_QUERIES );
-		return array( 'items_removed' => $had, 'items_retained' => false, 'messages' => array(), 'done' => true );
+		$lock = $this->acquire_lock( 'saved-query', $user->ID );
+		if ( is_wp_error( $lock ) ) {
+			$this->mark_failure( 'privacy_erase' );
+			return array( 'items_removed' => false, 'items_retained' => true, 'messages' => array( __( 'Saved-query erasure is temporarily unavailable; no success is reported.', 'sabri-file26' ) ), 'done' => false );
+		}
+		try {
+			$had = (bool) get_user_meta( $user->ID, self::META_SAVED_QUERIES, true );
+			delete_user_meta( $user->ID, self::META_SAVED_QUERIES );
+			$remaining = get_user_meta( $user->ID, self::META_SAVED_QUERIES, true );
+			if ( $remaining ) {
+				$this->mark_failure( 'privacy_erase' );
+				return array( 'items_removed' => false, 'items_retained' => true, 'messages' => array( __( 'Saved-query erasure could not be verified; retry after storage is repaired.', 'sabri-file26' ) ), 'done' => false );
+			}
+			$this->clear_failure( 'privacy_erase' );
+			return array( 'items_removed' => $had, 'items_retained' => false, 'messages' => array(), 'done' => true );
+		} finally {
+			$this->release_lock( $lock );
+		}
+	}
+
+	private function acquire_lock( $scope, $identity ) {
+		global $wpdb;
+		$name = 'file26:central:' . substr( hash( 'sha256', sanitize_key( $scope ) . '|' . (string) $identity ), 0, 40 );
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $name ) );
+		if ( '1' !== (string) $acquired ) {
+			$this->mark_failure( 'lock_' . sanitize_key( $scope ) );
+			return new \WP_Error( 'file26_central_state_busy', 'File 26 account/search state is busy; retry safely.', array( 'status' => 409 ) );
+		}
+		$this->clear_failure( 'lock_' . sanitize_key( $scope ) );
+		return $name;
+	}
+
+	private function release_lock( $name ) {
+		global $wpdb;
+		if ( is_string( $name ) && '' !== $name ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+		}
+	}
+
+	private function persist_option_array( $option, array $value, $stage, $error_code ) {
+		$written = update_option( $option, $value, false );
+		$stored = get_option( $option, array() );
+		if ( ( false === $written && $stored !== $value ) || $stored !== $value ) {
+			$this->mark_failure( $stage );
+			return new \WP_Error( $error_code, 'File 26 central state could not be persisted or verified safely.', array( 'status' => 500 ) );
+		}
+		$this->clear_failure( $stage );
+		return true;
+	}
+
+	private function failures() {
+		$value = get_option( self::OPTION_FAILURES, array() );
+		return is_array( $value ) ? $value : array();
+	}
+
+	private function mark_failure( $stage ) {
+		$stage = sanitize_key( $stage );
+		$failures = $this->failures();
+		$failures[ $stage ] = array( 'at' => DB::now() );
+		update_option( self::OPTION_FAILURES, $failures, false );
+	}
+
+	private function clear_failure( $stage ) {
+		$stage = sanitize_key( $stage );
+		$failures = $this->failures();
+		if ( isset( $failures[ $stage ] ) ) {
+			unset( $failures[ $stage ] );
+			if ( $failures ) {
+				update_option( self::OPTION_FAILURES, $failures, false );
+			} else {
+				delete_option( self::OPTION_FAILURES );
+			}
+		}
 	}
 }
