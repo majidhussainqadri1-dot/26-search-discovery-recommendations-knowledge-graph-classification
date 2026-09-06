@@ -8,7 +8,7 @@ $checks = array(
 	array( $ranking, 'file26_doctor_ranking_source_read_failed', 'eligible doctor DB failure fails closed' ),
 	array( $ranking, 'file26_doctor_ranking_stale', 'directory rejects stale policy projection' ),
 	array( $ranking, 'file26_doctor_ranking_projection_mixed', 'mixed policy projections are rejected' ),
-	array( $ranking, "unset( $payload['global_doctor_rank']", 'stale rank fields are purged before recompute' ),
+	array( $ranking, 'unset( $payload[\'global_doctor_rank\']', 'stale rank fields are purged before recompute' ),
 	array( $ranking, 'all_doctor_rows', 'recompute cleans doctors outside current public eligibility' ),
 	array( $appeals, 'file26_appeal_schema_incomplete', 'appeal schema is verified before version pointer' ),
 	array( $appeals, 'file26_appeal_doctor_read_failed', 'doctor read failure is not a false 404' ),
