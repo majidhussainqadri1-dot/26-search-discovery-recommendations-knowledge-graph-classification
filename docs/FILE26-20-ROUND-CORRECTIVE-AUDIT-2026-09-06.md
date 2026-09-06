@@ -23,7 +23,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 8 | DEFECT | Doctor-ranking recompute did not verify transaction start/commit and could not reliably distinguish ranking-metadata option persistence failure, permitting a false-success claim for an allegedly atomic recompute. | Recompute now verifies START TRANSACTION, ranking projection writes, ranking metadata persistence and COMMIT; failures roll back/fail closed. A dedicated regression protects the atomicity boundary. Exact-head CI GREEN `b6cbc5048e9f6427e04dc4fb2518873da3233180`; ledger-close exact head `cee21fce26b516687331ee07a01529801d401d57` also GREEN. |
 | 9 | DEFECT | REST `/admin/reconcile` discarded the `Indexer::reconcile()` result and always returned `reconciled=true`, while the admin control path correctly surfaced `WP_Error`; a backend reconciliation failure could therefore be reported as API success. | REST now captures the reconciliation result and returns the `WP_Error` on failure; Round 09 REST regression protects operation truth. Exact-head CI GREEN `6b2416ea7ec19b33b8bc5290d218bdd65cae0ecd`; ledger-close exact head `d27042a8d35bb26408f816f6eef87ce2a7e45d50` also GREEN. |
 | 10 | DEFECT | Role-model installation trusted only the stored role-model version. If a dedicated File 26 role/capability was removed or administrator operational capabilities drifted while the option still read `1.1.0`, `Roles::install()` returned early and did not restore separation of duties. | Role installation now verifies physical role/capability integrity before taking the version fast-path; administrator operational-cap drift and missing/extra dedicated capabilities force repair. Round 10 regression protects this invariant. Exact-head CI GREEN `3af3a27adec0279aba7f18eed6c1db420ac0e871`; first-ten checkpoint head `a5ce1bc56fa9fbc0286ddef6cce57eb601eba159` also GREEN. |
-| 11 | DEFECT | Privacy erasure did not verify transaction start or commit, so a failed transaction boundary could still be reported as completed. Doctor-ranking appeal retention converted DB `false` results into zero counts, allowing retention UPDATE/DELETE failure to look like successful no-op retention. | Pending correction after this frozen ledger. |
+| 11 | DEFECT | Privacy erasure did not verify transaction start or commit, so a failed transaction boundary could still be reported as completed. Doctor-ranking appeal retention converted DB `false` results into zero counts, allowing retention UPDATE/DELETE failure to look like successful no-op retention. | Privacy erasure now verifies START TRANSACTION and COMMIT and remains retryable on failure. Appeal retention now runs inside a checked transaction, verifies UPDATE/DELETE/COMMIT and returns an explicit `WP_Error` on failure. Round 11 regression protects both lifecycles. Exact-head CI GREEN `6e844687315afbd98f1cc42db2877e0e99b71568`. |
 
 ## First-ten-round checkpoint
 
@@ -35,7 +35,6 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 
 ## Round status
 
-- Completed rounds: **10/20**
-- Round 11 review: **FROZEN — correction pending**
+- Completed rounds: **11/20**
 
-Round 12 must not begin until Round 11 correction, regression and exact-head CI are green.
+Round 12 may begin only after the exact head containing this Round 11 closure is green.
