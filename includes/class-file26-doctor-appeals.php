@@ -10,8 +10,14 @@ final class Doctor_Appeals {
 	public function __construct( Security $security ) { $this->security = $security; }
 	public static function table() { global $wpdb; return $wpdb->prefix . 'f26_ranking_appeals'; }
 
+	public static function schema_exists() {
+		global $wpdb;
+		$table = self::table();
+		return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+	}
+
 	public static function install_schema() {
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) { return; }
+		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) && self::schema_exists() ) { return; }
 		global $wpdb; require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate(); $table = self::table();
 		dbDelta( "CREATE TABLE $table (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -35,7 +41,7 @@ final class Doctor_Appeals {
 			KEY appellant_status (appellant_user_id,status),
 			KEY submitted_at (submitted_at)
 		) $charset;" );
-		update_option( self::OPTION_SCHEMA, self::SCHEMA_VERSION, false );
+		if ( self::schema_exists() ) { update_option( self::OPTION_SCHEMA, self::SCHEMA_VERSION, false ); }
 	}
 
 	public function submit( $doctor_key, $reason, array $evidence = array() ) {
