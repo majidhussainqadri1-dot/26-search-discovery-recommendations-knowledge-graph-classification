@@ -17,19 +17,18 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 6 | DEFECT | Feedback/undo idempotency made operation-bound and replay-safe. GREEN `3fa9e285877be2ea057b9738b91e6937da89f5ad`. |
 | 7 | DEFECT | Blocked/restricted ranking exclusion and hard first-page concentration boundary enforced. GREEN `8186bdcba8e93ffcc49223c2ce65520381ec8e0c`. |
 | 8 | DEFECT | Taxonomy create/alias transfer/merge read/high-impact-review integrity hardened. GREEN `ded988a25e24ee93a8b2657874fa271bd5ad5482`. |
-| 9 | DEFECT | Graph traversal edge/node DB read failures could be treated as empty/revoked output. Added checked reads, audited `file26_graph_read_failed` 503 paths, and regression `tests/review-round-09-graph-read-truth-second-cycle.php`. Exact-head GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
-| 10 | DEFECT | Operation truth hardened: own doctor-appeal errors propagate; governance report collections are validated; health table/count DB failures become explicit `unavailable` evidence; saved-query/content-gap mutations receive pre/post persisted-state verification; editorial-radar read failure becomes explicit. Dedicated regression `tests/review-round-10-operation-truth-second-cycle.php`. Exact-head GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
-| 11 | DEFECT | Privacy/retention truth hardened: native exporter checks profile/feedback/appeal DB reads and remains retryable on failure; erasure verifies appeal-count read before pseudonymization; `Privacy_Truth` overrides saved-query erasure with post-state verification and performs cursor-bounded saved-query/content-gap retention with verified writes; saved-query GET exposes failed expiry persistence instead of hiding it; destructive uninstall now removes central saved-query user meta plus content-gap/migration/retention state. Regression `tests/review-round-11-privacy-retention-second-cycle.php`. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`. |
+| 9 | DEFECT | Graph read-truth hardened. GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
+| 10 | DEFECT | REST/health operation truth hardened. GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
+| 11 | DEFECT | Privacy/retention truth hardened. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`; ledger-head GREEN `974cefc3d8534243aab8b76ffdbd921a387882d8`. |
+| 12 | DEFECT — FROZEN | Queue/worker operation-truth defects: (1) pending/retry job SELECT can fail at DB level and be treated as “no work”; (2) connector/exception failure transition uses an unchecked job update, so a failed retry/dead-letter write can leave a running lock while the worker returns silently; (3) completion CAS failure is only audited and not surfaced as a worker error. Cron self-healing, stale recovery, enqueue failure and retry backoff otherwise reviewed as present. Correction/regression/exact-head CI pending. |
 
 ## First-ten checkpoint
 
 - Defect rounds: **2, 3, 4, 5, 6, 7, 8, 9, 10**
 - Clean rounds: **1**
-- Defect count: **9/10**
-- Clean count: **1/10**
 
 ## Status
 
 - Completed rounds: **11/20**
-- Round 11: **closed**
-- Round 12 may begin only after this ledger-head CI is GREEN.
+- Round 12 review: **FROZEN — correction pending**
+- Round 13 must not begin until Round 12 correction, regression and exact-head CI are GREEN.
