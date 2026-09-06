@@ -17,9 +17,11 @@ It does **not** own canonical posts, doctors, clinics, lessons, videos, PDFs, ma
 - Personalization is off by default and requires explicit consent, visible explanation and reset/opt-out controls.
 - Public activation remains off until owner connectors, migration, security/privacy, staging and Founder approval gates are accepted.
 
-## Installation
+## Installation artifact
 
-Install the deterministic ZIP from `release/`, activate the plugin, register versioned owner connectors, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, then enable **Approved runtime activation**.
+Do **not** treat the repository ZIP, a historical package, or a local `release/` directory as deployment truth. Run `bash qa/run-tests.sh` at the exact commit or use the GitHub Actions artifact produced for that exact commit. The QA run creates the runtime-only deterministic package `26-sabri-file26-search-discovery-1.2.0.zip` and its portable `CHECKSUMS.sha256`.
+
+After obtaining that exact-head artifact, install it on staging, register versioned owner connectors, execute shadow reindex and reconciliation, complete `docs/STAGING-ACCEPTANCE.md`, and only then enable **Approved runtime activation**. Deployment and live parity remain separate evidence gates.
 
 ## Local QA
 
@@ -27,4 +29,4 @@ Install the deterministic ZIP from `release/`, activate the plugin, register ver
 bash qa/run-tests.sh
 ```
 
-This proves source/package checks in the local environment. Hostinger staging, real owner connectors, browser/accessibility evidence, load tests, restore/rollback rehearsal and live monitoring are separate acceptance gates.
+This proves source/package checks in the local environment only. Hostinger staging, real owner connectors, browser/accessibility evidence, load tests, restore/rollback rehearsal and live monitoring are separate acceptance gates.
