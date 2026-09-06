@@ -18,7 +18,8 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 7 | DEFECT | Blocked/restricted ranking exclusion and hard first-page concentration boundary enforced. GREEN `8186bdcba8e93ffcc49223c2ce65520381ec8e0c`. |
 | 8 | DEFECT | Taxonomy create/alias transfer/merge read/high-impact-review integrity hardened. GREEN `ded988a25e24ee93a8b2657874fa271bd5ad5482`. |
 | 9 | DEFECT | Graph traversal edge/node DB read failures could be treated as empty/revoked output. Added checked reads, audited `file26_graph_read_failed` 503 paths, and regression `tests/review-round-09-graph-read-truth-second-cycle.php`. Exact-head GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
-| 10 | DEFECT | Operation truth hardened: own doctor-appeal errors propagate; governance report collections are validated; health table/count DB failures become explicit `unavailable` evidence; saved-query/content-gap mutations receive pre/post persisted-state verification; editorial-radar read failure becomes explicit. Dedicated regression `tests/review-round-10-operation-truth-second-cycle.php`. An older formatting-sensitive health assertion was corrected after the new regression passed. Exact-head GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`. |
+| 10 | DEFECT | Operation truth hardened: own doctor-appeal errors propagate; governance report collections are validated; health table/count DB failures become explicit `unavailable` evidence; saved-query/content-gap mutations receive pre/post persisted-state verification; editorial-radar read failure becomes explicit. Dedicated regression `tests/review-round-10-operation-truth-second-cycle.php`. An older formatting-sensitive health assertion was corrected after the new regression passed. Exact-head GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
+| 11 | DEFECT — FROZEN | Privacy/retention truth defects: (1) native privacy exporter profile/feedback/appeal DB reads are unchecked and can misreport completion or fail on null results; (2) erasure casts an unchecked appeal-count read to zero, so appeal pseudonymization can be skipped while success is reported; (3) saved-query privacy eraser does not verify `delete_user_meta`; (4) lazy saved-query expiry and explicit content-gap retention writes are unchecked, so bounded-retention policy can be violated silently; (5) explicit destructive uninstall leaves central-plan saved-query user meta/content-gap and migration options behind. Correction/regression/exact-head CI pending. |
 
 ## First-ten checkpoint
 
@@ -29,6 +30,6 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 
 ## Status
 
-- Completed reviews/corrections: **10/20**
-- First-ten checkpoint: **closed**
-- Round 11 may begin only after this ledger-head CI is GREEN.
+- Completed rounds: **10/20**
+- Round 11 review: **FROZEN — correction pending**
+- Round 12 must not begin until Round 11 correction, regression and exact-head CI are GREEN.
