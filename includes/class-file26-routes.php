@@ -63,13 +63,9 @@ final class Routes {
 	public function template_redirect() {
 		global $wp_query;
 		$route = sanitize_key( (string) get_query_var( 'sabri_f26_route' ) );
-		if ( ! $route ) {
-			return;
-		}
+		if ( ! $route ) { return; }
 		if ( ! in_array( $route, array( 'search', 'discover', 'topic' ), true ) ) {
-			if ( $wp_query ) {
-				$wp_query->set_404();
-			}
+			if ( $wp_query ) { $wp_query->set_404(); }
 			status_header( 404 );
 			nocache_headers();
 			return;
@@ -79,10 +75,10 @@ final class Routes {
 		if ( 'topic' === $route ) {
 			$resolved = $this->resolve_topic_term( get_query_var( 'sabri_f26_term' ), true );
 			if ( is_wp_error( $resolved ) ) {
-				if ( $wp_query ) {
-					$wp_query->set_404();
-				}
-				status_header( 404 );
+				$error_data = $resolved->get_error_data();
+				$error_status = is_array( $error_data ) && ! empty( $error_data['status'] ) ? max( 400, min( 599, (int) $error_data['status'] ) ) : 404;
+				if ( 404 === $error_status && $wp_query ) { $wp_query->set_404(); }
+				status_header( $error_status );
 				nocache_headers();
 				$this->enqueue_assets();
 				get_header();
@@ -99,7 +95,6 @@ final class Routes {
 
 		$this->enqueue_assets();
 		status_header( 200 );
-		// Dynamic discovery/search/topic projections can be revoked at any time. Do not permit browser/CDN stale replay without an explicit purge contract.
 		nocache_headers();
 		if ( 'topic' !== $route ) {
 			add_filter( 'wp_robots', static function ( $robots ) {
