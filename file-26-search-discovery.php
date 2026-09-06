@@ -42,6 +42,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-admin.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-privacy.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-health.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-central-plan.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-operation-truth.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
 
 register_activation_hook( __FILE__, static function () {
@@ -54,6 +55,7 @@ register_deactivation_hook( __FILE__, array( 'Sabri\\File26\\DB', 'deactivate' )
 add_action(
 	'plugins_loaded',
 	static function () {
+		\Sabri\File26\Operation_Truth::boot();
 		\Sabri\File26\Plugin::instance()->boot();
 	},
 	5
