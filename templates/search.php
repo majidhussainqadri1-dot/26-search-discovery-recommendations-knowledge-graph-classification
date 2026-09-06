@@ -3,18 +3,20 @@ defined( 'ABSPATH' ) || exit;
 $filters = isset( $filters ) && is_array( $filters ) ? $filters : array();
 $facets = ! is_wp_error( $data ) && ! empty( $data['facets'] ) && is_array( $data['facets'] ) ? $data['facets'] : array();
 $get_filter = static function ( $key ) use ( $filters ) { return isset( $filters[ $key ] ) ? (string) $filters[ $key ] : ''; };
+$title_id = $instance_id . '-title';
+$query_id = $instance_id . '-q';
 ?>
-<section class="sabri-f26" aria-labelledby="sabri-f26-search-title">
+<section class="sabri-f26" aria-labelledby="<?php echo esc_attr( $title_id ); ?>">
 	<header class="sabri-f26__header">
-		<h1 id="sabri-f26-search-title" class="sabri-f26__title"><?php esc_html_e( 'Search the Sabri Platform', 'sabri-file26' ); ?></h1>
+		<h1 id="<?php echo esc_attr( $title_id ); ?>" class="sabri-f26__title"><?php esc_html_e( 'Search the Sabri Platform', 'sabri-file26' ); ?></h1>
 		<p class="sabri-f26__lead"><?php esc_html_e( 'Search eligible knowledge, doctors, clinics, learning, media, research and marketplace destinations. Canonical owners remain the source of truth.', 'sabri-file26' ); ?></p>
 	</header>
 
 	<form class="sabri-f26__search" method="get" action="<?php echo esc_url( home_url( '/search/' ) ); ?>" role="search">
 		<div class="sabri-f26__search-form">
 			<div class="sabri-f26__search-field">
-				<label class="screen-reader-text" for="sabri-f26-q"><?php esc_html_e( 'Search', 'sabri-file26' ); ?></label>
-				<input id="sabri-f26-q" class="sabri-f26__input" type="search" name="q" value="<?php echo esc_attr( $query ); ?>" maxlength="200" autocomplete="off" data-f26-suggest aria-autocomplete="list" aria-expanded="false">
+				<label class="screen-reader-text" for="<?php echo esc_attr( $query_id ); ?>"><?php esc_html_e( 'Search', 'sabri-file26' ); ?></label>
+				<input id="<?php echo esc_attr( $query_id ); ?>" class="sabri-f26__input" type="search" name="q" value="<?php echo esc_attr( $query ); ?>" maxlength="200" autocomplete="off" data-f26-suggest role="combobox" aria-haspopup="listbox" aria-autocomplete="list" aria-expanded="false">
 			</div>
 			<button class="sabri-f26__button" type="submit"><span class="dashicons dashicons-search" aria-hidden="true"></span><span><?php esc_html_e( 'Search', 'sabri-file26' ); ?></span></button>
 		</div>
