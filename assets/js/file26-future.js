@@ -49,7 +49,7 @@
     record(query, meta) {
       const q = cleanQuery(query);
       if (!q) return false;
-      const items = read();
+      const items = read().filter((item) => cleanQuery(item && item.query) !== q);
       items.push({
         query: q,
         searched_at: new Date().toISOString(),
