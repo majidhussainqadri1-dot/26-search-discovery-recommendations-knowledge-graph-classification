@@ -17,12 +17,13 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 |---:|---|---|---|
 | 1 | CLEAN | Deterministic package build, source/package manifest parity, path safety, immutable workflow action pins, PHP 7.4/8.3 matrix, artifact generation and release/source separation are internally consistent. No new proven defect. | No production change. Exact-head CI GREEN `ef41d8337fc84ee9fab35e27bb4df22153299337`. |
 | 2 | DEFECT | `Schema_Integrity` verified only column names and index names; safety-critical type/nullability and index uniqueness/order drift could pass. | Added safety-critical column signatures and exact index signatures. Regression: `tests/review-round-02-schema-signatures-second-cycle.php`. Exact-head CI GREEN `a176c9cbbcbde5fce23e63f471500f0b6ca087a3`. |
-| 3 | DEFECT | Canonical object identity was normalized inconsistently between upsert and tombstone/restrict; normalized `domain/object_id` could become invalid; malformed/non-positive monotonic versions were silently coerced. | Canonical key now normalizes object IDs consistently; upsert rejects normalized-empty/oversized identities, invalid positive versions and invalid non-negative event sequences; tombstone/restrict normalize and validate the same identity/version before hashing. Regression: `tests/review-round-03-identity-version-second-cycle.php`. Exact-head CI pending on this closure head. |
+| 3 | DEFECT | Canonical identity normalization differed between upsert and revocation; normalized identity and monotonic versions could be invalid/coerced. | Unified normalized identity/key semantics and strict version/sequence validation. Regression: `tests/review-round-03-identity-version-second-cycle.php`. Exact-head CI GREEN `4247d116f879b668eee34acae7b4d0f63994e49e`. |
+| 4 | DEFECT | Connector registration could persist an index/production lifecycle status before proving the current runtime callbacks required by that status. Governance could promote a persisted connector to `shadow`/`approved`/`active` without proving a compatible current runtime adapter, and DB status could diverge from the in-memory registry. Connector health callback results were returned as authoritative even when persistence of `health_state/last_health` failed. | Pending correction after this frozen ledger. |
 
 ## Round status
 
-- Completed reviews/corrections: **3/20**
-- Defect rounds: **2, 3**
+- Completed reviews: **4/20**
+- Defect rounds: **2, 3, 4**
 - Clean rounds: **1**
 
-Round 4 must not begin until this exact head is green.
+Round 5 must not begin until Round 4 correction, regression and exact-head CI are green.
