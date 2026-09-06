@@ -4,6 +4,24 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+run_php_test() {
+    local script="$1" out err
+    out="$(mktemp "$TMP/php-out.XXXXXX")"
+    err="$(mktemp "$TMP/php-err.XXXXXX")"
+    if ! php -d display_errors=1 -d error_reporting=E_ALL "$script" >"$out" 2>"$err"; then
+        cat "$out"
+        cat "$err" >&2
+        echo "FAIL: PHP test failed: $script" >&2
+        return 1
+    fi
+    cat "$out"
+    if [[ -s "$err" ]]; then
+        cat "$err" >&2
+        echo "FAIL: PHP test emitted warning/notice/deprecation output: $script" >&2
+        return 1
+    fi
+}
+
 printf '[1/15] PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" || { echo "FAIL: PHP syntax: $file" >&2; exit 1; }; done < <(find "$ROOT" -type f -name '*.php' -print0)
 
@@ -13,21 +31,21 @@ node --check "$ROOT/assets/js/file26.js"
 node --check "$ROOT/assets/js/file26-future.js"
 
 printf '[3/15] Pure normalization and ranking tests\n'
-php "$ROOT/tests/test-normalizer-ranking.php"
+run_php_test "$ROOT/tests/test-normalizer-ranking.php"
 printf '[4/15] Architecture, policy and traceability contracts\n'
-php "$ROOT/tests/contract-tests.php"
+run_php_test "$ROOT/tests/contract-tests.php"
 printf '[5/15] Corrective architecture regressions\n'
-php "$ROOT/tests/corrective-contract-tests.php"
+run_php_test "$ROOT/tests/corrective-contract-tests.php"
 printf '[6/15] New governing-plan completion regressions\n'
-php "$ROOT/tests/central-plan-contract-tests.php"
+run_php_test "$ROOT/tests/central-plan-contract-tests.php"
 printf '[7/15] Sequential 20-round review regressions\n'
 shopt -s nullglob
 ROUND_TESTS=("$ROOT"/tests/review-round-*.php)
-for test_file in "${ROUND_TESTS[@]}"; do php "$test_file"; done
+for test_file in "${ROUND_TESTS[@]}"; do run_php_test "$test_file"; done
 printf '[8/15] Future and current review-cycle regressions\n'
-php "$ROOT/tests/future-intelligence-contract-tests.php"
-php "$ROOT/tests/review-second-forty-round-contract-tests.php"
-php "$ROOT/tests/review-r62-r81-contract-tests.php"
+run_php_test "$ROOT/tests/future-intelligence-contract-tests.php"
+run_php_test "$ROOT/tests/review-second-forty-round-contract-tests.php"
+run_php_test "$ROOT/tests/review-r62-r81-contract-tests.php"
 
 printf '[9/15] Dangerous execution primitive scan\n'
 if grep -RInE --include='*.php' '(eval\s*\(|shell_exec\s*\(|passthru\s*\(|proc_open\s*\(|popen\s*\()' "$ROOT"; then echo 'FAIL: dangerous execution primitive'; exit 1; fi
@@ -37,6 +55,10 @@ if grep -RInE --include='*.php' '(SELECT|UPDATE|DELETE|INSERT).*(smc_|clinical_|
 
 printf '[11/15] Required release files and current-cycle evidence\n'
 for file in README.md readme.txt CHANGELOG.md DECISION-LOG.md LICENSE docs/ARCHITECTURE.md docs/CONNECTOR-CONTRACT.md docs/REST-CONTRACT.md docs/SECURITY-THREAT-MODEL.md docs/PRIVACY-RETENTION.md docs/MIGRATION.md docs/ROLLBACK.md docs/STAGING-ACCEPTANCE.md docs/REQUIREMENTS-TRACEABILITY.md docs/REVIEW-AND-CORRECTION-1.0.0.md docs/REVIEW-AND-CORRECTION-1.1.0.md docs/NEW-GOVERNING-PLANS-COMPLETION-1.2.0.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.3.0-PARITY-ROUND-2.md docs/FILE26-R62-R81-SEQUENTIAL-REVIEW-2026-08-29.md docs/QA-REPORT.md docs/SBOM.md tests/review-round-77-regressions.php tests/review-round-78-regressions.php tests/review-round-79-regressions.php tests/review-round-80-regressions.php tests/review-round-81-regressions.php; do test -s "$ROOT/$file" || { echo "FAIL: required release evidence missing: $file" >&2; exit 1; }; done
+for round in 82 83 84 85 87 88 89 90 91 92 93 94 95 96 97 98 99 100; do
+    file="tests/review-round-${round}-regressions.php"
+    test -s "$ROOT/$file" || { echo "FAIL: current R82-R100 regression evidence missing: $file" >&2; exit 1; }
+done
 if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 && git -C "$ROOT" ls-files --error-unmatch MANIFEST.sha256 >/dev/null 2>&1; then
     echo 'FAIL: MANIFEST.sha256 must be generated from the exact build tree, not tracked as stale source evidence' >&2
     exit 1
@@ -49,6 +71,7 @@ grep -q "SABRI_FILE26_CONTRACT_VERSION', '1.3'" "$ROOT/file-26-search-discovery.
 grep -q 'Stable tag: 1.3.0' "$ROOT/readme.txt"
 grep -q 'F26-FUT-24' "$ROOT/docs/FUTURE-SEARCH-KNOWLEDGE-INTELLIGENCE-SUPERSET-24-1.3.0.md"
 grep -q 'R62–R81' "$ROOT/docs/QA-REPORT.md"
+grep -q 'R82–R101' "$ROOT/docs/QA-REPORT.md"
 grep -qi '#087a4e' "$ROOT/assets/css/file26.css"
 
 printf '[13/15] Deterministic double build\n'
@@ -74,14 +97,14 @@ PY
 printf '[15/15] Clean-extract QA and manifest parity\n'
 unzip -q "$TMP/a.zip" -d "$TMP/extract"
 PACKAGE="$TMP/extract/sabri-file26-search-discovery"
-php "$PACKAGE/tests/test-normalizer-ranking.php" >/dev/null
-php "$PACKAGE/tests/contract-tests.php" >/dev/null
-php "$PACKAGE/tests/corrective-contract-tests.php" >/dev/null
-php "$PACKAGE/tests/central-plan-contract-tests.php" >/dev/null
-for test_file in "$PACKAGE"/tests/review-round-*.php; do php "$test_file" >/dev/null; done
-php "$PACKAGE/tests/future-intelligence-contract-tests.php" >/dev/null
-php "$PACKAGE/tests/review-second-forty-round-contract-tests.php" >/dev/null
-php "$PACKAGE/tests/review-r62-r81-contract-tests.php" >/dev/null
+run_php_test "$PACKAGE/tests/test-normalizer-ranking.php"
+run_php_test "$PACKAGE/tests/contract-tests.php"
+run_php_test "$PACKAGE/tests/corrective-contract-tests.php"
+run_php_test "$PACKAGE/tests/central-plan-contract-tests.php"
+for test_file in "$PACKAGE"/tests/review-round-*.php; do run_php_test "$test_file"; done
+run_php_test "$PACKAGE/tests/future-intelligence-contract-tests.php"
+run_php_test "$PACKAGE/tests/review-second-forty-round-contract-tests.php"
+run_php_test "$PACKAGE/tests/review-r62-r81-contract-tests.php"
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
 mkdir -p "$ROOT/release"
