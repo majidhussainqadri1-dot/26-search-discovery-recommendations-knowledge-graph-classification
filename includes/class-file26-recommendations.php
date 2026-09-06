@@ -163,8 +163,10 @@ final class Recommendations {
 				return array( 'reversed' => true, 'effective_next_request' => true );
 			}
 
+			$context = isset( $request['context'] ) ? sanitize_key( $request['context'] ) : 'discover';
 			$days = max( 30, (int) DB::setting( 'feedback_retention_days', 365 ) );
 			$expires = gmdate( 'Y-m-d H:i:s', time() + ( $days * DAY_IN_SECONDS ) );
+			$payload_json = wp_json_encode( array( 'context' => $context ) );
 			$sql = $wpdb->prepare(
 				'INSERT INTO ' . DB::table( 'feedback' ) . "
 				(idempotency_key,user_id,item_key,feedback_type,scope_key,payload,active,created_at,updated_at,expires_at)
@@ -175,12 +177,20 @@ final class Recommendations {
 				$item_key ?: null,
 				$type,
 				$scope_key,
-				wp_json_encode( array( 'context' => isset( $request['context'] ) ? sanitize_key( $request['context'] ) : 'discover' ) ),
+				$payload_json,
 				DB::now(),
 				DB::now(),
 				$expires
 			);
 			if ( false === $wpdb->query( $sql ) ) { throw new \RuntimeException( 'feedback_write_failed' ); }
+			$wpdb->last_error = '';
+			$stored = $wpdb->get_row( $wpdb->prepare( 'SELECT user_id,item_key,feedback_type,scope_key,payload FROM ' . DB::table( 'feedback' ) . ' WHERE idempotency_key=%s', $idempotency ), ARRAY_A );
+			if ( null === $stored ) { throw new \RuntimeException( '' !== (string) $wpdb->last_error ? 'feedback_idempotency_read_failed' : 'feedback_idempotency_missing' ); }
+			$stored_item = null === $stored['item_key'] ? '' : (string) $stored['item_key'];
+			$stored_scope = null === $stored['scope_key'] ? '' : (string) $stored['scope_key'];
+			if ( (int) $stored['user_id'] !== $user_id || $stored_item !== $item_key || (string) $stored['feedback_type'] !== $type || $stored_scope !== $scope_key || (string) $stored['payload'] !== (string) $payload_json ) {
+				throw new \RuntimeException( 'feedback_idempotency_conflict' );
+			}
 			$rebuilt = $this->rebuild_negative_controls( $user_id );
 			if ( is_wp_error( $rebuilt ) ) { throw new \RuntimeException( $rebuilt->get_error_code() ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
@@ -190,6 +200,7 @@ final class Recommendations {
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			if ( 'feedback_not_reversible' === $e->getMessage() ) { return new \WP_Error( 'file26_feedback_not_reversible', 'The feedback action was not found or was already reversed.', array( 'status' => 409 ) ); }
+			if ( 'feedback_idempotency_conflict' === $e->getMessage() ) { return new \WP_Error( 'file26_feedback_idempotency_conflict', 'The idempotency key is already bound to a different feedback action.', array( 'status' => 409 ) ); }
 			return new \WP_Error( 'file26_feedback_write_failed', 'Recommendation feedback and controls could not be updated atomically.', array( 'status' => 500 ) );
 		}
 		$this->security->audit( 'recommendation_feedback_recorded', array( 'object_type' => 'recommendation', 'object_key' => $item_key, 'reason' => $type ) );
@@ -238,7 +249,8 @@ final class Recommendations {
 		$access = $this->require_preference_access();
 		if ( is_wp_error( $access ) ) { return $access; }
 		$user_id = (int) $access['user_id'];
-		$consent = (bool) $consent;
+		$consent = $this->strict_bool( $consent );
+		if ( null === $consent ) { return new \WP_Error( 'file26_invalid_consent', 'Consent must be an explicit boolean value.', array( 'status' => 400 ) ); }
 		$empty = wp_json_encode( array() );
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_consent_transaction_unavailable', 'Recommendation consent transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
@@ -335,6 +347,14 @@ final class Recommendations {
 		if ( empty( $audience['valid'] ) || ! empty( $audience['suspended'] ) ) { return new \WP_Error( 'file26_membership_invalid', 'Current membership assertions do not permit this preference action.', array( 'status' => 403 ) ); }
 		if ( ! empty( $audience['is_minor'] ) && empty( $audience['guardian_verified'] ) ) { return new \WP_Error( 'file26_guardian_required', 'Verified guardian authorization is required for this preference action.', array( 'status' => 403 ) ); }
 		return array( 'user_id' => (int) $user_id, 'audience' => $audience );
+	}
+
+	private function strict_bool( $value ) {
+		if ( is_bool( $value ) ) { return $value; }
+		if ( is_int( $value ) ) { if ( 1 === $value ) { return true; } if ( 0 === $value ) { return false; } return null; }
+		if ( is_float( $value ) ) { if ( 1.0 === $value ) { return true; } if ( 0.0 === $value ) { return false; } return null; }
+		if ( is_string( $value ) ) { $value = strtolower( trim( $value ) ); if ( in_array( $value, array( '1','true','yes','on' ), true ) ) { return true; } if ( in_array( $value, array( '0','false','no','off' ), true ) ) { return false; } }
+		return null;
 	}
 
 	private function sanitize_topics( array $topics, $limit ) {
