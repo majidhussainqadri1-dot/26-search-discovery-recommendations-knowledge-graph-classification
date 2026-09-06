@@ -6,11 +6,11 @@ $rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
 $fail = static function ( $m ) { fwrite( STDERR, "FAIL: {$m}\n" ); exit( 1 ); };
 
 foreach ( array(
-    "'audience' => $audience_fingerprint",
+    "'audience' => \$audience_fingerprint",
     "d.safety_class NOT IN ('blocked','restricted')",
     "file26_search_read_failed",
     "file26_suggest_read_failed",
-    "unset( $payload['download_url'] )",
+    "unset( \$payload['download_url'] )",
 ) as $needle ) {
     if ( false === strpos( $search, $needle ) ) { $fail( 'Missing search safeguard: ' . $needle ); }
 }
