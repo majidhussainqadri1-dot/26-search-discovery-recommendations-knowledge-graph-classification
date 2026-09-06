@@ -20,13 +20,12 @@ Repository/source/package evidence is separate from staging/live deployment, dep
 | 3 | DEFECT | Canonical identity normalization differed between upsert and revocation; normalized identity and monotonic versions could be invalid/coerced. | Unified normalized identity/key semantics and strict version/sequence validation. Regression: `tests/review-round-03-identity-version-second-cycle.php`. Exact-head CI GREEN `4247d116f879b668eee34acae7b4d0f63994e49e`. |
 | 4 | DEFECT | Connector registration/lifecycle/health persistence could diverge from current runtime truth. | Runtime-gated persistence/promotion, DB↔memory status sync and degraded health-on-persistence-failure added. Regression: `tests/review-round-04-connector-runtime-truth-second-cycle.php`. Corrective CI GREEN `c9b508a99bb74d4ced48015c7cfa4e6bb4918a16`; ledger-closing CI GREEN `1a33b6c96e3c0c34ad7d8ebc4e263a5f68326ccb`. |
 | 5 | DEFECT | Primary federated search treated a failed candidate DB read like an empty batch, allowing database failure to become apparently successful empty/complete output. | Candidate reads now require an array result; non-array DB failure returns audited `file26_search_read_failed` with HTTP 503 and trace ID, while a valid empty array remains normal termination. Regression: `tests/review-round-05-search-read-truth-second-cycle.php`. Exact-head CI GREEN `7f2dc890def1cee881d33709cd785a6dec19ad5a`. |
-| 6 | DEFECT | Feedback idempotency could report `recorded=true` when an existing idempotency key represented a different feedback operation, because duplicate-key handling only refreshed `updated_at`; undo accepted an idempotency key but did not persist an undo receipt, so a replay of the same undo became a conflict instead of the same idempotent outcome. | FROZEN — correction pending. |
+| 6 | DEFECT | Feedback idempotency could report `recorded=true` when an existing idempotency key represented a different feedback operation; undo accepted an idempotency key without persisting an undo receipt, so identical undo replay became a conflict; identical ordinary replay could also rebuild profile projections and mutate profile version. | Feedback/undo now bind the idempotency key to a persisted operation fingerprint, reject mismatched reuse with `file26_idempotency_conflict`, persist inactive undo receipts, and return identical replays before mutable projection work. Regression: `tests/review-round-06-feedback-idempotency-second-cycle.php`. Exact-head CI pending on this closure head. |
 
 ## Round status
 
-- Completed reviews/corrections: **5/20**
-- Active frozen round: **6/20 — correction pending**
+- Completed reviews/corrections: **6/20**
 - Defect rounds so far: **2, 3, 4, 5, 6**
 - Clean rounds so far: **1**
 
-Round 7 must not begin until Round 6 is corrected, regressed and exact-head CI is green.
+Round 7 must not begin until this exact head is green.
