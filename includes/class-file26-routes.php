@@ -97,6 +97,9 @@ final class Routes {
 
 	private function render( $template, array $vars ) {
 		$file = SABRI_FILE26_DIR . 'templates/' . sanitize_file_name( $template ) . '.php'; if ( ! file_exists( $file ) ) { return ''; }
+		static $render_sequence = 0;
+		$render_sequence++;
+		$vars['instance_id'] = 'sabri-f26-' . sanitize_key( $template ) . '-' . $render_sequence;
 		ob_start(); extract( $vars, EXTR_SKIP ); include $file; return (string) ob_get_clean();
 	}
 }
