@@ -19,7 +19,7 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 8 | DEFECT | Taxonomy create/alias transfer/merge read/high-impact-review integrity hardened. GREEN `ded988a25e24ee93a8b2657874fa271bd5ad5482`. |
 | 9 | DEFECT | Graph traversal edge/node DB read failures could be treated as empty/revoked output. Added checked reads, audited `file26_graph_read_failed` 503 paths, and regression `tests/review-round-09-graph-read-truth-second-cycle.php`. Exact-head GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
 | 10 | DEFECT | Operation truth hardened: own doctor-appeal errors propagate; governance report collections are validated; health table/count DB failures become explicit `unavailable` evidence; saved-query/content-gap mutations receive pre/post persisted-state verification; editorial-radar read failure becomes explicit. Dedicated regression `tests/review-round-10-operation-truth-second-cycle.php`. Exact-head GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
-| 11 | DEFECT | Privacy/retention truth hardened: native exporter checks profile/feedback/appeal DB reads and remains retryable on failure; erasure verifies appeal-count read before pseudonymization; `Privacy_Truth` overrides saved-query erasure with post-state verification and performs cursor-bounded saved-query/content-gap retention with verified writes; saved-query GET exposes failed expiry persistence instead of hiding it; destructive uninstall now removes central saved-query user meta plus content-gap/migration/retention state. Regression `tests/review-round-11-privacy-retention-second-cycle.php`. Exact-head CI pending. |
+| 11 | DEFECT | Privacy/retention truth hardened: native exporter checks profile/feedback/appeal DB reads and remains retryable on failure; erasure verifies appeal-count read before pseudonymization; `Privacy_Truth` overrides saved-query erasure with post-state verification and performs cursor-bounded saved-query/content-gap retention with verified writes; saved-query GET exposes failed expiry persistence instead of hiding it; destructive uninstall now removes central saved-query user meta plus content-gap/migration/retention state. Regression `tests/review-round-11-privacy-retention-second-cycle.php`. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`. |
 
 ## First-ten checkpoint
 
@@ -30,6 +30,6 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 
 ## Status
 
-- Completed rounds: **10/20**
-- Round 11 correction/regression: **complete; exact-head CI pending**
-- Round 12 must not begin until Round 11 exact-head CI is GREEN.
+- Completed rounds: **11/20**
+- Round 11: **closed**
+- Round 12 may begin only after this ledger-head CI is GREEN.
