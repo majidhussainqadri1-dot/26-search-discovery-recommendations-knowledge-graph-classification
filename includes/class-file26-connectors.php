@@ -64,11 +64,18 @@ final class Connectors {
 			}
 		}
 
-		$public_manifest = $manifest;
-		foreach ( array( 'list_batch', 'can_view', 'health', 'fetch_object', 'secret', 'token', 'credentials' ) as $private_key ) {
-			unset( $public_manifest[ $private_key ] );
+		// Persist a strict public metadata allowlist. Runtime callbacks, credentials and unknown extension fields never enter the database manifest.
+		$public_keys = array(
+			'slug', 'owner_file', 'contract_version', 'entity_types', 'privacy_classes', 'visibility_fields',
+			'deletion_semantics', 'status', 'schema_version', 'change_source', 'rebuild_method',
+			'cursor_semantics', 'description', 'supports',
+		);
+		$public_manifest = array_intersect_key( $manifest, array_flip( $public_keys ) );
+		$persisted = $this->persist( $public_manifest );
+		if ( is_wp_error( $persisted ) ) {
+			return $persisted;
 		}
-		$manifest['status'] = $this->persist( $public_manifest );
+		$manifest['status'] = $persisted;
 		$this->registry[ $slug ] = $manifest;
 		return true;
 	}
@@ -78,6 +85,9 @@ final class Connectors {
 		$table = DB::table( 'connectors' );
 		$now = DB::now();
 		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT owner_file,contract_version,status FROM $table WHERE slug=%s", $manifest['slug'] ), ARRAY_A );
+		if ( null === $existing && ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'file26_connector_registry_read_failed', 'Connector governance state could not be read safely.' );
+		}
 		if ( $existing && $existing['owner_file'] === $manifest['owner_file'] && $existing['contract_version'] === $manifest['contract_version'] ) {
 			// Governance state survives code reloads; manifests cannot self-promote or undo suspension.
 			$manifest['status'] = $existing['status'];
@@ -95,7 +105,9 @@ final class Connectors {
 			 owner_file=VALUES(owner_file),contract_version=VALUES(contract_version),status=VALUES(status),manifest=VALUES(manifest),updated_at=VALUES(updated_at)",
 			$manifest['slug'], $manifest['owner_file'], $manifest['contract_version'], $manifest['status'], wp_json_encode( $manifest ), $now, $now
 		);
-		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			return new \WP_Error( 'file26_connector_registry_write_failed', 'Connector registry state could not be persisted.' );
+		}
 		return $manifest['status'];
 	}
 
@@ -183,8 +195,13 @@ final class Connectors {
 					$detail = array( 'error_class' => get_class( $e ) );
 				}
 			}
+			$updated = $wpdb->update( DB::table( 'connectors' ), array( 'health_state' => $state, 'last_health' => DB::now(), 'updated_at' => DB::now() ), array( 'slug' => $slug ), array( '%s', '%s', '%s' ), array( '%s' ) );
+			if ( false === $updated ) {
+				$detail['registry_persisted'] = false;
+				$detail['registry_error'] = 'health_state_write_failed';
+				$this->security->audit( 'connector_health_persist_failed', array( 'object_type' => 'connector', 'object_key' => $slug ) );
+			}
 			$result[ $slug ] = array( 'state' => $state, 'contract_version' => $manifest['contract_version'], 'owner_file' => $manifest['owner_file'], 'status' => $manifest['status'], 'detail' => $detail );
-			$wpdb->update( DB::table( 'connectors' ), array( 'health_state' => $state, 'last_health' => DB::now(), 'updated_at' => DB::now() ), array( 'slug' => $slug ), array( '%s', '%s', '%s' ), array( '%s' ) );
 		}
 		return $result;
 	}
@@ -195,6 +212,9 @@ final class Connectors {
 			"SELECT slug,owner_file,status,health_state,last_health FROM " . DB::table( 'connectors' ) . " WHERE status IN ('active','degraded') AND health_state NOT IN ('healthy','ok') ORDER BY slug",
 			ARRAY_A
 		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $rows && ! empty( $wpdb->last_error ) ) {
+			return array( array( 'connector' => '*', 'owner_file' => 'File 26', 'status' => 'unknown', 'health' => 'registry_read_failed', 'last_health' => null ) );
+		}
 		$output = array();
 		foreach ( (array) $rows as $row ) {
 			$output[] = array(
