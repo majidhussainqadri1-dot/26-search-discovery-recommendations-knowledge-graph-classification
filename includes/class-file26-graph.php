@@ -33,9 +33,15 @@ final class Graph {
 		if ( strlen( $source ) !== 64 || strlen( $target ) !== 64 || ! in_array( $type, $this->allowed_edges, true ) || hash_equals( $source, $target ) ) {
 			return new \WP_Error( 'file26_invalid_edge', 'Invalid graph edge.' );
 		}
-		if ( ! $this->public_node_exists( $source ) || ! $this->public_node_exists( $target ) ) {
+		$source_visible = $this->public_node_state( $source );
+		$target_visible = $this->public_node_state( $target );
+		if ( is_wp_error( $source_visible ) ) { return $source_visible; }
+		if ( is_wp_error( $target_visible ) ) { return $target_visible; }
+		if ( ! $source_visible || ! $target_visible ) {
 			return new \WP_Error( 'file26_invalid_edge_endpoint', 'Both graph endpoints must be valid visible nodes.' );
 		}
+		$owner_file = $this->source_owner_file( $source );
+		if ( is_wp_error( $owner_file ) ) { return $owner_file; }
 		$provenance = isset( $input['provenance'] ) && is_array( $input['provenance'] ) ? $this->sanitize_provenance( $input['provenance'] ) : array();
 		if ( is_wp_error( $provenance ) ) {
 			return $provenance;
@@ -51,29 +57,39 @@ final class Graph {
 		if ( is_wp_error( $evidence_url ) ) {
 			return $evidence_url;
 		}
-		$uuid = DB::uuid();
-		$inserted = $wpdb->insert(
-			DB::table( 'edges' ),
-			array(
-				'edge_uuid' => $uuid,
-				'source_key' => $source,
-				'target_key' => $target,
-				'edge_type' => $type,
-				'provenance' => $encoded_provenance,
-				'owner_file' => isset( $input['owner_file'] ) ? substr( sanitize_text_field( $input['owner_file'] ), 0, 64 ) : 'File 26',
-				'evidence_url' => $evidence_url,
-				// Creation never self-publishes; activation is a separate audited governance transition.
-				'state' => 'draft',
-				'visibility' => 'public',
-				'version' => 1,
-				'created_at' => DB::now(),
-				'updated_at' => DB::now(),
-			)
-		);
-		if ( ! $inserted ) {
-			return new \WP_Error( 'file26_edge_insert_failed', 'Graph edge could not be created.', array( 'status' => 409 ) );
+		$identity = hash( 'sha256', $source . '|' . $target . '|' . $type );
+		$lock = $this->acquire_edge_lock( $identity );
+		if ( is_wp_error( $lock ) ) { return $lock; }
+		try {
+			$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT edge_uuid FROM ' . DB::table( 'edges' ) . " WHERE source_key=%s AND target_key=%s AND edge_type=%s AND state IN ('draft','active') LIMIT 1", $source, $target, $type ) );
+			if ( ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_edge_read_failed', 'Existing graph relationship state could not be read safely.', array( 'status' => 500 ) ); }
+			if ( $existing ) { return new \WP_Error( 'file26_duplicate_edge', 'An equivalent current graph edge already exists.', array( 'status' => 409 ) ); }
+			$uuid = DB::uuid();
+			$inserted = $wpdb->insert(
+				DB::table( 'edges' ),
+				array(
+					'edge_uuid' => $uuid,
+					'source_key' => $source,
+					'target_key' => $target,
+					'edge_type' => $type,
+					'provenance' => $encoded_provenance,
+					'owner_file' => $owner_file,
+					'evidence_url' => $evidence_url,
+					// Creation never self-publishes; activation is a separate audited governance transition.
+					'state' => 'draft',
+					'visibility' => 'public',
+					'version' => 1,
+					'created_at' => DB::now(),
+					'updated_at' => DB::now(),
+				)
+			);
+			if ( ! $inserted ) {
+				return new \WP_Error( 'file26_edge_insert_failed', 'Graph edge could not be created.', array( 'status' => 409 ) );
+			}
+		} finally {
+			$this->release_edge_lock( $lock );
 		}
-		$this->security->audit( 'knowledge_edge_created', array( 'object_type' => 'knowledge_edge', 'object_key' => $uuid, 'metadata' => array( 'edge_type' => $type, 'source_key' => $source, 'target_key' => $target ) ) );
+		$this->security->audit( 'knowledge_edge_created', array( 'object_type' => 'knowledge_edge', 'object_key' => $uuid, 'metadata' => array( 'edge_type' => $type, 'source_key' => $source, 'target_key' => $target, 'owner_file' => $owner_file ) ) );
 		do_action( 'sabri_file26_event', 'KnowledgeEdgeCreated', array( 'edge_uuid' => $uuid, 'edge_type' => $type ) );
 		return $uuid;
 	}
@@ -85,11 +101,21 @@ final class Graph {
 		}
 		$edge_uuid = sanitize_text_field( $edge_uuid );
 		$edge = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'edges' ) . ' WHERE edge_uuid=%s', $edge_uuid ), ARRAY_A );
+		if ( null === $edge && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_edge_read_failed', 'Graph edge state could not be read safely.', array( 'status' => 500 ) ); }
 		if ( ! $edge || 'draft' !== $edge['state'] || (int) $edge['version'] !== (int) $expected_version ) {
 			return new \WP_Error( 'file26_edge_conflict', 'Graph edge is missing or changed concurrently.', array( 'status' => 409 ) );
 		}
-		if ( ! $this->public_node_exists( $edge['source_key'] ) || ! $this->public_node_exists( $edge['target_key'] ) || empty( json_decode( $edge['provenance'], true ) ) ) {
+		$source_visible = $this->public_node_state( $edge['source_key'] );
+		$target_visible = $this->public_node_state( $edge['target_key'] );
+		if ( is_wp_error( $source_visible ) ) { return $source_visible; }
+		if ( is_wp_error( $target_visible ) ) { return $target_visible; }
+		if ( ! $source_visible || ! $target_visible || empty( json_decode( $edge['provenance'], true ) ) ) {
 			return new \WP_Error( 'file26_edge_endpoint_stale', 'Graph endpoints or provenance are no longer eligible for activation.', array( 'status' => 409 ) );
+		}
+		$current_owner = $this->source_owner_file( $edge['source_key'] );
+		if ( is_wp_error( $current_owner ) ) { return $current_owner; }
+		if ( (string) $current_owner !== (string) $edge['owner_file'] ) {
+			return new \WP_Error( 'file26_graph_owner_stale', 'The source-domain owner changed; recreate the edge under the current owner contract.', array( 'status' => 409 ) );
 		}
 		$approved = (bool) apply_filters( 'sabri_file26_graph_edge_owner_approved', 'File 26' === $edge['owner_file'], $edge, get_current_user_id() );
 		if ( ! $approved ) {
@@ -101,6 +127,7 @@ final class Graph {
 			array( 'edge_uuid' => $edge_uuid, 'state' => 'draft', 'version' => (int) $edge['version'] ),
 			array( '%s', '%d', '%s' ), array( '%s', '%s', '%d' )
 		);
+		if ( false === $updated ) { return new \WP_Error( 'file26_edge_write_failed', 'Graph edge approval could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== $updated ) {
 			return new \WP_Error( 'file26_edge_conflict', 'Graph edge changed concurrently.', array( 'status' => 409 ) );
 		}
@@ -119,6 +146,7 @@ final class Graph {
 			'UPDATE ' . DB::table( 'edges' ) . " SET state='removed',version=version+1,updated_at=%s WHERE edge_uuid=%s AND version=%d AND state IN ('draft','active')",
 			DB::now(), $edge_uuid, (int) $expected_version
 		) );
+		if ( false === $updated ) { return new \WP_Error( 'file26_edge_write_failed', 'Graph edge removal could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== (int) $updated ) {
 			return new \WP_Error( 'file26_edge_conflict', 'Graph edge is missing or changed concurrently.', array( 'status' => 409 ) );
 		}
@@ -130,7 +158,10 @@ final class Graph {
 	public function query( $start_key, $depth = 1, $degree = 10, array $allowed_types = array() ) {
 		global $wpdb;
 		$start_key = preg_replace( '/[^a-f0-9]/', '', strtolower( $start_key ) );
-		if ( strlen( $start_key ) !== 64 || ! $this->public_node_exists( $start_key ) ) {
+		if ( strlen( $start_key ) !== 64 ) { return new \WP_Error( 'file26_graph_node_not_found', 'Graph node not found.', array( 'status' => 404 ) ); }
+		$start_visible = $this->public_node_state( $start_key );
+		if ( is_wp_error( $start_visible ) ) { return $start_visible; }
+		if ( ! $start_visible ) {
 			return new \WP_Error( 'file26_graph_node_not_found', 'Graph node not found.', array( 'status' => 404 ) );
 		}
 		$depth = max( 1, min( (int) DB::setting( 'graph_max_depth', 2 ), (int) $depth ) );
@@ -156,10 +187,11 @@ final class Graph {
 					$args
 				);
 				$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				foreach ( $rows as $edge ) {
-					if ( ! $this->public_node_exists( $edge['target_key'] ) ) {
-						continue;
-					}
+				if ( null === $rows && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_graph_read_failed', 'Graph relationships could not be read safely.', array( 'status' => 503 ) ); }
+				foreach ( (array) $rows as $edge ) {
+					$target_visible = $this->public_node_state( $edge['target_key'] );
+					if ( is_wp_error( $target_visible ) ) { return $target_visible; }
+					if ( ! $target_visible ) { continue; }
 					$edge['provenance'] = json_decode( $edge['provenance'], true );
 					$edges[] = $edge;
 					if ( ! isset( $visited[ $edge['target_key'] ] ) ) {
@@ -179,6 +211,7 @@ final class Graph {
 				$keys
 			);
 			$nodes = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $nodes && ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_graph_read_failed', 'Graph nodes could not be read safely.', array( 'status' => 503 ) ); }
 		}
 		// Final fail-closed recheck: a node can be revoked after traversal but before response assembly.
 		$visible_keys = array();
@@ -251,13 +284,41 @@ final class Graph {
 		return $url;
 	}
 
-	private function public_node_exists( $key ) {
+	private function public_node_state( $key ) {
 		global $wpdb;
-		return (bool) $wpdb->get_var(
+		$value = $wpdb->get_var(
 			$wpdb->prepare(
 				'SELECT 1 FROM ' . DB::table( 'nodes' ) . " WHERE node_key=%s AND state IN ('active','published','corrected') AND visibility='public' LIMIT 1",
 				$key
 			)
 		);
+		if ( ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_graph_read_failed', 'Graph node visibility could not be read safely.', array( 'status' => 503 ) ); }
+		return (bool) $value;
+	}
+
+	private function source_owner_file( $source_key ) {
+		global $wpdb;
+		$owner = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT c.owner_file FROM ' . DB::table( 'documents' ) . ' d INNER JOIN ' . DB::table( 'connectors' ) . ' c ON c.slug=d.connector_slug WHERE d.canonical_key=%s AND c.status IN (\'active\',\'approved\',\'shadow\') LIMIT 1',
+				$source_key
+			)
+		);
+		if ( ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_graph_owner_read_failed', 'Source-domain ownership could not be read safely.', array( 'status' => 500 ) ); }
+		if ( ! $owner ) { return new \WP_Error( 'file26_graph_owner_missing', 'A canonical source-domain owner is required for this edge.', array( 'status' => 409 ) ); }
+		return substr( sanitize_text_field( $owner ), 0, 64 );
+	}
+
+	private function acquire_edge_lock( $identity ) {
+		global $wpdb;
+		$name = 'file26:edge:' . substr( (string) $identity, 0, 40 );
+		$acquired = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $name ) );
+		if ( '1' !== (string) $acquired ) { return new \WP_Error( 'file26_edge_busy', 'Equivalent graph relationship is busy; retry safely.', array( 'status' => 409 ) ); }
+		return $name;
+	}
+
+	private function release_edge_lock( $name ) {
+		global $wpdb;
+		if ( is_string( $name ) && '' !== $name ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) ); }
 	}
 }
