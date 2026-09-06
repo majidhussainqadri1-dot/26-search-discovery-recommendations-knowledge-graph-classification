@@ -21,7 +21,7 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 10 | DEFECT | REST/health operation truth hardened. GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
 | 11 | DEFECT | Privacy/retention truth hardened. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`; ledger-head GREEN `974cefc3d8534243aab8b76ffdbd921a387882d8`. |
 | 12 | DEFECT | Queue/worker operation truth hardened: queue-head read failures, claim/completion/failure-transition write failures and CAS loss now fail closed; stale recovery/backoff retained. Exact-head GREEN `fb0be05360bc6e0c6fb6ef28903280fd4ee6ef2b`; ledger-head GREEN `2feeafb35473e780069cf1061019a8cd9f149c1b`. |
-| 13 | DEFECT — FROZEN | Deletion/replay integrity: (1) tombstone-precedence and existing-document version reads can fail at DB level and be cast/treated as absent, permitting fail-open mutation decisions; (2) reconciliation purges edges/classifications/nodes for any tombstone without first excluding a higher-version live document, while only the document-delete query has an explicit version predicate. Correction/regression/exact-head CI pending. |
+| 13 | DEFECT | Deletion/replay integrity hardened: precedence reads now fail closed on DB errors; reconciliation protects higher-version live resurrection from stale tombstone derivative purges. Dedicated Round 13 regression passed. Reformatting exposed three stale formatting-bound historical test assertions; those harness assertions were made whitespace-insensitive without weakening their semantics. Exact-head corrective CI GREEN `4d5e617bd45b50f6921fc2ab980d9bf32e9d0b6e`. |
 
 ## First-ten checkpoint
 
@@ -30,6 +30,6 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 
 ## Status
 
-- Completed rounds: **12/20**
-- Round 13 review: **FROZEN — correction pending**
-- Round 14 must not begin until Round 13 correction, regression and exact-head CI are GREEN.
+- Completed rounds: **13/20**
+- Round 13: **CLOSED — exact-head CI GREEN**
+- Round 14 may begin only after this ledger-head commit is GREEN.
