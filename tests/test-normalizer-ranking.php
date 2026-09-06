@@ -95,8 +95,8 @@ $GLOBALS['wpdb']->row = array(
 	'version' => 'doctor-policy-zero',
 	'features_json' => json_encode( array( 'weights' => array_fill_keys( array_keys( $doctor_base ), 0 ) ) ),
 );
-$safe_policy = ( new Doctor_Ranking( new Security() ) )->policy();
-check_case( true === $safe_policy['safe_fallback'], 'Invalid zero-weight doctor policy fails safely to the disclosed baseline.' );
+$invalid_policy = ( new Doctor_Ranking( new Security() ) )->policy();
+check_case( is_wp_error( $invalid_policy ) && 'file26_doctor_ranking_policy_invalid' === $invalid_policy->get_error_code(), 'Invalid zero-weight doctor policy fails closed instead of silently substituting ranking truth.' );
 $GLOBALS['wpdb']->row = null;
 
 printf( "Passed: %d\nFailed: %d\n", $passed, $failed );
