@@ -124,9 +124,12 @@ final class Governance {
 		if ( ! apply_filters( 'sabri_file26_validate_ranking_approver', user_can( $second, 'approve_sabri_ranking' ), $second, $row ) ) {
 			return new \WP_Error( 'file26_invalid_second_approver', 'The recorded second approver is no longer authorized.', array( 'status' => 403 ) );
 		}
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new \WP_Error( 'file26_policy_activation_failed', 'Ranking policy activation transaction could not start.', array( 'status' => 500 ) );
+		}
 		try {
-			$wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'context_name' => $row['context_name'], 'audience' => $row['audience'], 'status' => 'active' ) );
+			$demoted = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'context_name' => $row['context_name'], 'audience' => $row['audience'], 'status' => 'active' ) );
+			if ( false === $demoted ) { throw new \RuntimeException( 'Previous active policy demotion failed.' ); }
 			$updated = $wpdb->update(
 				DB::table( 'ranking_policies' ),
 				array( 'status' => 'active', 'effective_at' => DB::now(), 'updated_at' => DB::now() ),
@@ -135,7 +138,7 @@ final class Governance {
 			);
 			if ( 1 !== $updated ) { throw new \RuntimeException( 'Concurrent policy transition.' ); }
 			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) { DB::update_settings( array( 'policy_version' => $row['version'] ) ); }
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Ranking policy activation commit failed.' ); }
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_policy_activation_failed', 'Ranking policy activation failed.', array( 'status' => 409 ) );
@@ -180,13 +183,15 @@ final class Governance {
 			$wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . " WHERE context_name=%s AND audience=%s AND status='rolled_back' AND policy_uuid<>%s ORDER BY effective_at DESC,id DESC LIMIT 1", $row['context_name'], $row['audience'], $row['policy_uuid'] ), ARRAY_A
 		);
 		if ( ! $previous ) { return new \WP_Error( 'file26_no_previous_policy', 'No previously active policy is available to restore.', array( 'status' => 409 ) ); }
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new \WP_Error( 'file26_policy_rollback_failed', 'Ranking policy rollback transaction could not start.', array( 'status' => 500 ) );
+		}
 		try {
 			$current_updated = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'rolled_back', 'updated_at' => DB::now() ), array( 'policy_uuid' => $row['policy_uuid'], 'status' => 'active' ), array( '%s', '%s' ), array( '%s', '%s' ) );
 			$previous_updated = $wpdb->update( DB::table( 'ranking_policies' ), array( 'status' => 'active', 'approval_two' => $second, 'effective_at' => DB::now(), 'updated_at' => DB::now() ), array( 'policy_uuid' => $previous['policy_uuid'], 'status' => 'rolled_back' ), array( '%s', '%d', '%s', '%s' ), array( '%s', '%s' ) );
 			if ( 1 !== $current_updated || 1 !== $previous_updated ) { throw new \RuntimeException( 'Concurrent rollback transition.' ); }
 			if ( 'search' === $row['context_name'] && 'public' === $row['audience'] ) { DB::update_settings( array( 'policy_version' => $previous['version'] ) ); }
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'Ranking policy rollback commit failed.' ); }
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_policy_rollback_failed', 'Ranking policy rollback failed safely.', array( 'status' => 409 ) );
