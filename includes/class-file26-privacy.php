@@ -118,7 +118,14 @@ final class Privacy {
 		$appeal_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Doctor_Appeals::table() . ' WHERE appellant_user_id=%d', $user->ID ) );
 		$removed_any = false;
 		$retained = false;
-		$wpdb->query( 'START TRANSACTION' );
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return array(
+				'items_removed' => false,
+				'items_retained' => (bool) $appeal_count,
+				'messages' => array( __( 'File 26 erasure could not start its atomic transaction; no success is reported.', 'sabri-file26' ) ),
+				'done' => false,
+			);
+		}
 		try {
 			$removed_feedback = $wpdb->delete( DB::table( 'feedback' ), array( 'user_id' => $user->ID ), array( '%d' ) );
 			$removed_profile = $wpdb->delete( DB::table( 'profiles' ), array( 'user_id' => $user->ID ), array( '%d' ) );
@@ -143,7 +150,9 @@ final class Privacy {
 				$retained = true;
 				$removed_any = true;
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				throw new \RuntimeException( 'Privacy erasure commit failed.' );
+			}
 		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return array(
