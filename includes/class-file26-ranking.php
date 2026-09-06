@@ -78,6 +78,7 @@ final class Ranking {
 					if ( isset( $features['limits'][ $name ] ) ) {
 						$defaults['limits'][ $name ] = min( 100, max( 1, (int) $features['limits'][ $name ] ) );
 					}
+				}
 			}
 			$defaults['version'] = (string) $row['version'];
 		}
