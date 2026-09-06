@@ -64,8 +64,8 @@ f26_central_assert( false !== strpos( $files['central'], "setting_days( 'saved_q
 
 f26_central_assert( false !== strpos( $files['doctor'], "'top_10'" ) && false !== strpos( $files['doctor'], "'top_100'" ) && false !== strpos( $files['doctor'], "'top_1000'" ), 'doctor Top 10/100/1000 tiers remain implemented' );
 f26_central_assert( false === strpos( $files['doctor'], "'author_key' => \$row['author_key']" ), 'public doctor ranking does not expose internal author references' );
-f26_central_assert( false !== strpos( $files['plugin'], "'primary_accent_fallback' => '#087A4E'" ), 'File 25 provider receives Sabri Green fallback only' );
-f26_central_assert( false !== strpos( $files['plugin'], "'visual_owner' => 'File 25'" ), 'File 26 does not claim visual ownership' );
+f26_central_assert( false !== strpos( preg_replace( '/\s+/', '', $files['plugin'] ), "'primary_accent_fallback'=>'#087A4E'" ), 'File 25 provider receives Sabri Green fallback only' );
+f26_central_assert( false !== strpos( preg_replace( '/\s+/', '', $files['plugin'] ), "'visual_owner'=>'File25'" ), 'File 26 does not claim visual ownership' );
 f26_central_assert( false !== strpos( $files['plugin'], "'shell_owner'" ) || false !== strpos( $files['central'], "'shell_owner' => 'File 20'" ), 'File 20 shell ownership retained' );
 
 f26_central_assert( false !== strpos( $files['workflow'], 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' ), 'checkout action pinned to approved immutable Node 24 release' );
