@@ -138,37 +138,66 @@ final class Recommendations {
 		$idempotency_raw = isset( $request['idempotency_key'] ) ? sanitize_text_field( $request['idempotency_key'] ) : '';
 		if ( ! $idempotency_raw ) { return new \WP_Error( 'file26_idempotency_required', 'An idempotency key is required.', array( 'status' => 400 ) ); }
 		$idempotency = hash( 'sha256', $user_id . '|' . $idempotency_raw );
+		$context = isset( $request['context'] ) ? sanitize_key( $request['context'] ) : 'discover';
+		$payload = wp_json_encode( array( 'context' => $context ) );
+		$days = max( 30, (int) DB::setting( 'feedback_retention_days', 365 ) );
+		$expires = gmdate( 'Y-m-d H:i:s', time() + ( $days * DAY_IN_SECONDS ) );
 
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_feedback_write_failed', 'Recommendation feedback transaction could not start.', array( 'status' => 500 ) ); }
 		try {
 			if ( 'undo' === $type ) {
-				$target = isset( $request['undo_idempotency_key'] ) ? hash( 'sha256', $user_id . '|' . sanitize_text_field( $request['undo_idempotency_key'] ) ) : '';
-				if ( ! $target ) { throw new \InvalidArgumentException( 'undo_target_required' ); }
+				$target_raw = isset( $request['undo_idempotency_key'] ) ? sanitize_text_field( $request['undo_idempotency_key'] ) : '';
+				if ( ! $target_raw ) { throw new \InvalidArgumentException( 'undo_target_required' ); }
+				$target = hash( 'sha256', $user_id . '|' . $target_raw );
+				$sql = $wpdb->prepare(
+					'INSERT INTO ' . DB::table( 'feedback' ) . " (idempotency_key,user_id,item_key,feedback_type,scope_key,payload,active,created_at,updated_at,expires_at)
+					VALUES (%s,%d,NULL,'undo',%s,%s,0,%s,%s,%s) ON DUPLICATE KEY UPDATE idempotency_key=VALUES(idempotency_key)",
+					$idempotency, $user_id, $target, $payload, DB::now(), DB::now(), $expires
+				);
+				$receipt_write = $wpdb->query( $sql );
+				if ( false === $receipt_write ) { throw new \RuntimeException( 'undo_receipt_write_failed' ); }
+				$receipt = $this->feedback_by_idempotency( $idempotency, $user_id );
+				if ( is_wp_error( $receipt ) ) { throw new \RuntimeException( 'undo_receipt_read_failed' ); }
+				if ( ! $receipt || 'undo' !== $receipt['feedback_type'] || $target !== (string) $receipt['scope_key'] || $payload !== (string) $receipt['payload'] ) {
+					throw new \DomainException( 'idempotency_conflict' );
+				}
+				if ( 0 === (int) $receipt_write ) {
+					if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
+					return array( 'reversed' => true, 'effective_next_request' => true, 'idempotent_replay' => true, 'idempotency_key' => $idempotency_raw );
+				}
 				$reversed = $wpdb->update( DB::table( 'feedback' ), array( 'active' => 0, 'updated_at' => DB::now() ), array( 'idempotency_key' => $target, 'user_id' => $user_id, 'active' => 1 ), array( '%d', '%s' ), array( '%s', '%d', '%d' ) );
 				if ( 1 !== $reversed ) { throw new \UnexpectedValueException( 'feedback_not_reversible' ); }
 				$rebuilt = $this->rebuild_negative_controls( $user_id );
 				if ( is_wp_error( $rebuilt ) ) { throw new \RuntimeException( 'negative_rebuild_failed' ); }
 				if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
-				$this->security->audit( 'recommendation_feedback_reversed', array( 'object_type' => 'recommendation', 'object_key' => $item_key ) );
-				return array( 'reversed' => true, 'effective_next_request' => true );
+				$this->security->audit( 'recommendation_feedback_reversed', array( 'object_type' => 'recommendation', 'object_key' => $target ) );
+				return array( 'reversed' => true, 'effective_next_request' => true, 'idempotent_replay' => false, 'idempotency_key' => $idempotency_raw );
 			}
 
-			$days = max( 30, (int) DB::setting( 'feedback_retention_days', 365 ) );
-			$expires = gmdate( 'Y-m-d H:i:s', time() + ( $days * DAY_IN_SECONDS ) );
 			$sql = $wpdb->prepare(
 				'INSERT INTO ' . DB::table( 'feedback' ) . " (idempotency_key,user_id,item_key,feedback_type,scope_key,payload,active,created_at,updated_at,expires_at)
-				VALUES (%s,%d,%s,%s,%s,%s,1,%s,%s,%s) ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at)",
-				$idempotency, $user_id, $item_key ?: null, $type, $scope_key,
-				wp_json_encode( array( 'context' => isset( $request['context'] ) ? sanitize_key( $request['context'] ) : 'discover' ) ),
+				VALUES (%s,%d,%s,%s,%s,%s,1,%s,%s,%s) ON DUPLICATE KEY UPDATE idempotency_key=VALUES(idempotency_key)",
+				$idempotency, $user_id, $item_key ?: null, $type, $scope_key, $payload,
 				DB::now(), DB::now(), $expires
 			);
-			if ( false === $wpdb->query( $sql ) ) { throw new \RuntimeException( 'feedback_insert_failed' ); }
+			$feedback_write = $wpdb->query( $sql );
+			if ( false === $feedback_write ) { throw new \RuntimeException( 'feedback_insert_failed' ); }
+			$stored = $this->feedback_by_idempotency( $idempotency, $user_id );
+			if ( is_wp_error( $stored ) ) { throw new \RuntimeException( 'feedback_read_failed' ); }
+			$stored_item = isset( $stored['item_key'] ) ? (string) $stored['item_key'] : '';
+			$stored_scope = isset( $stored['scope_key'] ) ? (string) $stored['scope_key'] : '';
+			if ( ! $stored || $stored_item !== $item_key || (string) $stored['feedback_type'] !== $type || $stored_scope !== $scope_key || (string) $stored['payload'] !== $payload ) {
+				throw new \DomainException( 'idempotency_conflict' );
+			}
 			$rebuilt = $this->rebuild_negative_controls( $user_id );
 			if ( is_wp_error( $rebuilt ) ) { throw new \RuntimeException( 'negative_rebuild_failed' ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new \RuntimeException( 'feedback_commit_failed' ); }
 		} catch ( \InvalidArgumentException $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_undo_target_required', 'The feedback action to undo is required.', array( 'status' => 400 ) );
+		} catch ( \DomainException $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new \WP_Error( 'file26_idempotency_conflict', 'The idempotency key is already bound to a different feedback operation.', array( 'status' => 409 ) );
 		} catch ( \UnexpectedValueException $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new \WP_Error( 'file26_feedback_not_reversible', 'The feedback action was not found or was already reversed.', array( 'status' => 409 ) );
@@ -177,7 +206,24 @@ final class Recommendations {
 			return new \WP_Error( 'file26_feedback_write_failed', 'Recommendation feedback could not be persisted atomically.', array( 'status' => 500 ) );
 		}
 		$this->security->audit( 'recommendation_feedback_recorded', array( 'object_type' => 'recommendation', 'object_key' => $item_key, 'reason' => $type ) );
-		return array( 'recorded' => true, 'effective_next_request' => true, 'idempotency_key' => $idempotency_raw );
+		return array( 'recorded' => true, 'effective_next_request' => true, 'idempotent_replay' => 0 === (int) $feedback_write, 'idempotency_key' => $idempotency_raw );
+	}
+
+	private function feedback_by_idempotency( $idempotency, $user_id ) {
+		global $wpdb;
+		$wpdb->last_error = '';
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT idempotency_key,user_id,item_key,feedback_type,scope_key,payload,active FROM ' . DB::table( 'feedback' ) . ' WHERE idempotency_key=%s AND user_id=%d LIMIT 1',
+				$idempotency,
+				(int) $user_id
+			),
+			ARRAY_A
+		);
+		if ( null === $row && ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'file26_feedback_read_failed', 'Recommendation feedback idempotency state could not be read.' );
+		}
+		return $row;
 	}
 
 	private function rebuild_negative_controls( $user_id ) {
