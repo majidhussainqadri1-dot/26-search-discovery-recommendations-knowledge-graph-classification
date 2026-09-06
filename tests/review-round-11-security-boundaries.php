@@ -9,7 +9,7 @@ $plugin = file_get_contents( $root . '/includes/class-file26-plugin.php' );
 $checks = array(
 	array( $security, "'exp'", 'signed cursor has an expiry claim' ),
 	array( $security, 'sabri_file26_cursor_ttl', 'cursor lifetime is bounded and configurable' ),
-	array( $security, "esc_url_raw( $url, array( 'https' ) )", 'external resources require HTTPS' ),
+	array( $security, 'esc_url_raw( $url, array( \'https\' ) )', 'external resources require HTTPS' ),
 	array( $security, 'file26_audit_write_failed', 'audit persistence failure is explicit' ),
 	array( $security, 'access\\s*token', 'sensitive query detection covers access tokens' ),
 	array( $roles, 'public static function verify()', 'role model is verifiable' ),
