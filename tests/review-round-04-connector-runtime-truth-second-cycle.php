@@ -9,10 +9,10 @@ $checks = array(
 	array( $connectors, '$persisted = $this->persist( $public_manifest );', 'connector persistence is explicit after runtime checks' ),
 	array( $connectors, 'file26_connector_runtime_incomplete', 'incomplete eligible runtime fails closed' ),
 	array( $connectors, 'connector_health_persist_failed', 'health persistence failure is audited' ),
-	array( $connectors, "$detail['persistence_error'] = true", 'health persistence failure is exposed as degraded detail' ),
+	array( $connectors, '$detail[\'persistence_error\'] = true', 'health persistence failure is exposed as degraded detail' ),
 	array( $governance, 'private $connectors;', 'governance owns current runtime connector registry' ),
 	array( $governance, '$runtime = $this->connectors->get( $slug );', 'promotion resolves current runtime adapter' ),
-	array( $governance, "in_array( $target, array( 'shadow', 'approved', 'active' ), true )", 'index/production promotion is runtime-gated' ),
+	array( $governance, 'in_array( $target, array( \'shadow\', \'approved\', \'active\' ), true )', 'index/production promotion is runtime-gated' ),
 	array( $governance, '$this->connectors->set_runtime_status( $slug, $target )', 'successful DB transition syncs runtime state' ),
 	array( $plugin, 'new Governance( $this->security, $this->taxonomy, $this->graph, $this->connectors )', 'governance receives the authoritative runtime registry' ),
 );
