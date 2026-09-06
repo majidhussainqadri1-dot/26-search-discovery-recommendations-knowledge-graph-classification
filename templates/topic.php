@@ -1,8 +1,11 @@
-<?php defined( 'ABSPATH' ) || exit; ?>
-<section class="sabri-f26" aria-labelledby="sabri-f26-topic-title">
+<?php
+defined( 'ABSPATH' ) || exit;
+$title_id = $instance_id . '-title';
+?>
+<section class="sabri-f26" aria-labelledby="<?php echo esc_attr( $title_id ); ?>">
 	<header class="sabri-f26__header">
 		<span class="sabri-f26-badge"><span class="dashicons dashicons-networking" aria-hidden="true"></span><?php esc_html_e( 'Knowledge topic', 'sabri-file26' ); ?></span>
-		<h1 id="sabri-f26-topic-title" class="sabri-f26__title"><?php echo esc_html( $term['preferred_label'] ); ?></h1>
+		<h1 id="<?php echo esc_attr( $title_id ); ?>" class="sabri-f26__title"><?php echo esc_html( $term['preferred_label'] ); ?></h1>
 		<?php if ( ! empty( $term['definition'] ) ) : ?><p class="sabri-f26__lead"><?php echo esc_html( $term['definition'] ); ?></p><?php endif; ?>
 	</header>
 	<?php if ( is_wp_error( $data ) ) : ?>
