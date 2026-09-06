@@ -35,6 +35,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-graph.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-governance.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-doctor-ranking.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-doctor-appeals.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-schema-integrity.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-rest.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-routes.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-admin.php';
