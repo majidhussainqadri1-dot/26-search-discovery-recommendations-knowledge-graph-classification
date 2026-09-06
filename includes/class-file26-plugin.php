@@ -56,24 +56,30 @@ final class Plugin {
 		DB::schedule();
 	}
 
+	/** Return true only when every physical table required by the runtime exists. */
+	private function physical_schema_complete() {
+		global $wpdb;
+		$required = array( 'connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits' );
+		foreach ( $required as $name ) {
+			$table = DB::table( $name );
+			if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { return false; }
+		}
+		$appeals = Doctor_Appeals::table();
+		return $appeals === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $appeals ) ) );
+	}
+
 	/** Serialize and complete schema changes before connectors/routes/search are exposed. */
 	private function ensure_schema_current() {
 		global $wpdb;
 		$main_current = SABRI_FILE26_SCHEMA_VERSION === get_option( DB::OPTION_SCHEMA );
 		$appeal_current = Doctor_Appeals::SCHEMA_VERSION === get_option( Doctor_Appeals::OPTION_SCHEMA );
-		if ( $main_current && $appeal_current ) { return true; }
+		if ( $main_current && $appeal_current && $this->physical_schema_complete() ) { return true; }
 		$lock_name = 'file26:schema-migration';
 		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock_name ) ) ) { return new \WP_Error( 'file26_migration_busy', 'File 26 schema migration is already running.' ); }
 		try {
-			if ( SABRI_FILE26_SCHEMA_VERSION !== get_option( DB::OPTION_SCHEMA ) ) { DB::install_schema(); }
-			if ( Doctor_Appeals::SCHEMA_VERSION !== get_option( Doctor_Appeals::OPTION_SCHEMA ) ) { Doctor_Appeals::install_schema(); }
-			$required = array( 'connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits' );
-			foreach ( $required as $name ) {
-				$table = DB::table( $name );
-				if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing after migration.' ); }
-			}
-			$appeals = Doctor_Appeals::table();
-			if ( $appeals !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $appeals ) ) ) ) { return new \WP_Error( 'file26_schema_incomplete', 'The ranking appeals table is missing after migration.' ); }
+			if ( SABRI_FILE26_SCHEMA_VERSION !== get_option( DB::OPTION_SCHEMA ) || ! $this->physical_schema_complete() ) { DB::install_schema(); }
+			if ( Doctor_Appeals::SCHEMA_VERSION !== get_option( Doctor_Appeals::OPTION_SCHEMA ) || ! Doctor_Appeals::schema_exists() ) { Doctor_Appeals::install_schema(); }
+			if ( ! $this->physical_schema_complete() ) { return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing after migration.' ); }
 			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
 			update_option( Doctor_Appeals::OPTION_SCHEMA, Doctor_Appeals::SCHEMA_VERSION, false );
 			return true;
