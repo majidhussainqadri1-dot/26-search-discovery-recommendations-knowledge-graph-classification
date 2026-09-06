@@ -3,11 +3,7 @@ namespace Sabri\File26;
 
 defined( 'ABSPATH' ) || exit;
 
-/**
- * Post-dispatch persistence verifier for REST operations whose WordPress option/meta
- * APIs do not distinguish every write failure from a no-op. The verifier checks the
- * resulting state, so an API response cannot claim a durable mutation that is absent.
- */
+/** Verifies that success-shaped REST mutations and retention views match durable state. */
 final class Operation_Truth {
 	const META_SAVED_QUERIES = 'sabri_file26_saved_queries_v1';
 	const OPTION_CONTENT_GAPS = 'sabri_file26_explicit_content_gaps_v1';
@@ -19,38 +15,37 @@ final class Operation_Truth {
 	}
 
 	public static function capture_pre_state( $result, $server, $request ) {
-		if ( ! $request instanceof \WP_REST_Request ) {
-			return $result;
-		}
+		if ( ! $request instanceof \WP_REST_Request ) { return $result; }
 		$route = $request->get_route();
-		if ( '/sabri-search/v1/content-gap' !== $route || 'POST' !== $request->get_method() ) {
-			return $result;
-		}
+		if ( '/sabri-search/v1/content-gap' !== $route || 'POST' !== $request->get_method() ) { return $result; }
 		$params = (array) $request->get_json_params();
 		$key = self::content_gap_key( isset( $params['q'] ) ? $params['q'] : '' );
-		if ( ! $key ) {
-			return $result;
-		}
+		if ( ! $key ) { return $result; }
 		$registry = get_option( self::OPTION_CONTENT_GAPS, array() );
 		$registry = is_array( $registry ) ? $registry : array();
 		$current = isset( $registry[ $key ] ) && is_array( $registry[ $key ] ) ? $registry[ $key ] : array();
-		self::$pre['content_gap'] = array(
-			'key' => $key,
-			'count' => isset( $current['count'] ) ? (int) $current['count'] : 0,
-		);
+		self::$pre['content_gap'] = array( 'key' => $key, 'count' => isset( $current['count'] ) ? (int) $current['count'] : 0 );
 		return $result;
 	}
 
 	public static function verify_post_state( $response, $server, $request ) {
-		if ( ! $request instanceof \WP_REST_Request || is_wp_error( $response ) ) {
-			return $response;
-		}
+		if ( ! $request instanceof \WP_REST_Request || is_wp_error( $response ) ) { return $response; }
 		$route = $request->get_route();
 		$method = $request->get_method();
 		$response = rest_ensure_response( $response );
 		$data = $response->get_data();
-		if ( ! is_array( $data ) || $response->get_status() >= 400 ) {
-			return $response;
+		if ( ! is_array( $data ) || $response->get_status() >= 400 ) { return $response; }
+
+		if ( '/sabri-search/v1/saved-queries' === $route && 'GET' === $method ) {
+			$stored = get_user_meta( get_current_user_id(), self::META_SAVED_QUERIES, true );
+			$stored = is_array( $stored ) ? $stored : array();
+			$now = time();
+			foreach ( $stored as $record ) {
+				$expires = is_array( $record ) && ! empty( $record['expires_at'] ) ? strtotime( $record['expires_at'] . ' UTC' ) : false;
+				if ( false === $expires || $expires < $now ) {
+					return self::storage_failure( 'file26_saved_query_retention_failed', 'Expired saved-query state could not be durably pruned.' );
+				}
+			}
 		}
 
 		if ( '/sabri-search/v1/saved-queries' === $route && 'POST' === $method && ! empty( $data['id'] ) ) {
@@ -93,9 +88,7 @@ final class Operation_Truth {
 		$security = new Security();
 		$normalizer = new Normalizer();
 		$query = $security->sanitize_query( $query );
-		if ( '' === $query || $security->contains_sensitive_query( $query ) ) {
-			return '';
-		}
+		if ( '' === $query || $security->contains_sensitive_query( $query ) ) { return ''; }
 		$normalized = substr( $normalizer->normalize( $query ), 0, 180 );
 		return $normalized ? hash_hmac( 'sha256', $normalized, wp_salt( 'auth' ) ) : '';
 	}
