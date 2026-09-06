@@ -20,12 +20,14 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 5 | DEFECT | Anonymous 300-second shared search cache could survive visibility or connector-state revocation. | Governed File 26 mutation events invalidate shared search cache. Initial CI attempt caught a test-string interpolation bug; corrected exact-head CI GREEN `ad242677ad6c2c68472517063bb20ec36955147b`. |
 | 6 | DEFECT | Feedback insertion/rebuild could report success after DB failure; consent revocation was not atomic with feedback purge; reset did not verify transaction start/commit. | Feedback/undo + negative projection are atomic, DB results checked; consent revoke atomically clears profile signals and feedback; reset verifies start/deletes/commit. Corrective harness was strengthened to verify semantics rather than a deleted comment. Exact-head CI GREEN `0361f4be58b8c7788a33133dd32425aa454dfd0c`. |
 | 7 | CLEAN | Organic ranking, policy loading, bounded weights/limits, deterministic tie-break, safety exclusion, diversity and prohibited donation/payment/Founder-favoritism signals were reviewed. The optional `audience` policy parameter has no governing requirement for distinct audience-specific organic ranking in the current contracts, so its default-public use is not classified as a defect. | No production change required. Existing regressions remain the closure evidence. Exact-head CI GREEN `592ae636f7dd8ed518851893621d05f394fb95c6`. |
-| 8 | DEFECT | Doctor-ranking recompute did not verify transaction start/commit and could not reliably distinguish ranking-metadata option persistence failure, permitting a false-success claim for an allegedly atomic recompute. | Recompute now verifies START TRANSACTION, ranking projection writes, ranking metadata persistence and COMMIT; failures roll back/fail closed. A dedicated regression protects the atomicity boundary. Exact-head CI GREEN `b6cbc5048e9f6427e04dc4fb2518873da3233180`. |
+| 8 | DEFECT | Doctor-ranking recompute did not verify transaction start/commit and could not reliably distinguish ranking-metadata option persistence failure, permitting a false-success claim for an allegedly atomic recompute. | Recompute now verifies START TRANSACTION, ranking projection writes, ranking metadata persistence and COMMIT; failures roll back/fail closed. A dedicated regression protects the atomicity boundary. Exact-head CI GREEN `b6cbc5048e9f6427e04dc4fb2518873da3233180`; ledger-close exact head `cee21fce26b516687331ee07a01529801d401d57` also GREEN. |
+| 9 | DEFECT | REST `/admin/reconcile` discarded the `Indexer::reconcile()` result and always returned `reconciled=true`, while the admin control path correctly surfaced `WP_Error`; a backend reconciliation failure could therefore be reported as API success. | Pending correction after this frozen ledger. |
 
 ## Round status
 
 - Completed rounds: **8/20**
-- Defect rounds: **1, 2, 3, 4, 5, 6, 8**
-- Clean rounds: **7**
+- Round 9 review: **FROZEN — correction pending**
+- Defect rounds so far: **1, 2, 3, 4, 5, 6, 8, 9**
+- Clean rounds so far: **7**
 
-Round 9 may begin only from the green exact head recorded above.
+Round 10 must not begin until Round 9 correction, regression and exact-head CI are green.
