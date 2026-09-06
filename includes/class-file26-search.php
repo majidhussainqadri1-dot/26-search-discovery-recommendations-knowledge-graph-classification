@@ -29,15 +29,29 @@ final class Search {
 		$limit = max( 1, min( (int) DB::setting( 'max_results_per_page', 30 ), $limit ) );
 		$filters = $this->sanitize_filters( isset( $request['filters'] ) ? $request['filters'] : array() );
 		$policy_version = $this->ranking->policy_version();
+		$audience = $this->security->audience();
+		$entitlements = array_values( array_unique( array_map( 'sanitize_key', (array) $audience['entitlements'] ) ) );
+		$roles = array_values( array_unique( array_map( 'sanitize_key', (array) $audience['roles'] ) ) );
+		sort( $entitlements, SORT_STRING );
+		sort( $roles, SORT_STRING );
+		$audience_fingerprint = hash( 'sha256', wp_json_encode( array(
+			'user_id' => ! empty( $audience['authenticated'] ) ? (int) $audience['user_id'] : 0,
+			'authenticated' => ! empty( $audience['authenticated'] ),
+			'valid' => ! empty( $audience['valid'] ),
+			'is_minor' => ! empty( $audience['is_minor'] ),
+			'guardian_verified' => ! empty( $audience['guardian_verified'] ),
+			'entitlements' => $entitlements,
+			'roles' => $roles,
+		) ) );
 		$cursor_context = hash( 'sha256', wp_json_encode( array(
 			'q' => $this->normalizer->normalize( $query ), 'locale' => $locale, 'filters' => $filters,
-			'limit' => $limit, 'policy' => $policy_version,
+			'limit' => $limit, 'policy' => $policy_version, 'audience' => $audience_fingerprint,
 		) ) );
 		$offset = 0;
 		if ( ! empty( $request['cursor'] ) ) {
 			$cursor = $this->security->verify_cursor( $request['cursor'] );
 			if ( ! $cursor || empty( $cursor['p'] ) || empty( $cursor['h'] ) || $cursor['p'] !== $policy_version || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) {
-				return new \WP_Error( 'file26_invalid_cursor', 'The result cursor is invalid or expired.', array( 'status' => 400, 'trace_id' => $trace ) );
+				return new \WP_Error( 'file26_invalid_cursor', 'The result cursor is invalid or expired for the current eligibility context.', array( 'status' => 400, 'trace_id' => $trace ) );
 			}
 			$offset = max( 0, min( 100000, (int) $cursor['o'] ) );
 		}
@@ -45,7 +59,6 @@ final class Search {
 			return new \WP_Error( 'file26_rate_limited', 'Too many search requests. Please retry shortly.', array( 'status' => 429, 'trace_id' => $trace ) );
 		}
 
-		$audience = $this->security->audience();
 		$sensitive_query = $this->security->contains_sensitive_query( $query );
 		$public_cache = empty( $audience['authenticated'] ) && empty( $filters['availability'] ) && ! $sensitive_query;
 		$cache_key = 'search:' . hash( 'sha256', wp_json_encode( array(
@@ -60,7 +73,7 @@ final class Search {
 			}
 		}
 
-		$where = array( "d.state IN ('published','active','corrected','retracted')" );
+		$where = array( "d.state IN ('published','active','corrected','retracted')", "d.safety_class NOT IN ('blocked','restricted')" );
 		$args = array();
 		if ( empty( $audience['authenticated'] ) || empty( $audience['valid'] ) ) {
 			$where[] = "d.visibility='public'";
@@ -134,6 +147,9 @@ final class Search {
 			$sql = $base_sql . ' LIMIT %d OFFSET %d';
 			$query_args = array_merge( $args, array( $batch_size, $scan_offset ) );
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $query_args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $rows && ! empty( $wpdb->last_error ) ) {
+				return new \WP_Error( 'file26_search_read_failed', 'Search candidates could not be read safely.', array( 'status' => 503, 'trace_id' => $trace ) );
+			}
 			if ( ! $rows ) {
 				break;
 			}
@@ -143,6 +159,9 @@ final class Search {
 					continue;
 				}
 				if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) {
+					continue;
+				}
+				if ( in_array( $row['safety_class'], array( 'blocked', 'restricted' ), true ) ) {
 					continue;
 				}
 				if ( $query && ! $this->ranking->matches_query( $row, $query ) ) {
@@ -230,17 +249,23 @@ final class Search {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT d.* FROM $table d INNER JOIN $connector_table c ON c.slug=d.connector_slug AND c.status='active'
-				 WHERE d.state IN ('published','active','corrected') AND d.visibility='public' AND d.normalized_title LIKE %s
+				 WHERE d.state IN ('published','active','corrected') AND d.visibility='public' AND d.safety_class NOT IN ('blocked','restricted') AND d.normalized_title LIKE %s
 				 AND (d.locale=%s OR d.locale=%s OR d.locale='und')
 				 ORDER BY d.authority_score DESC,d.quality_score DESC,d.title ASC LIMIT %d",
 				$like, $locale, substr( $locale, 0, 2 ), min( 50, $limit * 5 )
 			), ARRAY_A
 		);
+		if ( null === $rows && ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'file26_suggest_read_failed', 'Suggestions could not be read safely.', array( 'status' => 503 ) );
+		}
 		$output = array();
-		$audience = array( 'authenticated' => false, 'valid' => true, 'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array() );
-		foreach ( $rows as $row ) {
+		$audience = array( 'authenticated' => false, 'valid' => true, 'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array(), 'roles' => array(), 'user_id' => 0 );
+		foreach ( (array) $rows as $row ) {
 			$row = $this->hydrate_row( $row );
 			if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) {
+				continue;
+			}
+			if ( in_array( $row['safety_class'], array( 'blocked', 'restricted' ), true ) ) {
 				continue;
 			}
 			$output[] = array( 'key' => $row['canonical_key'], 'label' => $row['title'], 'entity_type' => $row['entity_type'], 'url' => $row['canonical_url'] );
@@ -272,6 +297,9 @@ final class Search {
 				$args
 			);
 			$edges = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $edges && ! empty( $wpdb->last_error ) ) {
+				continue;
+			}
 			foreach ( (array) $edges as $edge ) {
 				if ( isset( $seen[ $edge['edge_uuid'] ] ) ) {
 					continue;
@@ -322,14 +350,9 @@ final class Search {
 
 	private function to_result( array $row, $query ) {
 		$payload = is_array( $row['payload'] ) ? $row['payload'] : array();
+		// Capability-bearing signed delivery URLs belong to their canonical owner and must never be replayed from the search index/cache.
+		unset( $payload['download_url'] );
 		$actions = array( 'open' => array( 'url' => $row['canonical_url'], 'label' => __( 'Open', 'sabri-file26' ), 'icon' => 'external' ) );
-		if ( ! empty( $payload['download_allowed'] ) && ! empty( $payload['download_url'] ) ) {
-			$actions['download'] = array(
-				'url' => $payload['download_url'],
-				'label' => ! empty( $payload['download_label'] ) ? $payload['download_label'] : __( 'Download', 'sabri-file26' ),
-				'icon' => 'download',
-			);
-		}
 		return array(
 			'key' => $row['canonical_key'], 'entity_type' => $row['entity_type'], 'title' => $row['title'],
 			'excerpt' => $row['excerpt'], 'url' => $row['canonical_url'], 'locale' => $row['locale'],
