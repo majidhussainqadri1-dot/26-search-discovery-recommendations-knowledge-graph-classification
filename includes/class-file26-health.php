@@ -4,52 +4,20 @@ defined( 'ABSPATH' ) || exit;
 
 final class Health {
 	private $connectors; private $owner_contracts;
-	public function __construct( Connectors $connectors, Owner_Contracts $owner_contracts ) { $this->connectors=$connectors; $this->owner_contracts=$owner_contracts; }
-
-	public function snapshot() {
-		global $wpdb; $tables=array(); $db_failure=false;
-		foreach(array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits') as $name){
-			$table=DB::table($name);$value=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));
-			if(!empty($wpdb->last_error)){$tables[$name]='unknown';$db_failure=true;$wpdb->last_error='';}else{$tables[$name]=$value===$table?'present':'missing';}
-		}
-		$appeals_table=Doctor_Appeals::table();$value=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($appeals_table)));
-		if(!empty($wpdb->last_error)){$tables['ranking_appeals']='unknown';$db_failure=true;$wpdb->last_error='';}else{$tables['ranking_appeals']=$value===$appeals_table?'present':'missing';}
-
-		$counts=array();
-		foreach(array('documents','tombstones','terms','edges','jobs') as $name){if('present'===$tables[$name]){$value=$wpdb->get_var('SELECT COUNT(*) FROM '.DB::table($name));if(!empty($wpdb->last_error)){$counts[$name]=null;$db_failure=true;$wpdb->last_error='';}else{$counts[$name]=(int)$value;}}}
-		if('present'===$tables['ranking_appeals']){$value=$wpdb->get_var('SELECT COUNT(*) FROM '.$appeals_table);if(!empty($wpdb->last_error)){$counts['ranking_appeals']=null;$db_failure=true;$wpdb->last_error='';}else{$counts['ranking_appeals']=(int)$value;}}
-
-		$dead_letter=null;$stale_running=null;$oldest_pending_age_seconds=null;
-		if('present'===$tables['jobs']){
-			$value=$wpdb->get_var("SELECT COUNT(*) FROM ".DB::table('jobs')." WHERE status='dead_letter'");if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}else{$dead_letter=(int)$value;}
-			$stale_before=gmdate('Y-m-d H:i:s',time()-max(300,min(DAY_IN_SECONDS,(int)DB::setting('job_lock_timeout_seconds',1800))));
-			$value=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM ".DB::table('jobs')." WHERE status='running' AND started_at<%s",$stale_before));if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}else{$stale_running=(int)$value;}
-			$oldest=$wpdb->get_var("SELECT MIN(created_at) FROM ".DB::table('jobs')." WHERE status IN ('pending','retry')");if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}elseif($oldest){$oldest_pending_age_seconds=max(0,time()-strtotime($oldest.' UTC'));}
-		}
-
-		$connector_health=$this->connectors->health_snapshot();$degraded=false;
-		if(is_wp_error($connector_health)){$degraded=true;$connector_health=array('_registry'=>array('state'=>'unavailable','status'=>'unknown','detail'=>array('reason'=>'health_snapshot_failed')));}
-		foreach($connector_health as $connector){if(isset($connector['state'],$connector['status'])&&in_array($connector['state'],array('degraded','unavailable','unknown'),true)&&'active'===$connector['status']){$degraded=true;}}
-		$owner_readiness=$this->owner_contracts->readiness();$owner_contracts_ready=$this->owner_contracts->all_required_active();$activated=(bool)DB::setting('activated',false);
-		$cron=array('queue'=>wp_next_scheduled(DB::CRON_QUEUE)?:null,'reconcile'=>wp_next_scheduled(DB::CRON_RECONCILE)?:null,'retention'=>wp_next_scheduled(DB::CRON_RETENTION)?:null,'doctor_ranking'=>wp_next_scheduled(DB::CRON_DOCTOR_RANKING)?:null);
-		$cron_missing=$activated&&in_array(null,$cron,true);
-		$schema_drift=SABRI_FILE26_SCHEMA_VERSION!==(string)get_option(DB::OPTION_SCHEMA)||Doctor_Appeals::SCHEMA_VERSION!==(string)get_option(Doctor_Appeals::OPTION_SCHEMA);
+	public function __construct(Connectors $connectors,Owner_Contracts $owner_contracts){$this->connectors=$connectors;$this->owner_contracts=$owner_contracts;}
+	public function snapshot(){
+		global $wpdb;$tables=array();$db_failure=false;
+		foreach(array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits') as $name){$table=DB::table($name);$value=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));if(!empty($wpdb->last_error)){$tables[$name]='unknown';$db_failure=true;$wpdb->last_error='';}else{$tables[$name]=$value===$table?'present':'missing';}}
+		$appeals_table=Doctor_Appeals::table();$value=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($appeals_table)));if(!empty($wpdb->last_error)){$tables['ranking_appeals']='unknown';$db_failure=true;$wpdb->last_error='';}else{$tables['ranking_appeals']=$value===$appeals_table?'present':'missing';}
+		$counts=array();foreach(array('documents','tombstones','terms','edges','jobs') as $name){if('present'===$tables[$name]){$value=$wpdb->get_var('SELECT COUNT(*) FROM '.DB::table($name));if(!empty($wpdb->last_error)){$counts[$name]=null;$db_failure=true;$wpdb->last_error='';}else{$counts[$name]=(int)$value;}}}if('present'===$tables['ranking_appeals']){$value=$wpdb->get_var('SELECT COUNT(*) FROM '.$appeals_table);if(!empty($wpdb->last_error)){$counts['ranking_appeals']=null;$db_failure=true;$wpdb->last_error='';}else{$counts['ranking_appeals']=(int)$value;}}
+		$dead_letter=null;$stale_running=null;$oldest_pending_age_seconds=null;if('present'===$tables['jobs']){$value=$wpdb->get_var("SELECT COUNT(*) FROM ".DB::table('jobs')." WHERE status='dead_letter'");if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}else{$dead_letter=(int)$value;}$stale_before=gmdate('Y-m-d H:i:s',time()-max(300,min(DAY_IN_SECONDS,(int)DB::setting('job_lock_timeout_seconds',1800))));$value=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM ".DB::table('jobs')." WHERE status='running' AND started_at<%s",$stale_before));if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}else{$stale_running=(int)$value;}$oldest=$wpdb->get_var("SELECT MIN(created_at) FROM ".DB::table('jobs')." WHERE status IN ('pending','retry')");if(!empty($wpdb->last_error)){$db_failure=true;$wpdb->last_error='';}elseif($oldest){$oldest_pending_age_seconds=max(0,time()-strtotime($oldest.' UTC'));}}
+		$connector_health=$this->connectors->health_snapshot();$degraded=false;if(is_wp_error($connector_health)){$degraded=true;$connector_health=array('_registry'=>array('state'=>'unavailable','status'=>'unknown','detail'=>array('reason'=>'health_snapshot_failed')));}foreach($connector_health as $connector){if(isset($connector['state'],$connector['status'])&&in_array($connector['state'],array('degraded','unavailable','unknown'),true)&&'active'===$connector['status']){$degraded=true;}}
+		$owner_readiness=$this->owner_contracts->readiness();$owner_contracts_ready=$this->owner_contracts->all_required_active();$activated=(bool)DB::setting('activated',false);$cron=array('queue'=>wp_next_scheduled(DB::CRON_QUEUE)?:null,'reconcile'=>wp_next_scheduled(DB::CRON_RECONCILE)?:null,'retention'=>wp_next_scheduled(DB::CRON_RETENTION)?:null,'doctor_ranking'=>wp_next_scheduled(DB::CRON_DOCTOR_RANKING)?:null);$cron_missing=$activated&&in_array(null,$cron,true);$schema_drift=SABRI_FILE26_SCHEMA_VERSION!==(string)get_option(DB::OPTION_SCHEMA)||Doctor_Appeals::SCHEMA_VERSION!==(string)get_option(Doctor_Appeals::OPTION_SCHEMA);
 		$operational_failures=array(
-			'audit'=>get_option('sabri_file26_last_audit_failure',false)?true:false,
-			'privacy'=>get_option('sabri_file26_last_privacy_failure',false)?true:false,
-			'retention'=>get_option('sabri_file26_last_retention_failure',false)?true:false,
-			'appeal_retention'=>get_option('sabri_file26_last_appeal_retention_failure',false)?true:false,
+			'audit'=>(bool)get_option('sabri_file26_last_audit_failure',false),'privacy'=>(bool)get_option('sabri_file26_last_privacy_failure',false),'retention'=>(bool)get_option('sabri_file26_last_retention_failure',false),'appeal_retention'=>(bool)get_option('sabri_file26_last_appeal_retention_failure',false),
+			'connector_boot'=>(bool)get_option('sabri_file26_last_connector_boot_failure',false),'connector_health'=>(bool)get_option('sabri_file26_last_connector_health_failure',false),'scheduler'=>(bool)get_option('sabri_file26_last_schedule_failure',false),
 		);
-		$has_operational_failure=in_array(true,$operational_failures,true);
-		$unknown=in_array('missing',$tables,true)||in_array('unknown',$tables,true);
-		$status=$unknown||$schema_drift||$db_failure?'unavailable':($degraded||$dead_letter||$stale_running||$cron_missing||$has_operational_failure||($activated&&!$owner_contracts_ready)?'degraded':($activated?'healthy':'inactive'));
-		return array(
-			'status'=>$status,'plugin_version'=>SABRI_FILE26_VERSION,'schema_version'=>get_option(DB::OPTION_SCHEMA),'contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'activated'=>$activated,
-			'tables'=>$tables,'counts'=>$counts,'db_read_failure'=>$db_failure,'dead_letter_jobs'=>$dead_letter,'stale_running_jobs'=>$stale_running,'oldest_pending_age_seconds'=>$oldest_pending_age_seconds,
-			'schema_drift'=>$schema_drift,'connectors'=>$connector_health,'owner_contracts'=>$owner_readiness,'owner_contracts_ready'=>$owner_contracts_ready,'cron'=>$cron,'cron_missing'=>$cron_missing,
-			'operational_failures'=>$operational_failures,
-			'doctor_ranking'=>array('policy_version'=>DB::setting('doctor_ranking_policy_version','doctor-global-1.0'),'last_run'=>DB::setting('doctor_ranking_last_run',''),'appeals_schema'=>get_option(Doctor_Appeals::OPTION_SCHEMA)),
-			'claims'=>array('staging_accepted'=>false,'live_deployed'=>false,'operational'=>false),'timestamp_utc'=>DB::now(),
-		);
+		$has_operational_failure=in_array(true,$operational_failures,true);$unknown=in_array('missing',$tables,true)||in_array('unknown',$tables,true);$status=$unknown||$schema_drift||$db_failure?'unavailable':($degraded||$dead_letter||$stale_running||$cron_missing||$has_operational_failure||($activated&&!$owner_contracts_ready)?'degraded':($activated?'healthy':'inactive'));
+		return array('status'=>$status,'plugin_version'=>SABRI_FILE26_VERSION,'schema_version'=>get_option(DB::OPTION_SCHEMA),'contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'activated'=>$activated,'tables'=>$tables,'counts'=>$counts,'db_read_failure'=>$db_failure,'dead_letter_jobs'=>$dead_letter,'stale_running_jobs'=>$stale_running,'oldest_pending_age_seconds'=>$oldest_pending_age_seconds,'schema_drift'=>$schema_drift,'connectors'=>$connector_health,'owner_contracts'=>$owner_readiness,'owner_contracts_ready'=>$owner_contracts_ready,'cron'=>$cron,'cron_missing'=>$cron_missing,'operational_failures'=>$operational_failures,'doctor_ranking'=>array('policy_version'=>DB::setting('doctor_ranking_policy_version','doctor-global-1.0'),'last_run'=>DB::setting('doctor_ranking_last_run',''),'appeals_schema'=>get_option(Doctor_Appeals::OPTION_SCHEMA)),'claims'=>array('staging_accepted'=>false,'live_deployed'=>false,'operational'=>false),'timestamp_utc'=>DB::now());
 	}
 }
