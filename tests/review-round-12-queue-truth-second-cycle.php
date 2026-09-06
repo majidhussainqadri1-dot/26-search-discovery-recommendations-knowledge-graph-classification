@@ -10,11 +10,11 @@ $checks = array(
 	array( $worker, 'file26_job_completion_failed', 'completion DB write failure is explicit' ),
 	array( $worker, 'file26_job_failure_transition_failed', 'retry/dead-letter DB write failure is explicit' ),
 	array( $worker, 'file26_job_lock_lost', 'worker CAS loss is explicit' ),
-	array( $worker, "'finished_at' => $dead ? DB::now() : null", 'dead-letter transition records a finish time' ),
+	array( $worker, '\'finished_at\' => $dead ? DB::now() : null', 'dead-letter transition records a finish time' ),
 	array( $worker, 'worker_timeout', 'stale worker recovery remains implemented' ),
 	array( $bootstrap, 'class-file26-queue-truth.php', 'checked queue worker is loaded' ),
 	array( $bootstrap, 'remove_action( \\Sabri\\File26\\DB::CRON_QUEUE', 'legacy unchecked cron callback is removed' ),
-	array( $bootstrap, "add_action( \\Sabri\\File26\\DB::CRON_QUEUE, array( $queue_truth, 'run' ) )", 'queue cron uses checked worker' ),
+	array( $bootstrap, 'add_action( \\Sabri\\File26\\DB::CRON_QUEUE, array( $queue_truth, \'run\' ) )', 'queue cron uses checked worker' ),
 );
 $failures = 0;
 foreach ( $checks as $check ) {
