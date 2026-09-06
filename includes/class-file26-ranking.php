@@ -65,7 +65,6 @@ final class Ranking {
 					if ( isset( $features['limits'][ $name ] ) ) {
 						$defaults['limits'][ $name ] = min( 100, max( 1, (int) $features['limits'][ $name ] ) );
 					}
-				}
 			}
 			$defaults['version'] = (string) $row['version'];
 		}
@@ -153,6 +152,10 @@ final class Ranking {
 	}
 
 	public function sort_and_diversify( array $documents, $query, $limit ) {
+		$documents = array_values( array_filter( $documents, static function ( $document ) {
+			$safety_class = isset( $document['safety_class'] ) ? (string) $document['safety_class'] : 'general';
+			return ! in_array( $safety_class, array( 'blocked', 'restricted' ), true );
+		} ) );
 		foreach ( $documents as &$document ) {
 			$document['_score'] = $this->score( $document, $query );
 		}
@@ -165,28 +168,30 @@ final class Ranking {
 		} );
 
 		$limits = $this->policy()['limits'];
-		$result = array();
-		$deferred = array();
+		$first_page = array();
+		$overflow = array();
 		$author_counts = array();
 		$connector_counts = array();
 		foreach ( $documents as $document ) {
+			if ( count( $first_page ) >= 20 ) {
+				$overflow[] = $document;
+				continue;
+			}
 			$author = ! empty( $document['author_key'] ) ? (string) $document['author_key'] : 'none';
 			$connector = (string) $document['connector_slug'];
-			$blocked = count( $result ) < 20 && (
+			$blocked_by_concentration =
 				( isset( $author_counts[ $author ] ) && $author_counts[ $author ] >= $limits['max_author_first_page'] ) ||
-				( isset( $connector_counts[ $connector ] ) && $connector_counts[ $connector ] >= $limits['max_connector_first_page'] )
-			);
-			if ( $blocked ) {
-				$deferred[] = $document;
+				( isset( $connector_counts[ $connector ] ) && $connector_counts[ $connector ] >= $limits['max_connector_first_page'] );
+			if ( $blocked_by_concentration ) {
+				$overflow[] = $document;
 				continue;
 			}
 			$author_counts[ $author ] = isset( $author_counts[ $author ] ) ? $author_counts[ $author ] + 1 : 1;
 			$connector_counts[ $connector ] = isset( $connector_counts[ $connector ] ) ? $connector_counts[ $connector ] + 1 : 1;
-			$result[] = $document;
+			$first_page[] = $document;
 		}
-		foreach ( $deferred as $document ) {
-			$result[] = $document;
-		}
+		// First-page concentration is a hard invariant. Overflow is exposed only after a complete protected first page exists.
+		$result = count( $first_page ) >= 20 ? array_merge( $first_page, $overflow ) : $first_page;
 		return array_slice( $result, 0, max( 1, (int) $limit ) );
 	}
 
