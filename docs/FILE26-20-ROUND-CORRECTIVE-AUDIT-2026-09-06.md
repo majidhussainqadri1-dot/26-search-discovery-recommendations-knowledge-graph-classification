@@ -26,8 +26,9 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 | 11 | DEFECT | Privacy erasure/appeal retention could falsely succeed across failed DB boundaries. | Checked transactional lifecycles. CI GREEN `6e844687315afbd98f1cc42db2877e0e99b71568`; ledger-close `dfbb05553ed3dd541d4ab7fe6ca9e6d6b39613f5` GREEN. |
 | 12 | DEFECT | Ranking activation/rollback and taxonomy merge/split had unchecked transaction boundaries. | High-risk transitions verify START/COMMIT and demotion failure. CI GREEN `dc0db18b5485b89c84df84796bb657f413f3666b`. |
 | 13 | CLEAN | Doctor-ranking appeals ownership, serialization, bounds, conflict/CAS, final-state and membership checks were consistent; recompute result is separately audited and no Must-contract equates appeal correction with synchronous recompute completion. | No production change. Exact-head CI GREEN `73af6d5c54c4477c8a2dba51a8e9c2e99008e4ee`. |
-| 14 | DEFECT | Unversioned `docs/QA-REPORT.md` presented stale 2026-08-13 review branch, baseline SHA and prior 20-round ledger as current corrective evidence, creating documentation/evidence provenance drift despite current runtime contracts being present. | Current QA report now names the 2026-09-06 branch/baseline/ledger as current evidence, explicitly labels the 2026-08-13 cycle historical, avoids duplicating mutable round counts, and QA now requires the current corrective ledger. `tests/review-round-14-evidence-truth.php` protects provenance truth. Exact-head CI GREEN `dc4bb37b0a3d307b6e26beef163674d61c033a16`. |
-| 15 | DEFECT | Runtime migration integrity checked stored schema versions and table existence but not required physical columns/indexes. A table could exist with structural drift while the version option remained current, allowing runtime exposure against an incomplete physical schema. Appeals schema and health used the same table-presence-only assumption. | Added `Schema_Integrity` physical metadata verification for every File 26 table plus ranking appeals, including required columns/indexes. Runtime migration now repairs main/appeals drift under the existing lock and fails closed if shape remains incomplete; Health reports structural drift. `tests/review-round-15-physical-schema-integrity.php` protects the gate. Exact-head CI pending on this closure head. |
+| 14 | DEFECT | Unversioned `docs/QA-REPORT.md` presented stale 2026-08-13 review branch, baseline SHA and prior 20-round ledger as current corrective evidence. | Current QA report aligned to the 2026-09-06 evidence cycle and QA requires the current ledger. Exact-head CI GREEN `dc4bb37b0a3d307b6e26beef163674d61c033a16`. |
+| 15 | DEFECT | Runtime migration integrity checked stored schema versions and table existence but not required physical columns/indexes. | Added physical metadata verification for all File 26 tables and ranking appeals; runtime repairs/fails closed on column/index drift and Health exposes structural drift. The first closure CI correctly exposed a stale historical migration-test literal; that regression was made semantic. Final exact-head CI GREEN `e1265a13e738f46e9623e642ad1017f53fdf2eed`. |
+| 16 | DEFECT | Human topic routes were always emitted with shared `public` caching even for authenticated valid members, while the underlying search can include `members`, `entitled` and `minor_guarded` results. This could place non-public topic HTML into a shared cache. In addition, `template_redirect()` claimed HTTP 200 before validating that `sabri_f26_route` was one of the three canonical File 26 routes, allowing injected unknown route values to produce a blank File 26 200 shell. | Pending correction after this frozen ledger. |
 
 ## First-ten-round checkpoint
 
@@ -36,7 +37,7 @@ This ledger is repository evidence only. Staging, live deployment, deployed data
 
 ## Round status
 
-- Completed reviews/corrections: **15/20**
-- Round 15 exact-head CI: **PENDING on this closure head**
+- Completed rounds: **15/20**
+- Round 16 review: **FROZEN — correction pending**
 
-Round 16 must not begin until this exact head is green.
+Round 17 must not begin until Round 16 correction, regression and exact-head CI are green.
