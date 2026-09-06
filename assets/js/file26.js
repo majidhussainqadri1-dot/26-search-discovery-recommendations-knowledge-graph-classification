@@ -3,11 +3,22 @@
 
   const cfg = window.SabriFile26 || {};
   const root = document;
-  const escapeHtml = (value) => String(value || '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
   const newId = () => (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : String(Date.now()) + '-' + Math.random());
 
+  function safeSameOriginUrl(value) {
+    try {
+      const base = String(cfg.homeUrl || window.location.origin + '/');
+      const url = new URL(String(value || ''), base);
+      if (!['http:', 'https:'].includes(url.protocol) || url.origin !== window.location.origin) return '';
+      return url.href;
+    } catch (error) {
+      return '';
+    }
+  }
+
   async function api(path, options) {
-    const response = await fetch(String(cfg.restUrl || '') + path, Object.assign({
+    if (!cfg.restUrl) throw new Error((cfg.strings && cfg.strings.error) || 'Request configuration unavailable');
+    const response = await fetch(String(cfg.restUrl) + path, Object.assign({
       credentials: 'same-origin',
       headers: {'Accept': 'application/json', 'X-WP-Nonce': cfg.nonce || ''}
     }, options || {}));
@@ -21,6 +32,17 @@
     if (!live) return;
     live.textContent = String(message || '');
     live.classList.toggle('sabri-f26-state--error', Boolean(isError));
+  }
+
+  function restoreCardFocus(card) {
+    if (!card) return;
+    const target = card.querySelector('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
+    if (target && typeof target.focus === 'function') {
+      target.focus();
+      return;
+    }
+    card.setAttribute('tabindex', '-1');
+    card.focus();
   }
 
   root.querySelectorAll('[data-f26-suggest]').forEach((input, inputIndex) => {
@@ -98,7 +120,20 @@
           list.id = listId;
           list.className = 'sabri-f26__suggestions';
           list.setAttribute('role', 'listbox');
-          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false"><a href="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</a></li>').join('');
+          suggestions.slice(0, 10).forEach((item, i) => {
+            const href = safeSameOriginUrl(item && item.url);
+            if (!href) return;
+            const option = document.createElement('li');
+            option.id = listId + '-option-' + i;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            const link = document.createElement('a');
+            link.href = href;
+            link.textContent = String((item && item.label) || '');
+            option.appendChild(link);
+            list.appendChild(option);
+          });
+          if (!list.children.length) return;
           host.appendChild(list);
           activeIndex = -1;
           input.setAttribute('aria-expanded', 'true');
@@ -110,7 +145,8 @@
 
     input.addEventListener('blur', () => {
       window.setTimeout(() => {
-        if (!currentList() || !currentList().contains(document.activeElement)) close();
+        const list = currentList();
+        if (!list || !list.contains(document.activeElement)) close();
       }, 120);
     });
   });
@@ -118,20 +154,88 @@
   root.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-f26-feedback]');
     if (!button) return;
-    event.preventDefault(); if (button.disabled) return; button.disabled = true;
-    const original = button.textContent; const actionId = newId(); button.textContent = (cfg.strings && cfg.strings.working) || 'Working…';
+    event.preventDefault();
+    if (button.disabled) return;
+    button.disabled = true;
+    const original = button.textContent;
+    const actionId = newId();
+    button.textContent = (cfg.strings && cfg.strings.working) || 'Working…';
     try {
       await api('feedback', {method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce || ''},body:JSON.stringify({item_key:button.getAttribute('data-object-key'),type:button.getAttribute('data-f26-feedback'),scope_key:button.getAttribute('data-scope-key') || '',idempotency_key:actionId,context:button.getAttribute('data-context') || 'discover'})});
-      button.textContent=(cfg.strings&&cfg.strings.done)||'Saved';button.setAttribute('aria-pressed','true');const type=button.getAttribute('data-f26-feedback');const card=button.closest('.sabri-f26-card');
-      if(card&&['not_interested','hide_item','hide_author','hide_topic'].includes(type)){card.hidden=true;const live=root.querySelector('[data-f26-live]');if(live){live.textContent='';const text=document.createElement('span');text.textContent=(cfg.strings&&cfg.strings.done)||'Saved';const undo=document.createElement('button');undo.type='button';undo.className='sabri-f26__action';undo.textContent=(cfg.strings&&cfg.strings.undo)||'Undo';undo.addEventListener('click',async()=>{undo.disabled=true;try{await api('feedback',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({type:'undo',item_key:button.getAttribute('data-object-key'),idempotency_key:newId(),undo_idempotency_key:actionId})});card.hidden=false;live.textContent=(cfg.strings&&cfg.strings.done)||'Saved';card.focus&&card.focus();}catch(error){undo.disabled=false;announce(error.message,true);}});live.append(text,document.createTextNode(' '),undo);undo.focus();}}
-    } catch(error){button.textContent=original;button.removeAttribute('aria-pressed');announce(error.message,true);} finally{button.disabled=false;}
+      button.textContent=(cfg.strings&&cfg.strings.done)||'Saved';
+      button.setAttribute('aria-pressed','true');
+      const type=button.getAttribute('data-f26-feedback');
+      const card=button.closest('.sabri-f26-card');
+      if(card&&['not_interested','hide_item','hide_author','hide_topic'].includes(type)){
+        card.hidden=true;
+        const live=root.querySelector('[data-f26-live]');
+        if(live){
+          live.textContent='';
+          const text=document.createElement('span');
+          text.textContent=(cfg.strings&&cfg.strings.done)||'Saved';
+          const undo=document.createElement('button');
+          undo.type='button';
+          undo.className='sabri-f26__action';
+          undo.textContent=(cfg.strings&&cfg.strings.undo)||'Undo';
+          undo.addEventListener('click',async()=>{
+            undo.disabled=true;
+            try{
+              await api('feedback',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({type:'undo',item_key:button.getAttribute('data-object-key'),idempotency_key:newId(),undo_idempotency_key:actionId})});
+              card.hidden=false;
+              live.textContent=(cfg.strings&&cfg.strings.done)||'Saved';
+              restoreCardFocus(card);
+            }catch(error){undo.disabled=false;announce(error.message,true);}
+          });
+          live.append(text,document.createTextNode(' '),undo);
+          undo.focus();
+        }
+      }
+    } catch(error){
+      button.textContent=original;
+      button.removeAttribute('aria-pressed');
+      announce(error.message,true);
+    } finally{
+      button.disabled=false;
+    }
   });
 
   root.addEventListener('click', async (event) => {
-    const button=event.target.closest('[data-f26-personalization]');if(!button)return;event.preventDefault();if(button.disabled)return;const action=button.getAttribute('data-f26-personalization');const map={'consent-on':['personalization/consent',{consent:true}],'consent-off':['personalization/consent',{consent:false}],'reset':['personalization/reset',{}],'opt-out':['personalization/opt-out',{}]};if(!map[action])return;button.disabled=true;const original=button.textContent;button.textContent=(cfg.strings&&cfg.strings.working)||'Working…';try{await api(map[action][0],{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify(map[action][1])});announce((cfg.strings&&cfg.strings.done)||'Saved',false);window.location.reload();}catch(error){button.textContent=original;button.disabled=false;announce(error.message,true);}
+    const button=event.target.closest('[data-f26-personalization]');
+    if(!button)return;
+    event.preventDefault();
+    if(button.disabled)return;
+    const action=button.getAttribute('data-f26-personalization');
+    const map={'consent-on':['personalization/consent',{consent:true}],'consent-off':['personalization/consent',{consent:false}],'reset':['personalization/reset',{}],'opt-out':['personalization/opt-out',{}]};
+    if(!map[action])return;
+    button.disabled=true;
+    const original=button.textContent;
+    button.textContent=(cfg.strings&&cfg.strings.working)||'Working…';
+    try{
+      await api(map[action][0],{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify(map[action][1])});
+      announce((cfg.strings&&cfg.strings.done)||'Saved',false);
+      window.location.reload();
+    }catch(error){
+      button.textContent=original;
+      button.disabled=false;
+      announce(error.message,true);
+    }
   });
 
   root.querySelectorAll('[data-f26-interests]').forEach((form) => {
-    form.addEventListener('submit', async (event) => {event.preventDefault();const input=form.querySelector('[name="interests"]');const button=form.querySelector('button[type="submit"]');const interests=String(input&&input.value||'').split(',').map((value)=>value.trim()).filter(Boolean).slice(0,50);if(button)button.disabled=true;try{await api('personalization/interests',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({interests:interests})});announce((cfg.strings&&cfg.strings.done)||'Saved',false);window.location.reload();}catch(error){announce(error.message,true);if(button)button.disabled=false;}});
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input=form.querySelector('[name="interests"]');
+      const button=form.querySelector('button[type="submit"]');
+      const interests=String(input&&input.value||'').split(',').map((value)=>value.trim()).filter(Boolean).slice(0,50);
+      if(button)button.disabled=true;
+      try{
+        await api('personalization/interests',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({interests:interests})});
+        announce((cfg.strings&&cfg.strings.done)||'Saved',false);
+        window.location.reload();
+      }catch(error){
+        announce(error.message,true);
+        if(button)button.disabled=false;
+      }
+    });
   });
 })();
