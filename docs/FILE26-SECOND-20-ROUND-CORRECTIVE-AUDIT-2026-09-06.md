@@ -20,7 +20,7 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 | 9 | DEFECT | Graph read-truth hardened. GREEN `8f9024bfbf6dbeb48c93bb28b7455bd2de719f3e`. |
 | 10 | DEFECT | REST/health operation truth hardened. GREEN `ff2b99e0f87e1c53b181d6d0ca53d9451613c62e`; ledger-head GREEN `5c76b6789e982545916626c381cfcee17cd899e2`. |
 | 11 | DEFECT | Privacy/retention truth hardened. Exact-head GREEN `43a3b4fcc01b95bfc2a3224d3aaf86288f4eda73`; ledger-head GREEN `974cefc3d8534243aab8b76ffdbd921a387882d8`. |
-| 12 | DEFECT — FROZEN | Queue/worker operation-truth defects: (1) pending/retry job SELECT can fail at DB level and be treated as “no work”; (2) connector/exception failure transition uses an unchecked job update, so a failed retry/dead-letter write can leave a running lock while the worker returns silently; (3) completion CAS failure is only audited and not surfaced as a worker error. Cron self-healing, stale recovery, enqueue failure and retry backoff otherwise reviewed as present. Correction/regression/exact-head CI pending. |
+| 12 | DEFECT | Queue/worker operation truth hardened: queue-head read failures, claim/completion/failure-transition write failures and CAS loss now fail closed; stale recovery/backoff retained. Exact-head GREEN `fb0be05360bc6e0c6fb6ef28903280fd4ee6ef2b`. |
 
 ## First-ten checkpoint
 
@@ -29,6 +29,6 @@ Method: **Review → Ledger Freeze → Fix → Regression → Exact-head CI → 
 
 ## Status
 
-- Completed rounds: **11/20**
-- Round 12 review: **FROZEN — correction pending**
-- Round 13 must not begin until Round 12 correction, regression and exact-head CI are GREEN.
+- Completed rounds: **12/20**
+- Round 12: **CLOSED — exact-head CI GREEN**
+- Round 13 may begin only after this ledger-head commit is GREEN.
