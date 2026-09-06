@@ -18,7 +18,7 @@ $checks = array(
 	array( $plugin, "empty( \$shape['appeals_complete'] )", 'appeals schema drift forces repair' ),
 	array( $plugin, 'delete_option( Doctor_Appeals::OPTION_SCHEMA )', 'appeals dbDelta fast-path is bypassed for physical drift repair' ),
 	array( $plugin, "empty( \$shape['complete'] )", 'runtime remains fail-closed if repair is incomplete' ),
-	array( $health, "empty(\$integrity['complete'])", 'health reports structural schema drift' ),
+	array( $health, 'empty( $integrity[\'complete\'] )', 'health reports structural schema drift' ),
 );
 $failures = 0;
 foreach ( $checks as $check ) {
