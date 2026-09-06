@@ -2,17 +2,20 @@
 defined( 'ABSPATH' ) || exit;
 $controls = ! is_wp_error( $data ) && ! empty( $data['controls'] ) && is_array( $data['controls'] ) ? $data['controls'] : array();
 $interests = isset( $controls['interests'] ) && is_array( $controls['interests'] ) ? implode( ', ', $controls['interests'] ) : '';
+$title_id = $instance_id . '-title';
+$preference_id = $instance_id . '-preference-title';
+$interests_id = $instance_id . '-interests';
 ?>
-<section class="sabri-f26" aria-labelledby="sabri-f26-discover-title">
+<section class="sabri-f26" aria-labelledby="<?php echo esc_attr( $title_id ); ?>">
 	<header class="sabri-f26__header">
-		<h1 id="sabri-f26-discover-title" class="sabri-f26__title"><?php esc_html_e( 'Discover', 'sabri-file26' ); ?></h1>
+		<h1 id="<?php echo esc_attr( $title_id ); ?>" class="sabri-f26__title"><?php esc_html_e( 'Discover', 'sabri-file26' ); ?></h1>
 		<p class="sabri-f26__lead"><?php esc_html_e( 'Diverse, source-conscious recommendations with clear controls. Personalization is used only after explicit consent.', 'sabri-file26' ); ?></p>
 	</header>
 	<div class="sabri-f26__live" role="status" aria-live="polite" data-f26-live></div>
 
 	<?php if ( ! empty( $controls['logged_in'] ) ) : ?>
-		<section class="sabri-f26__preference-panel" aria-labelledby="sabri-f26-preference-title">
-			<h2 id="sabri-f26-preference-title"><?php esc_html_e( 'Recommendation controls', 'sabri-file26' ); ?></h2>
+		<section class="sabri-f26__preference-panel" aria-labelledby="<?php echo esc_attr( $preference_id ); ?>">
+			<h2 id="<?php echo esc_attr( $preference_id ); ?>"><?php esc_html_e( 'Recommendation controls', 'sabri-file26' ); ?></h2>
 			<p><?php esc_html_e( 'Your interests are used only after explicit consent. You can change, reset, or opt out at any time.', 'sabri-file26' ); ?></p>
 			<div class="sabri-f26__controls">
 				<?php if ( ! empty( $controls['personalization_available'] ) && empty( $controls['consent'] ) ) : ?>
@@ -25,7 +28,7 @@ $interests = isset( $controls['interests'] ) && is_array( $controls['interests']
 			</div>
 			<?php if ( ! empty( $controls['personalization_available'] ) && ! empty( $controls['consent'] ) ) : ?>
 				<form class="sabri-f26__interest-form" data-f26-interests>
-					<label for="sabri-f26-interests"><span><?php esc_html_e( 'Selected topic IDs, separated by commas', 'sabri-file26' ); ?></span><input id="sabri-f26-interests" class="sabri-f26__input" name="interests" value="<?php echo esc_attr( $interests ); ?>" maxlength="1000"></label>
+					<label for="<?php echo esc_attr( $interests_id ); ?>"><span><?php esc_html_e( 'Selected topic IDs, separated by commas', 'sabri-file26' ); ?></span><input id="<?php echo esc_attr( $interests_id ); ?>" class="sabri-f26__input" name="interests" value="<?php echo esc_attr( $interests ); ?>" maxlength="1000"></label>
 					<button class="sabri-f26__button" type="submit"><span class="dashicons dashicons-saved" aria-hidden="true"></span><span><?php esc_html_e( 'Save interests', 'sabri-file26' ); ?></span></button>
 				</form>
 			<?php endif; ?>
