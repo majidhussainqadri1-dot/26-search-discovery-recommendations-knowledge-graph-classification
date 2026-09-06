@@ -6,10 +6,10 @@ $indexer_normalized = preg_replace( '/\s+/', '', $indexer );
 $admin = file_get_contents( $root . '/includes/class-file26-admin.php' );
 
 $checks = array(
-	array( $indexer_normalized, "if(false===\$wpdb->query('STARTTRANSACTION'))", 'reconciliation verifies transaction start before destructive queries' ),
+	array( $indexer_normalized, 'if(false===$wpdb->query(\'STARTTRANSACTION\'))', 'reconciliation verifies transaction start before destructive queries' ),
 	array( $indexer, 'Deletion and graph reconciliation transaction could not start.', 'transaction-start failure is explicit' ),
-	array( $indexer_normalized, "if(false===\$wpdb->query('COMMIT'))", 'reconciliation verifies commit' ),
-	array( $indexer_normalized, "\$wpdb->query('ROLLBACK')", 'reconciliation failure rolls back' ),
+	array( $indexer_normalized, 'if(false===$wpdb->query(\'COMMIT\'))', 'reconciliation verifies commit' ),
+	array( $indexer_normalized, '$wpdb->query(\'ROLLBACK\')', 'reconciliation failure rolls back' ),
 	array( $admin, '$requested = array(', 'settings success is bound to an explicit requested state' ),
 	array( $admin, '$persisted = DB::settings()', 'settings are read back after persistence' ),
 	array( $admin, '! array_key_exists( $key, $persisted ) || $persisted[ $key ] !== $value', 'every requested setting is verified exactly' ),
