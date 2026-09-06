@@ -149,7 +149,10 @@ final class REST {
 	public function transition_edge( \WP_REST_Request $request ) { return $this->respond( $this->governance->transition_edge( $request['edge'], $request->get_param( 'target' ), $request->get_param( 'reason' ) ) ); }
 	public function reports() { return $this->respond( $this->governance->reports() ); }
 
-	public function logged_in() { return is_user_logged_in() ? true : new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) ); }
+	public function logged_in() {
+		if ( ! is_user_logged_in() ) { return new \WP_Error( 'file26_auth_required', 'Authentication is required.', array( 'status' => 401 ) ); }
+		return $this->security->valid_authenticated_member() ? true : new \WP_Error( 'file26_membership_invalid', 'Current membership assertions are invalid, expired or suspended.', array( 'status' => 403 ) );
+	}
 	public function can_operate() { return $this->security->can_operate() ? true : new \WP_Error( 'file26_forbidden', 'Search operator capability is required.', array( 'status' => 403 ) ); }
 	public function can_curate() { return $this->security->can_curate() ? true : new \WP_Error( 'file26_forbidden', 'Taxonomy curator capability is required.', array( 'status' => 403 ) ); }
 	public function can_approve_ranking() { return $this->security->can_approve_ranking() ? true : new \WP_Error( 'file26_forbidden', 'Ranking approval capability is required.', array( 'status' => 403 ) ); }
