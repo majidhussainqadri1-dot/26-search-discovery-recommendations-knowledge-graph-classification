@@ -59,6 +59,9 @@ final class Security {
 		return false;
 	}
 
+	/** Public authenticated-subject gate shared by route permission callbacks. */
+	public function valid_authenticated_member() { return $this->current_membership_valid(); }
+
 	/** Configuration authority only; it is not an operational super-capability. */
 	public function can_manage() { return $this->current_membership_valid() && current_user_can( 'manage_sabri_search' ); }
 	public function can_operate() { return $this->current_membership_valid() && current_user_can( 'operate_sabri_search' ); }
