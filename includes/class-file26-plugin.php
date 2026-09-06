@@ -7,119 +7,41 @@ final class Plugin {
 	private $security; private $normalizer; private $ranking; private $connectors; private $owner_contracts;
 	private $indexer; private $search; private $recommendations; private $taxonomy; private $graph; private $health;
 	private $governance; private $doctor_ranking; private $doctor_appeals; private $central_plan; private $rest; private $routes;
-	private $admin; private $privacy; private $booted = false; private $schema_ready = false;
-
-	public static function instance() { if ( ! self::$instance ) { self::$instance = new self(); } return self::$instance; }
-	private function __construct() {
-		$this->security = new Security(); $this->normalizer = new Normalizer(); $this->ranking = new Ranking( $this->normalizer );
-		$this->connectors = new Connectors( $this->security ); $this->owner_contracts = new Owner_Contracts( $this->connectors );
-		$this->indexer = new Indexer( $this->connectors, $this->normalizer, $this->security );
-		$this->search = new Search( $this->normalizer, $this->ranking, $this->security, $this->connectors );
-		$this->recommendations = new Recommendations( $this->search, $this->security ); $this->taxonomy = new Taxonomy( $this->normalizer, $this->security );
-		$this->graph = new Graph( $this->security ); $this->governance = new Governance( $this->security, $this->taxonomy, $this->graph );
-		$this->doctor_ranking = new Doctor_Ranking( $this->security ); $this->doctor_appeals = new Doctor_Appeals( $this->security );
-		$this->health = new Health( $this->connectors, $this->owner_contracts ); $this->central_plan = new Central_Plan( $this->search, $this->normalizer, $this->security, $this->ranking, $this->doctor_ranking, $this->health );
-		$this->rest = new REST( $this->search, $this->recommendations, $this->taxonomy, $this->graph, $this->indexer, $this->health, $this->security, $this->connectors, $this->governance, $this->doctor_ranking, $this->doctor_appeals );
-		$this->routes = new Routes( $this->search, $this->recommendations, $this->taxonomy ); $this->admin = new Admin( $this->health, $this->connectors, $this->indexer, $this->taxonomy, $this->security ); $this->privacy = new Privacy();
+	private $admin; private $privacy; private $booted=false; private $schema_ready=false;
+	public static function instance(){if(!self::$instance){self::$instance=new self();}return self::$instance;}
+	private function __construct(){
+		$this->security=new Security();$this->normalizer=new Normalizer();$this->ranking=new Ranking($this->normalizer);$this->connectors=new Connectors($this->security);$this->owner_contracts=new Owner_Contracts($this->connectors);$this->indexer=new Indexer($this->connectors,$this->normalizer,$this->security);$this->search=new Search($this->normalizer,$this->ranking,$this->security,$this->connectors);$this->recommendations=new Recommendations($this->search,$this->security);$this->taxonomy=new Taxonomy($this->normalizer,$this->security);$this->graph=new Graph($this->security);$this->governance=new Governance($this->security,$this->taxonomy,$this->graph);$this->doctor_ranking=new Doctor_Ranking($this->security);$this->doctor_appeals=new Doctor_Appeals($this->security);$this->health=new Health($this->connectors,$this->owner_contracts);$this->central_plan=new Central_Plan($this->search,$this->normalizer,$this->security,$this->ranking,$this->doctor_ranking,$this->health);$this->rest=new REST($this->search,$this->recommendations,$this->taxonomy,$this->graph,$this->indexer,$this->health,$this->security,$this->connectors,$this->governance,$this->doctor_ranking,$this->doctor_appeals);$this->routes=new Routes($this->search,$this->recommendations,$this->taxonomy);$this->admin=new Admin($this->health,$this->connectors,$this->indexer,$this->taxonomy,$this->security);$this->privacy=new Privacy();
 	}
-
-	public function boot() {
-		if ( $this->booted ) { return; }
-		$this->booted = true;
-		load_plugin_textdomain( 'sabri-file26', false, dirname( plugin_basename( SABRI_FILE26_FILE ) ) . '/languages' );
-		$migration = $this->ensure_schema_current();
-		if ( is_wp_error( $migration ) ) { $this->fail_closed( __( 'File 26 is fail-closed because its database migration could not be verified. Review migration evidence before reactivation.', 'sabri-file26' ) ); return; }
-		$roles = Roles::install();
-		if ( is_wp_error( $roles ) ) { $this->fail_closed( __( 'File 26 is fail-closed because its separation-of-duties role model could not be verified.', 'sabri-file26' ) ); return; }
-		$this->schema_ready = true;
-		add_filter( 'sabri_file26_connector_manifests', array( $this->owner_contracts, 'collect' ), 5 );
-		add_filter( 'sabri_file26_activation_gate_approved', array( $this->owner_contracts, 'activation_gate' ), 10, 3 );
-		$this->connectors->boot();
-		add_action( 'init', array( $this->routes, 'register' ), 20 );
-		add_action( 'rest_api_init', array( $this->rest, 'register' ) );
-		add_action( 'admin_init', array( $this, 'maybe_upgrade' ) );
-		$this->admin->register(); $this->privacy->register(); $this->central_plan->boot();
-		add_action( DB::CRON_QUEUE, array( $this->indexer, 'process_queue' ) );
-		add_action( DB::CRON_RECONCILE, array( $this->indexer, 'reconcile' ) );
-		add_action( DB::CRON_RETENTION, array( $this->indexer, 'retention' ) );
-		add_action( DB::CRON_RETENTION, array( $this, 'retain_doctor_appeals' ), 20 );
-		add_action( DB::CRON_DOCTOR_RANKING, array( $this->doctor_ranking, 'recompute' ) );
-		add_action( 'sabri_file26_doctor_ranking_recompute_requested', array( $this, 'recompute_doctor_ranking_after_appeal' ), 10, 2 );
-		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
-		add_action( 'sabri_file26_source_upsert', array( $this->indexer, 'upsert' ), 10, 1 );
-		add_action( 'sabri_file26_source_restrict', array( $this, 'source_restrict' ), 10, 5 );
-		add_action( 'sabri_file26_source_tombstone', array( $this, 'source_tombstone' ), 10, 5 );
-		add_filter( 'sabri_file24_module_manifest', array( $this, 'assurance_manifest' ) );
-		add_filter( 'sabri_file25_search_provider', array( $this, 'visual_provider' ) );
-		DB::schedule();
+	public function boot(){
+		if($this->booted){return;}$this->booted=true;load_plugin_textdomain('sabri-file26',false,dirname(plugin_basename(SABRI_FILE26_FILE)).'/languages');
+		$migration=$this->ensure_schema_current();if(is_wp_error($migration)){$this->fail_closed(__('File 26 is fail-closed because its database migration could not be verified. Review migration evidence before reactivation.','sabri-file26'));return;}
+		$roles=Roles::install();if(is_wp_error($roles)){$this->fail_closed(__('File 26 is fail-closed because its separation-of-duties role model could not be verified.','sabri-file26'));return;}
+		$this->schema_ready=true;
+		add_filter('sabri_file26_connector_manifests',array($this->owner_contracts,'collect'),5);add_filter('sabri_file26_activation_gate_approved',array($this->owner_contracts,'activation_gate'),10,3);$this->connectors->boot();
+		add_action('init',array($this->routes,'register'),20);add_action('rest_api_init',array($this->rest,'register'));add_action('admin_init',array($this,'maybe_upgrade'));$this->admin->register();$this->privacy->register();$this->central_plan->boot();
+		add_action(DB::CRON_QUEUE,array($this->indexer,'process_queue'));add_action(DB::CRON_RECONCILE,array($this->indexer,'reconcile'));add_action(DB::CRON_RETENTION,array($this->indexer,'retention'));add_action(DB::CRON_RETENTION,array($this,'retain_doctor_appeals'),20);add_action(DB::CRON_DOCTOR_RANKING,array($this->doctor_ranking,'recompute'));add_action('sabri_file26_doctor_ranking_recompute_requested',array($this,'recompute_doctor_ranking_after_appeal'),10,2);add_filter('cron_schedules',array($this,'cron_schedules'));add_action('sabri_file26_source_upsert',array($this->indexer,'upsert'),10,1);add_action('sabri_file26_source_restrict',array($this,'source_restrict'),10,5);add_action('sabri_file26_source_tombstone',array($this,'source_tombstone'),10,5);add_filter('sabri_file24_module_manifest',array($this,'assurance_manifest'));add_filter('sabri_file25_search_provider',array($this,'visual_provider'));DB::schedule();
 	}
-
-	private function fail_closed( $notice ) {
-		$this->schema_ready = false;
-		DB::update_settings( array( 'activated' => false, 'public_search_enabled' => false, 'personalization_enabled' => false ) );
-		add_action( 'admin_notices', static function () use ( $notice ) { echo '<div class="notice notice-error"><p>' . esc_html( $notice ) . '</p></div>'; } );
+	private function fail_closed($notice){$this->schema_ready=false;DB::update_settings(array('activated'=>false,'public_search_enabled'=>false,'personalization_enabled'=>false));add_action('admin_notices',static function()use($notice){echo '<div class="notice notice-error"><p>'.esc_html($notice).'</p></div>';});}
+	private function ensure_schema_current(){
+		global $wpdb;$main_verify=DB::verify_schema(false);$appeal_verify=$this->verify_appeal_schema(false);$main_current=SABRI_FILE26_SCHEMA_VERSION===get_option(DB::OPTION_SCHEMA);$appeal_current=Doctor_Appeals::SCHEMA_VERSION===get_option(Doctor_Appeals::OPTION_SCHEMA);if($main_current&&$appeal_current&&!is_wp_error($main_verify)&&!is_wp_error($appeal_verify)){return true;}$lock_name='file26:schema-migration';if('1'!==(string)$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)',$lock_name))){return new \WP_Error('file26_migration_busy','File 26 schema migration is already running.');}
+		try{if(!$main_current||is_wp_error($main_verify)){$installed=DB::install_schema();if(is_wp_error($installed)){return $installed;}}if(!$appeal_current||is_wp_error($appeal_verify)){$installed=Doctor_Appeals::install_schema();if(is_wp_error($installed)){return $installed;}}$main_verify=DB::verify_schema(true);if(is_wp_error($main_verify)){return $main_verify;}$appeal_verify=$this->verify_appeal_schema(true);if(is_wp_error($appeal_verify)){return $appeal_verify;}if(SABRI_FILE26_SCHEMA_VERSION!==get_option(DB::OPTION_SCHEMA)||Doctor_Appeals::SCHEMA_VERSION!==get_option(Doctor_Appeals::OPTION_SCHEMA)){return new \WP_Error('file26_schema_pointer_mismatch','Verified schema exists but its version pointer is not current.');}return true;}finally{$wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)',$lock_name));}
 	}
-
-	/** Verify actual tables first; option pointers are never treated as proof of deployed schema reality. */
-	private function ensure_schema_current() {
-		global $wpdb;
-		$main_verify = DB::verify_schema( false );
-		$appeal_verify = $this->verify_appeal_schema( false );
-		$main_current = SABRI_FILE26_SCHEMA_VERSION === get_option( DB::OPTION_SCHEMA );
-		$appeal_current = Doctor_Appeals::SCHEMA_VERSION === get_option( Doctor_Appeals::OPTION_SCHEMA );
-		if ( $main_current && $appeal_current && ! is_wp_error( $main_verify ) && ! is_wp_error( $appeal_verify ) ) { return true; }
-		$lock_name = 'file26:schema-migration';
-		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock_name ) ) ) { return new \WP_Error( 'file26_migration_busy', 'File 26 schema migration is already running.' ); }
-		try {
-			if ( ! $main_current || is_wp_error( $main_verify ) ) { $installed = DB::install_schema(); if ( is_wp_error( $installed ) ) { return $installed; } }
-			if ( ! $appeal_current || is_wp_error( $appeal_verify ) ) { $installed = Doctor_Appeals::install_schema(); if ( is_wp_error( $installed ) ) { return $installed; } }
-			$main_verify = DB::verify_schema( true ); if ( is_wp_error( $main_verify ) ) { return $main_verify; }
-			$appeal_verify = $this->verify_appeal_schema( true ); if ( is_wp_error( $appeal_verify ) ) { return $appeal_verify; }
-			if ( SABRI_FILE26_SCHEMA_VERSION !== get_option( DB::OPTION_SCHEMA ) || Doctor_Appeals::SCHEMA_VERSION !== get_option( Doctor_Appeals::OPTION_SCHEMA ) ) { return new \WP_Error( 'file26_schema_pointer_mismatch', 'Verified schema exists but its version pointer is not current.' ); }
-			return true;
-		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); }
+	private function verify_appeal_schema($deep=false){global $wpdb;$table=Doctor_Appeals::table();$exists=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));if(!empty($wpdb->last_error)||$exists!==$table){return new \WP_Error('file26_appeal_schema_missing','The ranking appeals table is missing or unreadable.');}if($deep){$columns=$wpdb->get_col("SHOW COLUMNS FROM $table",0);$required=array('appeal_uuid','doctor_key','appellant_user_id','status','policy_version','version','submitted_at','updated_at');if(!empty($wpdb->last_error)||!is_array($columns)||array_diff($required,$columns)){return new \WP_Error('file26_appeal_schema_incomplete','The ranking appeals table is missing critical columns.');}}return true;}
+	public function maybe_upgrade(){$result=$this->ensure_schema_current();if(is_wp_error($result)){$this->schema_ready=false;}return $result;}
+	public function cron_schedules($schedules){$schedules['sabri_file26_monthly']=array('interval'=>30*DAY_IN_SECONDS,'display'=>'Every 30 days — File 26');return $schedules;}
+	public function retain_doctor_appeals(){
+		global $wpdb;$table=Doctor_Appeals::table();$final_days=max(365,min(3650,(int)DB::setting('ranking_appeal_retention_days',1095)));$open_days=max($final_days,min(3650,(int)DB::setting('ranking_appeal_open_retention_days',1460)));$final_cutoff=gmdate('Y-m-d H:i:s',time()-($final_days*DAY_IN_SECONDS));$open_cutoff=gmdate('Y-m-d H:i:s',time()-($open_days*DAY_IN_SECONDS));
+		if(false===$wpdb->query('START TRANSACTION')){update_option('sabri_file26_last_appeal_retention_failure',array('at'=>DB::now(),'stage'=>'start'),false);return new \WP_Error('file26_appeal_retention_failed','Ranking appeal retention transaction could not start.');}
+		try{
+			$withdrawn=$wpdb->query($wpdb->prepare("UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s",'[redacted after retention expiry]','Closed after the documented maximum open-appeal retention period.',DB::now(),DB::now(),$open_cutoff));if(false===$withdrawn){throw new \RuntimeException('Open appeal retention failed.');}
+			$deleted=$wpdb->query($wpdb->prepare("DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s",$final_cutoff));if(false===$deleted){throw new \RuntimeException('Final appeal retention failed.');}
+			if(false===$wpdb->query('COMMIT')){throw new \RuntimeException('Appeal retention commit failed.');}
+		}catch(\Throwable $e){$wpdb->query('ROLLBACK');update_option('sabri_file26_last_appeal_retention_failure',array('at'=>DB::now(),'stage'=>'purge'),false);return new \WP_Error('file26_appeal_retention_failed','Ranking appeal retention failed atomically.');}
+		delete_option('sabri_file26_last_appeal_retention_failure');if($withdrawn||$deleted){$this->security->audit('doctor_ranking_appeal_retention',array('object_type'=>'ranking_appeal','object_key'=>'retention','metadata'=>array('withdrawn_count'=>(int)$withdrawn,'deleted_count'=>(int)$deleted,'final_retention_days'=>$final_days,'open_retention_days'=>$open_days)));}return array('withdrawn'=>(int)$withdrawn,'deleted'=>(int)$deleted);
 	}
-
-	private function verify_appeal_schema( $deep = false ) {
-		global $wpdb; $table = Doctor_Appeals::table();
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
-		if ( ! empty( $wpdb->last_error ) || $exists !== $table ) { return new \WP_Error( 'file26_appeal_schema_missing', 'The ranking appeals table is missing or unreadable.' ); }
-		if ( $deep ) {
-			$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$required = array( 'appeal_uuid','doctor_key','appellant_user_id','status','policy_version','version','submitted_at','updated_at' );
-			if ( ! empty( $wpdb->last_error ) || ! is_array( $columns ) || array_diff( $required, $columns ) ) { return new \WP_Error( 'file26_appeal_schema_incomplete', 'The ranking appeals table is missing critical columns.' ); }
-		}
-		return true;
-	}
-
-	public function maybe_upgrade() { $result = $this->ensure_schema_current(); if ( is_wp_error( $result ) ) { $this->schema_ready = false; } return $result; }
-	public function cron_schedules( $schedules ) { $schedules['sabri_file26_monthly'] = array( 'interval' => 30 * DAY_IN_SECONDS, 'display' => 'Every 30 days — File 26' ); return $schedules; }
-
-	public function retain_doctor_appeals() {
-		global $wpdb; $table = Doctor_Appeals::table();
-		$final_days = max( 365, min( 3650, (int) DB::setting( 'ranking_appeal_retention_days', 1095 ) ) ); $open_days = max( $final_days, min( 3650, (int) DB::setting( 'ranking_appeal_open_retention_days', 1460 ) ) );
-		$final_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $final_days * DAY_IN_SECONDS ) ); $open_cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $open_days * DAY_IN_SECONDS ) );
-		$withdrawn = $wpdb->query( $wpdb->prepare( "UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s", '[redacted after retention expiry]', 'Closed after the documented maximum open-appeal retention period.', DB::now(), DB::now(), $open_cutoff ) );
-		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s", $final_cutoff ) );
-		if ( $withdrawn || $deleted ) { $this->security->audit( 'doctor_ranking_appeal_retention', array( 'object_type'=>'ranking_appeal','object_key'=>'retention','metadata'=>array( 'withdrawn_count'=>max(0,(int)$withdrawn),'deleted_count'=>max(0,(int)$deleted),'final_retention_days'=>$final_days,'open_retention_days'=>$open_days ) ) ); }
-		return array( 'withdrawn'=>max(0,(int)$withdrawn),'deleted'=>max(0,(int)$deleted) );
-	}
-
-	public function recompute_doctor_ranking_after_appeal( $doctor_key, $appeal_uuid ) {
-		$result = $this->doctor_ranking->recompute( 'appeal_corrected' );
-		$this->security->audit( 'doctor_ranking_appeal_recompute', array( 'object_type'=>'ranking_appeal','object_key'=>sanitize_text_field($appeal_uuid),'metadata'=>array( 'doctor_key'=>sanitize_text_field($doctor_key),'success'=>!is_wp_error($result) ) ) ); return $result;
-	}
-
-	public function source_restrict( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) { return $this->indexer->restrict( $connector, $domain, $object_id, $object_version, $reason ); }
-	public function source_tombstone( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return $this->indexer->tombstone( $connector, $domain, $object_id, $object_version, $reason ); }
-
-	public function assurance_manifest( $manifests ) {
-		$manifests = is_array( $manifests ) ? $manifests : array();
-		$manifests['file26'] = array( 'file'=>26,'name'=>'Search, Discovery, Recommendations, Knowledge Graph and Classification','version'=>SABRI_FILE26_VERSION,'contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'data_classes'=>array('C1-public-derivative','C2-internal','C3-private-derived'),'native_controls'=>array('three-stage-visibility','production-lane-connector-isolation','tombstone-purge','query-redaction','bounded-graph','consent-controls','separation-of-duties','dual-approved-policy-rollback','doctor-ranking-appeals','doctor-ranking-appeal-retention','required-owner-contract-gate','advanced-search','account-owned-saved-queries','zero-result-recovery','search-safety-diversion','index-freshness-evidence','privacy-minimized-editorial-radar','public-ranking-constitution','single-free-tier-rank-parity','rate-limits','audit'),'health'=>array($this->health,'snapshot') ); return $manifests;
-	}
-	public function search_contract( array $request ) { if ( ! $this->schema_ready ) { return $this->not_ready_error(); } $result=$this->search->run($request); return $this->central_plan->augment_search_result($result,$request); }
-	public function visual_provider( $providers ) { $providers=is_array($providers)?$providers:array();if(!$this->schema_ready){return $providers;}$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.2','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers; }
-	public function ready() { return $this->schema_ready; }
-	public function not_ready_error() { return new \WP_Error( 'file26_runtime_not_ready', 'File 26 runtime schema is not verified.', array( 'status'=>503 ) ); }
-	public function connectors(){return $this->connectors;} public function owner_contracts(){return $this->owner_contracts;} public function indexer(){return $this->indexer;} public function search(){return $this->search;} public function recommendations(){return $this->recommendations;} public function taxonomy(){return $this->taxonomy;} public function graph(){return $this->graph;} public function doctor_ranking(){return $this->doctor_ranking;} public function doctor_appeals(){return $this->doctor_appeals;} public function governance(){return $this->governance;} public function health(){return $this->health;} public function central_plan(){return $this->central_plan;}
+	public function recompute_doctor_ranking_after_appeal($doctor_key,$appeal_uuid){$result=$this->doctor_ranking->recompute('appeal_corrected');$this->security->audit('doctor_ranking_appeal_recompute',array('object_type'=>'ranking_appeal','object_key'=>sanitize_text_field($appeal_uuid),'metadata'=>array('doctor_key'=>sanitize_text_field($doctor_key),'success'=>!is_wp_error($result))));return $result;}
+	public function source_restrict($connector,$domain,$object_id,$object_version,$reason='restricted'){return $this->indexer->restrict($connector,$domain,$object_id,$object_version,$reason);}public function source_tombstone($connector,$domain,$object_id,$object_version,$reason='deleted'){return $this->indexer->tombstone($connector,$domain,$object_id,$object_version,$reason);}
+	public function assurance_manifest($manifests){$manifests=is_array($manifests)?$manifests:array();$manifests['file26']=array('file'=>26,'name'=>'Search, Discovery, Recommendations, Knowledge Graph and Classification','version'=>SABRI_FILE26_VERSION,'contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'data_classes'=>array('C1-public-derivative','C2-internal','C3-private-derived'),'native_controls'=>array('three-stage-visibility','production-lane-connector-isolation','tombstone-purge','query-redaction','bounded-graph','consent-controls','separation-of-duties','dual-approved-policy-rollback','doctor-ranking-appeals','doctor-ranking-appeal-retention','required-owner-contract-gate','advanced-search','account-owned-saved-queries','zero-result-recovery','search-safety-diversion','index-freshness-evidence','privacy-minimized-editorial-radar','public-ranking-constitution','single-free-tier-rank-parity','rate-limits','audit'),'health'=>array($this->health,'snapshot'));return $manifests;}
+	public function search_contract(array $request){if(!$this->schema_ready){return $this->not_ready_error();}$result=$this->search->run($request);return $this->central_plan->augment_search_result($result,$request);}public function visual_provider($providers){$providers=is_array($providers)?$providers:array();if(!$this->schema_ready){return $providers;}$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.2','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers;}
+	public function ready(){return $this->schema_ready;}public function not_ready_error(){return new \WP_Error('file26_runtime_not_ready','File 26 runtime schema is not verified.',array('status'=>503));}public function connectors(){return $this->connectors;}public function owner_contracts(){return $this->owner_contracts;}public function indexer(){return $this->indexer;}public function search(){return $this->search;}public function recommendations(){return $this->recommendations;}public function taxonomy(){return $this->taxonomy;}public function graph(){return $this->graph;}public function doctor_ranking(){return $this->doctor_ranking;}public function doctor_appeals(){return $this->doctor_appeals;}public function governance(){return $this->governance;}public function health(){return $this->health;}public function central_plan(){return $this->central_plan;}
 }
