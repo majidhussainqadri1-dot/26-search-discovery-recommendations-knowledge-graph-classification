@@ -2,6 +2,8 @@
 /** Round 08 regression: graph edges require governed activation and final visibility rechecks. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-graph.php' );
+$compact = static function ( $value ) { return preg_replace( '/\s+/', '', (string) $value ); };
+$source_compact = $compact( $source );
 $checks = array(
 	'public function approve_edge' => 'draft edge has explicit approval transition',
 	'require_step_up( \'graph_edge_approve\' )' => 'edge activation requires fresh authorization',
@@ -13,6 +15,8 @@ $checks = array(
 	'hash_equals( $source, $target )' => 'self-edge rejected',
 );
 $failures = 0;
-foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
+foreach ( $checks as $needle => $label ) {
+	if ( false === strpos( $source_compact, $compact( $needle ) ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; }
+}
 if ( $failures ) { exit( 1 ); }
 echo "Round 08 graph governance regression passed.\n";
