@@ -10,7 +10,8 @@ $checks = array(
 	array( $workflow, 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020', 'setup-node must remain on the reviewed immutable Node 24 release' ),
 	array( $workflow, 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a', 'upload-artifact must remain on the reviewed immutable Node 24 release' ),
 	array( $runner, 'ROUND_TESTS=("$ROOT"/tests/review-round-*.php)', 'source QA must execute every sequential review regression' ),
-	array( $runner, '"$PACKAGE"/tests/review-round-*.php', 'clean-package QA must execute every sequential review regression' ),
+	array( $runner, "forbidden=('/.github/','/tests/','/tools/','/qa/','/release/','/docs/','/.git/')", 'installable package must remain runtime-only and exclude development tests' ),
+	array( $runner, 'assert not leaked, leaked', 'runtime-only package exclusion must be enforced, not documented only' ),
 	array( $ledger, 'Total: **20/20 rounds**; **17 defect rounds**, **3 clean rounds**.', '20-round ledger summary must remain explicit' ),
 	array( $ledger, 'Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔', 'live/repository truth boundary must remain explicit' ),
 );
