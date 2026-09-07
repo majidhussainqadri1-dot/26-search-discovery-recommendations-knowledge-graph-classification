@@ -37,7 +37,7 @@ corrective_assert( false !== strpos( $connectors, "\$manifest['status']='propose
 corrective_assert( false !== strpos( $search, "c.status='active'" ), 'Search SQL joins only active production connectors.' );
 corrective_assert( false !== strpos( $search, "fc.status IN ('approved','corrected')" ), 'Topic retrieval consumes only approved/corrected classifications.' );
 corrective_assert( false !== strpos( $search, 'apply_graph_relationship_scores' ) && false !== strpos( $search, "state='active' AND visibility='public'" ), 'Only active public graph edges contribute a bounded relationship signal.' );
-corrective_assert( false !== strpos( $search, "'health' => 'scan_limit'" ), 'Bounded corpus scans disclose truthful partial state.' );
+corrective_assert( false !== strpos( $compact( $search ), $compact( "'health' => 'scan_limit'" ) ), 'Bounded corpus scans disclose truthful partial state.' );
 corrective_assert( false !== strpos( $governance, 'restored_policy_uuid' ) && false === strpos( $governance, "'activated' => false" ), 'Ranking rollback restores the previous policy without disabling File 26.' );
 $governance_compact = $compact( $governance );
 corrective_assert(
