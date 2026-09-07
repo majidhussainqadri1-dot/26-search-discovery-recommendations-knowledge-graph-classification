@@ -15,11 +15,13 @@ $checks = array(
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
-if ( false === strpos( $rest, "rest_sanitize_boolean( $request->get_param( 'consent' ) )" ) ) {
+$consent_safe = 'rest_sanitize_boolean( $request->get_param( \'consent\' ) )';
+$consent_unsafe = 'set_consent( (bool) $request->get_param( \'consent\' ) )';
+if ( false === strpos( $rest, $consent_safe ) ) {
 	fwrite( STDERR, "FAIL: REST consent must preserve explicit false values instead of PHP string truthiness\n" );
 	$failures++;
 }
-if ( false !== strpos( $rest, "set_consent( (bool) $request->get_param( 'consent' ) )" ) ) {
+if ( false !== strpos( $rest, $consent_unsafe ) ) {
 	fwrite( STDERR, "FAIL: unsafe direct boolean cast remains on consent route\n" );
 	$failures++;
 }
