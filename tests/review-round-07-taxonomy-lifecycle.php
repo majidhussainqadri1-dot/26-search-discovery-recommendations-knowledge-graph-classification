@@ -2,6 +2,8 @@
 /** Round 07 regression: taxonomy merge/split must be previewable, owner-governed, serialized and reindexable. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
+$compact = static function ( $value ) { return preg_replace( '/\s+/', '', (string) $value ); };
+$source_compact = $compact( $source );
 $checks = array(
 	'public function merge_preview' => 'merge preview exists',
 	'public function split_preview' => 'split preview exists',
@@ -16,7 +18,7 @@ $checks = array(
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) {
-	if ( false === strpos( $source, $needle ) ) {
+	if ( false === strpos( $source_compact, $compact( $needle ) ) ) {
 		fwrite( STDERR, "FAIL: $label\n" );
 		$failures++;
 	}
