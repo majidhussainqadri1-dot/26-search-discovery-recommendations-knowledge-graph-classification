@@ -2,6 +2,7 @@
 /** Round 06 regression: persisted recommendation controls require fresh membership/guardian assertions and revocation purges signals. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-recommendations.php' );
+$rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
 $checks = array(
 	'require_preference_access()' => 'preference mutation access helper exists',
 	'empty( $audience[\'valid\'] ) || ! empty( $audience[\'suspended\'] )' => 'invalid or suspended membership is rejected',
@@ -14,5 +15,13 @@ $checks = array(
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
+if ( false === strpos( $rest, "rest_sanitize_boolean( $request->get_param( 'consent' ) )" ) ) {
+	fwrite( STDERR, "FAIL: REST consent must preserve explicit false values instead of PHP string truthiness\n" );
+	$failures++;
+}
+if ( false !== strpos( $rest, "set_consent( (bool) $request->get_param( 'consent' ) )" ) ) {
+	fwrite( STDERR, "FAIL: unsafe direct boolean cast remains on consent route\n" );
+	$failures++;
+}
 if ( $failures ) { exit( 1 ); }
 echo "Round 06 recommendation privacy regression passed.\n";
