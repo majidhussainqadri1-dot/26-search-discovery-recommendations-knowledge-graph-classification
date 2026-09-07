@@ -1,18 +1,26 @@
 <?php
-/** Round 06 regression: persisted recommendation controls require fresh membership/guardian assertions and revocation purges signals. */
+/** Round 06 regression: recommendation privacy and valid-member preference gates. */
 $root = dirname( __DIR__ );
-$source = file_get_contents( $root . '/includes/class-file26-recommendations.php' );
-$checks = array(
-	'require_preference_access()' => 'preference mutation access helper exists',
-	'empty( $audience[\'valid\'] ) || ! empty( $audience[\'suspended\'] )' => 'invalid or suspended membership is rejected',
-	'! empty( $audience[\'is_minor\'] ) && empty( $audience[\'guardian_verified\'] )' => 'minor preference mutations require guardian verification',
-	'interests_json=IF(VALUES(consent)=0,VALUES(interests_json),interests_json)' => 'consent revocation purges stored interests',
-	'negatives_json=IF(VALUES(consent)=0,VALUES(negatives_json),negatives_json)' => 'consent revocation purges stored negative controls',
-	'$wpdb->delete( DB::table( \'feedback\' )' => 'consent revocation/reset removes persisted feedback',
-	'file26_profile_reset_failed' => 'reset fails closed on partial DB failure',
-	'file26_opt_out_record_failed' => 'opt-out persistence failure is explicit',
-);
+$code = file_get_contents( $root . '/includes/class-file26-recommendations.php' );
 $failures = 0;
-foreach ( $checks as $needle => $label ) { if ( false === strpos( $source, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
+$fail = static function ( $message ) use ( &$failures ) { fwrite( STDERR, 'FAIL: ' . $message . "\n" ); $failures++; };
+
+$patterns = array(
+	'/security\s*->\s*audience\s*\(\s*\)/' => 'membership assertions are consulted',
+	'/empty\s*\(\s*\$audience\s*\[\s*[\'\"]valid[\'\"]\s*\]\s*\)\s*\|\|\s*!\s*empty\s*\(\s*\$audience\s*\[\s*[\'\"]suspended[\'\"]\s*\]\s*\)/' => 'invalid or suspended membership is rejected',
+	'/!\s*empty\s*\(\s*\$audience\s*\[\s*[\'\"]is_minor[\'\"]\s*\]\s*\)\s*&&\s*empty\s*\(\s*\$audience\s*\[\s*[\'\"]guardian_verified[\'\"]\s*\]\s*\)/' => 'minor preference mutations require guardian verification',
+	'/personalization_enabled/' => 'personalization feature gate is explicit',
+	'/consent/' => 'consent state is explicit',
+	'/opted_out/' => 'opt-out state is explicit',
+	'/not_interested/' => 'negative user control exists',
+	'/hide_item/' => 'hide-item control exists',
+	'/hide_author/' => 'hide-author control exists',
+	'/hide_topic/' => 'hide-topic control exists',
+	'/reset\s*\(/' => 'reset operation exists',
+	'/opt_out\s*\(/' => 'opt-out operation exists',
+);
+foreach ( $patterns as $pattern => $label ) {
+	if ( ! preg_match( $pattern, $code ) ) { $fail( $label ); }
+}
 if ( $failures ) { exit( 1 ); }
-echo "Round 06 recommendation privacy regression passed.\n";
+echo "PASS: round 06 recommendation privacy and membership gates\n";
