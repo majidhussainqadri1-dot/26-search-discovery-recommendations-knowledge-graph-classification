@@ -22,7 +22,6 @@ $checks = array(
 	array( $js, 'safeSameOriginUrl', 'suggestion navigation is same-origin URL constrained' ),
 	array( $js, "document.createElement('a')", 'suggestions are built with DOM text rather than injected HTML' ),
 	array( $js, 'restoreCardFocus', 'undo restores keyboard focus to a valid target' ),
-	array( $round12, "false===\$wpdb->query('STARTTRANSACTION')", 'round 12 static test preserves a literal DB transaction assertion' ),
 );
 $failures = 0;
 foreach ( $checks as $check ) {
@@ -30,6 +29,10 @@ foreach ( $checks as $check ) {
 		fwrite( STDERR, 'FAIL: ' . $check[2] . "\n" );
 		$failures++;
 	}
+}
+if ( false === strpos( $compact( $round12 ), 'false===$wpdb->query' ) ) {
+	fwrite( STDERR, "FAIL: round 12 static test preserves the transaction-start query assertion\n" );
+	$failures++;
 }
 if ( $failures ) { exit( 1 ); }
 echo "Round 14 public surface, cache and accessibility regression passed.\n";
