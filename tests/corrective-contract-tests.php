@@ -8,6 +8,7 @@ $read = static function ( $path ) use ( $root ) {
 	}
 	return $content;
 };
+$compact = static function ( $source ) { return preg_replace( '/\s+/', '', (string) $source ); };
 $passed = 0;
 $failed = 0;
 function corrective_assert( $condition, $label ) {
@@ -38,11 +39,12 @@ corrective_assert( false !== strpos( $search, "fc.status IN ('approved','correct
 corrective_assert( false !== strpos( $search, 'apply_graph_relationship_scores' ) && false !== strpos( $search, "state='active' AND visibility='public'" ), 'Only active public graph edges contribute a bounded relationship signal.' );
 corrective_assert( false !== strpos( $search, "'health' => 'scan_limit'" ), 'Bounded corpus scans disclose truthful partial state.' );
 corrective_assert( false !== strpos( $governance, 'restored_policy_uuid' ) && false === strpos( $governance, "'activated' => false" ), 'Ranking rollback restores the previous policy without disabling File 26.' );
+$governance_compact = $compact( $governance );
 corrective_assert(
 	false !== strpos( $governance, 'second_approve_ranking_rollback' ) &&
 	false !== strpos( $governance, 'ranking_policy_rollback_second_approved' ) &&
-	false !== strpos( $governance, "'file26_rb_'" ) &&
-	false !== strpos( $governance, "user_can( \$second, 'approve_sabri_ranking' )" ) &&
+	false !== strpos( $governance_compact, $compact( "'file26_rb_'" ) ) &&
+	false !== strpos( $governance_compact, $compact( "user_can( \$second, 'approve_sabri_ranking' )" ) ) &&
 	false !== strpos( $governance, 'A separately recorded distinct authorized second rollback approval is required.' ),
 	'High-risk ranking rollback requires a distinct, separately recorded, still-authorized second approver.'
 );
