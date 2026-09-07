@@ -8,6 +8,7 @@ final class Roles {
 	const OPTION_VERSION = 'sabri_file26_role_model_version';
 	const VERSION = '1.1.0';
 	private static $operational_caps = array( 'operate_sabri_search', 'curate_sabri_taxonomy', 'approve_sabri_ranking', 'audit_sabri_search' );
+	private static $duty_roles = array( 'sabri_search_operator', 'sabri_taxonomy_curator', 'sabri_ranking_approver', 'sabri_search_auditor' );
 
 	public static function install( $force = false ) {
 		if ( ! $force && self::VERSION === get_option( self::OPTION_VERSION ) ) {
@@ -36,6 +37,28 @@ final class Roles {
 		if ( ! $written && self::VERSION !== get_option( self::OPTION_VERSION ) ) {
 			return new \WP_Error( 'file26_role_version_write_failed', 'File 26 role-model version could not be persisted.' );
 		}
+		return true;
+	}
+
+	/**
+	 * Remove only File 26 role-model effects. This is deliberately idempotent so
+	 * activation compensation and destructive uninstall can call it safely.
+	 */
+	public static function uninstall() {
+		$administrator = get_role( 'administrator' );
+		if ( $administrator ) {
+			$administrator->remove_cap( 'manage_sabri_search' );
+			foreach ( self::$operational_caps as $cap ) { $administrator->remove_cap( $cap ); }
+		}
+		foreach ( self::$duty_roles as $slug ) {
+			$role = get_role( $slug );
+			if ( $role ) {
+				$role->remove_cap( 'manage_sabri_search' );
+				foreach ( self::$operational_caps as $cap ) { $role->remove_cap( $cap ); }
+			}
+			remove_role( $slug );
+		}
+		delete_option( self::OPTION_VERSION );
 		return true;
 	}
 
