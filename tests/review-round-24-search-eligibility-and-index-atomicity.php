@@ -24,7 +24,6 @@ if ( false === strpos( $rest_compact, 'if(is_wp_error($suggestions)){return$sugg
 	$fail( 'Suggestion read failures must propagate through REST.' );
 }
 foreach ( array(
-	'Capability-bearingsigneddeliveryURLsareintentionallyexcluded' => 'signed-delivery exclusion is documented at the index boundary',
 	'STARTTRANSACTION' => 'index/revocation mutation has a transaction boundary',
 	'file26_node_write_failed' => 'graph-node write failure is explicit',
 	'Staletombstonecleanupfailed.' => 'stale tombstone cleanup failure aborts mutation',
