@@ -15,7 +15,8 @@ foreach ( array(
 ) as $needle => $label ) {
 	if ( false === strpos( $compact, $needle ) ) { $fail( 'Missing connector safeguard: ' . $label ); }
 }
-if ( false !== strpos( $compact, "foreach(array('list_batch','can_view','health','fetch_object','secret','token','credentials')as$private_key" ) ) {
+$forbidden_secret_blacklist = 'foreach(array(\'list_batch\',\'can_view\',\'health\',\'fetch_object\',\'secret\',\'token\',\'credentials\')as$private_key';
+if ( false !== strpos( $compact, $forbidden_secret_blacklist ) ) {
 	$fail( 'Connector persistence must use a public metadata allowlist, not a secret-name blacklist.' );
 }
 if ( $failures ) { exit( 1 ); }
