@@ -17,7 +17,9 @@ $checks = array(
 	'file26_shadow_tombstone_precedence' => 'equal-version tombstones retain precedence over searchable candidates',
 	"shadow_version" => 'cutover carries staged restrictive source versions into removal evidence',
 	"\$version=max((int)\$r['object_version'],\$shadow_version)" => 'tombstone version preserves the highest active/restrictive source version',
-	"WHEREstateIN('published','active','corrected','retracted')ANDvisibility<>'restricted'" => 'parity counts only searchable candidate rows',
+	"\$where=\"stateIN('published','active','corrected','retracted')ANDvisibility<>'restricted'\"" => 'parity defines an explicit searchable-only predicate',
+	"COUNT(*)FROM`\$shadow`WHERE\$where" => 'parity count applies the searchable-only predicate',
+	"canonical_key,checksumFROM`\$shadow`WHERE\$where" => 'parity checksum applies the same searchable-only predicate',
 	"SELECT\$colsFROM`\$shadow`WHERE\$promotable" => 'restrictive markers are never promoted into active search documents',
 	"FROM`\$shadow`WHERE\$promotableONDUPLICATEKEYUPDATE" => 'restrictive markers are never promoted into graph nodes',
 );
@@ -36,7 +38,9 @@ $shadow_allowed = $extract_allowed( $shadow, 'safe_payload' );
 if ( ! is_array( $index_allowed ) || ! is_array( $shadow_allowed ) || $index_allowed !== $shadow_allowed ) {
 	$fail( 'Shadow and incremental payload allowlists must remain identical and ordered.' );
 }
-if ( false === strpos( $s, "elseif('doctor_rank_score'==\$k){\$c[\$k]=min(100,max(0,(float)\$p[\$k]));}" ) || false === strpos( $s, "elseif(preg_match('/_score$/',\$k)){\$c[\$k]=min(1,max(0,(float)\$p[\$k]));}" ) ) {
+$doctor_score = "/elseif\s*\(\s*'doctor_rank_score'\s*={2,3}\s*\\\$k\s*\)\s*\{\s*\\\$c\s*\[\s*\\\$k\s*\]\s*=\s*min\s*\(\s*100\s*,\s*max\s*\(\s*0\s*,\s*\(float\)\s*\\\$p\s*\[\s*\\\$k\s*\]\s*\)\s*\)\s*;/";
+$ordinary_score = "/elseif\s*\(\s*preg_match\s*\(\s*'\/_score\\\$\/'\s*,\s*\\\$k\s*\)\s*\)\s*\{\s*\\\$c\s*\[\s*\\\$k\s*\]\s*=\s*min\s*\(\s*1\s*,\s*max\s*\(\s*0\s*,\s*\(float\)\s*\\\$p\s*\[\s*\\\$k\s*\]\s*\)\s*\)\s*;/";
+if ( ! preg_match( $doctor_score, $shadow ) || ! preg_match( $ordinary_score, $shadow ) ) {
 	$fail( 'Shadow score bounds must match incremental projection semantics.' );
 }
 if ( $failures ) { exit( 1 ); }
