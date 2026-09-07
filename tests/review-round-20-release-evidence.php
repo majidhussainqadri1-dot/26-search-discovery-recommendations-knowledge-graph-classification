@@ -24,13 +24,31 @@ if ( count( $tests ) < 17 ) {
 	fwrite( STDERR, "FAIL: expected regression evidence for all defect rounds\n" );
 	$failures++;
 }
-$dangerous_vars = '(?:this|wpdb|audience|query|document|manifest|target|source|expected_version|migration|job|result|classes|nodes|edges|visible_keys)';
+
+/*
+ * Detect only real PHP interpolation inside double-quoted strings. Escaped
+ * dollars and single-quoted regex/source literals are intentionally safe and
+ * must not be rejected by a source-shape regex.
+ */
+$dangerous_vars = array(
+	'$this', '$wpdb', '$audience', '$query', '$document', '$manifest', '$target', '$source',
+	'$expected_version', '$migration', '$job', '$result', '$classes', '$nodes', '$edges', '$visible_keys',
+);
 foreach ( $tests as $test ) {
 	if ( basename( $test ) === basename( __FILE__ ) ) { continue; }
 	$content = file_get_contents( $test );
-	if ( preg_match( '/"[^"\n]*\$' . $dangerous_vars . '(?:->|\[|\b)[^"\n]*"/', $content, $match ) ) {
-		fwrite( STDERR, 'FAIL: interpolation-prone regression literal in ' . basename( $test ) . ': ' . $match[0] . "\n" );
-		$failures++;
+	$tokens = token_get_all( $content );
+	$in_double_quote = false;
+	foreach ( $tokens as $token ) {
+		if ( is_string( $token ) ) {
+			if ( '"' === $token ) { $in_double_quote = ! $in_double_quote; }
+			continue;
+		}
+		if ( $in_double_quote && T_VARIABLE === $token[0] && in_array( $token[1], $dangerous_vars, true ) ) {
+			fwrite( STDERR, 'FAIL: interpolation-prone regression literal in ' . basename( $test ) . ': ' . $token[1] . "\n" );
+			$failures++;
+			break;
+		}
 	}
 }
 if ( $failures ) { exit( 1 ); }
