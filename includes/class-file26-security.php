@@ -30,11 +30,9 @@ final class Security {
 			$expires = is_numeric( $claims['expires_at'] ) ? (int) $claims['expires_at'] : strtotime( (string) $claims['expires_at'] );
 			$not_expired = $expires && $expires >= time();
 		}
-		if ( $authenticated ) {
-			$claims['valid'] = $version && in_array( $version, $versions, true ) && empty( $claims['suspended'] ) && $not_expired;
-		} else { $claims['valid'] = true; }
+		if ( $authenticated ) { $claims['valid'] = $version && in_array( $version, $versions, true ) && empty( $claims['suspended'] ) && $not_expired; }
+		else { $claims['valid'] = true; }
 		$audience = array_merge( $default, $claims );
-		// External assertions can enrich a request but cannot change its authenticated subject or WordPress roles.
 		$audience['user_id'] = $current_user_id;
 		$audience['authenticated'] = $authenticated;
 		$audience['roles'] = $authenticated ? wp_get_current_user()->roles : array();
@@ -59,10 +57,7 @@ final class Security {
 		return false;
 	}
 
-	/** Public authenticated-subject gate shared by route permission callbacks. */
 	public function valid_authenticated_member() { return $this->current_membership_valid(); }
-
-	/** Configuration authority only; it is not an operational super-capability. */
 	public function can_manage() { return $this->current_membership_valid() && current_user_can( 'manage_sabri_search' ); }
 	public function can_operate() { return $this->current_membership_valid() && current_user_can( 'operate_sabri_search' ); }
 	public function can_curate() { return $this->current_membership_valid() && current_user_can( 'curate_sabri_taxonomy' ); }
@@ -92,11 +87,20 @@ final class Security {
 	public function contains_sensitive_query( $query ) {
 		$query = (string) $query;
 		$patterns = array(
-			'/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu', '/(?:\+?92|0)?3\d{9}/u', '/\b\d{5}-?\d{7}-?\d\b/u',
-			'/\b(?:patient|medical\s*record|clinical\s*record|prescription|cnic|passport|otp|password|access\s*token)\b/iu',
-			'/(?:مریض|طبی\s*ریکارڈ|نسخہ|شناختی|پاسپورٹ|فون\s*نمبر|خفیہ)/u',
+			'/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu',
+			'/(?:\+?92|0)?3\d{9}/u',
+			'/\b\d{5}-?\d{7}-?\d\b/u',
+			// Generic international telephone-like sequences: 8–15 digits with common separators, requiring at least 8 digits total.
+			'/(?<!\d)(?:\+\s*)?(?:\(?\d{1,4}\)?[\s.\-]*){2,6}\d{2,4}(?!\d)/u',
+			'/\b(?:patient|medical\s*record|clinical\s*record|prescription|cnic|national\s*id|identity\s*number|passport|otp|password|access\s*token|phone\s*number|mobile\s*number)\b/iu',
+			'/(?:مریض|طبی\s*ریکارڈ|نسخہ|شناختی|قومی\s*شناخت|پاسپورٹ|فون\s*نمبر|موبائل\s*نمبر|خفیہ)/u',
 		);
-		foreach ( $patterns as $pattern ) { if ( preg_match( $pattern, $query ) ) { return true; } }
+		$patterns = apply_filters( 'sabri_file26_sensitive_query_patterns', $patterns );
+		foreach ( is_array( $patterns ) ? $patterns : array() as $pattern ) {
+			if ( is_string( $pattern ) && '' !== $pattern && @preg_match( $pattern, $query ) ) {
+				if ( preg_match( $pattern, $query ) ) { return true; }
+			}
+		}
 		return false;
 	}
 
@@ -116,8 +120,7 @@ final class Security {
 	public function safe_resource_url( $url, $purpose = 'resource' ) {
 		$url = trim( (string) $url ); if ( '' === $url ) { return ''; }
 		$same_origin = $this->safe_url( $url ); if ( $same_origin ) { return $same_origin; }
-		$url = esc_url_raw( $url, array( 'https' ) );
-		$parts = $url ? wp_parse_url( $url ) : false;
+		$url = esc_url_raw( $url, array( 'https' ) ); $parts = $url ? wp_parse_url( $url ) : false;
 		if ( ! $parts || empty( $parts['scheme'] ) || 'https' !== strtolower( $parts['scheme'] ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) { return ''; }
 		$host = strtolower( $parts['host'] );
 		if ( 'localhost' === $host || substr( $host, -6 ) === '.local' || ( filter_var( $host, FILTER_VALIDATE_IP ) && ! filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) ) { return ''; }
@@ -127,19 +130,15 @@ final class Security {
 	public function sign_cursor( array $payload ) {
 		$now = time(); $ttl = max( 60, min( HOUR_IN_SECONDS, (int) apply_filters( 'sabri_file26_cursor_ttl', 900 ) ) );
 		$payload['v'] = 1; $payload['iat'] = $now; $payload['exp'] = $now + $ttl;
-		$json = wp_json_encode( $payload );
-		if ( false === $json || strlen( $json ) > 2048 ) { return ''; }
-		$body = rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
-		$sig = hash_hmac( 'sha256', $body, wp_salt( 'auth' ) );
+		$json = wp_json_encode( $payload ); if ( false === $json || strlen( $json ) > 2048 ) { return ''; }
+		$body = rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' ); $sig = hash_hmac( 'sha256', $body, wp_salt( 'auth' ) );
 		return $body . '.' . $sig;
 	}
 
 	public function verify_cursor( $cursor ) {
 		if ( ! is_string( $cursor ) || strlen( $cursor ) > 4096 || 1 !== substr_count( $cursor, '.' ) ) { return false; }
-		list( $body, $sig ) = explode( '.', $cursor, 2 );
-		if ( ! preg_match( '/^[a-f0-9]{64}$/', $sig ) ) { return false; }
-		$expected = hash_hmac( 'sha256', $body, wp_salt( 'auth' ) );
-		if ( ! hash_equals( $expected, $sig ) ) { return false; }
+		list( $body, $sig ) = explode( '.', $cursor, 2 ); if ( ! preg_match( '/^[a-f0-9]{64}$/', $sig ) ) { return false; }
+		$expected = hash_hmac( 'sha256', $body, wp_salt( 'auth' ) ); if ( ! hash_equals( $expected, $sig ) ) { return false; }
 		$encoded = strtr( $body, '-_', '+/' ); $encoded .= str_repeat( '=', ( 4 - strlen( $encoded ) % 4 ) % 4 );
 		$decoded = base64_decode( $encoded, true ); if ( false === $decoded || strlen( $decoded ) > 2048 ) { return false; }
 		$payload = json_decode( $decoded, true );
@@ -168,28 +167,22 @@ final class Security {
 		global $wpdb;
 		$metadata = isset( $context['metadata'] ) && is_array( $context['metadata'] ) ? $this->sanitize_audit_metadata( $context['metadata'] ) : array();
 		$trace = isset( $context['trace_id'] ) && preg_match( '/^[a-f0-9]{32}$/', (string) $context['trace_id'] ) ? (string) $context['trace_id'] : $this->trace_id();
-		$inserted = $wpdb->insert(
-			DB::table( 'audit' ),
-			array(
-				'action_name' => substr( sanitize_key( $action ), 0, 96 ), 'actor_id' => get_current_user_id() ?: null,
-				'object_type' => isset( $context['object_type'] ) ? substr( sanitize_key( $context['object_type'] ), 0, 64 ) : null,
-				'object_key' => isset( $context['object_key'] ) ? substr( sanitize_text_field( $context['object_key'] ), 0, 191 ) : null,
-				'reason_code' => isset( $context['reason'] ) ? substr( sanitize_key( $context['reason'] ), 0, 96 ) : null,
-				'trace_id' => $trace, 'metadata' => wp_json_encode( $metadata ), 'created_at' => DB::now(),
-			),
-			array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
-		);
+		$inserted = $wpdb->insert( DB::table( 'audit' ), array(
+			'action_name' => substr( sanitize_key( $action ), 0, 96 ), 'actor_id' => get_current_user_id() ?: null,
+			'object_type' => isset( $context['object_type'] ) ? substr( sanitize_key( $context['object_type'] ), 0, 64 ) : null,
+			'object_key' => isset( $context['object_key'] ) ? substr( sanitize_text_field( $context['object_key'] ), 0, 191 ) : null,
+			'reason_code' => isset( $context['reason'] ) ? substr( sanitize_key( $context['reason'] ), 0, 96 ) : null,
+			'trace_id' => $trace, 'metadata' => wp_json_encode( $metadata ), 'created_at' => DB::now(),
+		), array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) );
 		if ( false === $inserted ) {
 			update_option( 'sabri_file26_last_audit_failure', array( 'at' => DB::now(), 'action' => substr( sanitize_key( $action ), 0, 96 ) ), false );
 			return new \WP_Error( 'file26_audit_write_failed', 'Required File 26 audit evidence could not be persisted.' );
 		}
-		delete_option( 'sabri_file26_last_audit_failure' );
-		return true;
+		delete_option( 'sabri_file26_last_audit_failure' ); return true;
 	}
 
 	private function sanitize_audit_metadata( array $metadata, $depth = 0 ) {
-		if ( $depth > 3 ) { return array(); }
-		$clean = array();
+		if ( $depth > 3 ) { return array(); } $clean = array();
 		foreach ( array_slice( $metadata, 0, 100, true ) as $key => $value ) {
 			$key = sanitize_key( (string) $key );
 			if ( ! $key || preg_match( '/(?:query|password|token|secret|otp|cnic|passport|message|patient|identity|clinical|medical|credential|cookie|authorization)/', $key ) ) { continue; }
