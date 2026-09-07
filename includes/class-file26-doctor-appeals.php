@@ -36,18 +36,12 @@ final class Doctor_Appeals {
 			KEY submitted_at (submitted_at)
 		) $charset;" );
 		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
-		if ( ! empty( $wpdb->last_error ) || $exists !== $table ) {
-			return new \WP_Error( 'file26_appeal_schema_missing', 'Doctor ranking appeal schema could not be verified.' );
-		}
+		if ( ! empty( $wpdb->last_error ) || $exists !== $table ) { return new \WP_Error( 'file26_appeal_schema_missing', 'Doctor ranking appeal schema could not be verified.' ); }
 		$required = array( 'appeal_uuid', 'doctor_key', 'appellant_user_id', 'status', 'policy_version', 'version', 'submitted_at', 'updated_at' );
 		$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( ! empty( $wpdb->last_error ) || ! is_array( $columns ) || array_diff( $required, $columns ) ) {
-			return new \WP_Error( 'file26_appeal_schema_incomplete', 'Doctor ranking appeal schema is incomplete.' );
-		}
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $columns ) || array_diff( $required, $columns ) ) { return new \WP_Error( 'file26_appeal_schema_incomplete', 'Doctor ranking appeal schema is incomplete.' ); }
 		$updated = update_option( self::OPTION_SCHEMA, self::SCHEMA_VERSION, false );
-		if ( ! $updated && self::SCHEMA_VERSION !== get_option( self::OPTION_SCHEMA ) ) {
-			return new \WP_Error( 'file26_appeal_schema_pointer_failed', 'Doctor ranking appeal schema version could not be persisted.' );
-		}
+		if ( ! $updated && self::SCHEMA_VERSION !== get_option( self::OPTION_SCHEMA ) ) { return new \WP_Error( 'file26_appeal_schema_pointer_failed', 'Doctor ranking appeal schema version could not be persisted.' ); }
 		return true;
 	}
 
@@ -60,9 +54,10 @@ final class Doctor_Appeals {
 		$reason = trim( wp_strip_all_tags( (string) $reason, true ) );
 		$reason_length = function_exists( 'mb_strlen' ) ? mb_strlen( $reason, 'UTF-8' ) : strlen( $reason );
 		if ( 64 !== strlen( $doctor_key ) || $reason_length < 20 || $reason_length > 4000 ) { return new \WP_Error( 'file26_invalid_appeal', 'A valid doctor reference and a reason between 20 and 4000 characters are required.', array( 'status' => 400 ) ); }
-		$document = $wpdb->get_row( $wpdb->prepare( 'SELECT canonical_key,author_key,payload FROM ' . DB::table( 'documents' ) . " WHERE canonical_key=%s AND entity_type='doctor' AND state IN ('published','active','corrected') AND visibility='public' LIMIT 1", $doctor_key ), ARRAY_A );
-		if ( ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_appeal_doctor_read_failed', 'The doctor ranking record could not be verified.', array( 'status' => 503 ) ); }
-		if ( ! $document ) { return new \WP_Error( 'file26_doctor_not_found', 'The eligible doctor ranking record was not found.', array( 'status' => 404 ) ); }
+		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
+		$document = $wpdb->get_row( $wpdb->prepare( "SELECT d.canonical_key,d.author_key,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' WHERE d.canonical_key=%s AND d.entity_type='doctor' AND d.state IN ('published','active','corrected') AND d.visibility='public' LIMIT 1", $doctor_key ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) ) { return new \WP_Error( 'file26_appeal_doctor_read_failed', 'The active doctor ranking record could not be verified.', array( 'status' => 503 ) ); }
+		if ( ! $document ) { return new \WP_Error( 'file26_doctor_not_found', 'The eligible active doctor ranking record was not found.', array( 'status' => 404 ) ); }
 		$payload = json_decode( $document['payload'], true ); $payload = is_array( $payload ) ? $payload : array();
 		if ( empty( $payload['verified_doctor'] ) ) { return new \WP_Error( 'file26_doctor_not_eligible', 'Only a verified-doctor ranking record may be appealed.', array( 'status' => 409 ) ); }
 		$owner_aliases = array( (string) $user_id, 'u:' . $user_id, 'user:' . $user_id, 'wp:' . $user_id );
@@ -81,12 +76,11 @@ final class Doctor_Appeals {
 			$policy = isset( $payload['doctor_rank_policy_version'] ) ? sanitize_text_field( $payload['doctor_rank_policy_version'] ) : (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' );
 			$ok = $wpdb->insert( self::table(), array( 'appeal_uuid' => $uuid, 'doctor_key' => $doctor_key, 'appellant_user_id' => $user_id, 'reason_text' => $reason, 'evidence_json' => wp_json_encode( $clean_evidence ), 'status' => 'submitted', 'policy_version' => $policy, 'rank_snapshot' => isset( $payload['global_doctor_rank'] ) ? max( 0, (int) $payload['global_doctor_rank'] ) : null, 'version' => 1, 'submitted_at' => DB::now(), 'updated_at' => DB::now() ) );
 			if ( false === $ok ) { return new \WP_Error( 'file26_appeal_create_failed', 'The ranking appeal could not be created.', array( 'status' => 500 ) ); }
-			$this->security->audit( 'doctor_ranking_appeal_submitted', array( 'object_type' => 'ranking_appeal', 'object_key' => $uuid, 'metadata' => array( 'doctor_key' => $doctor_key, 'policy_version' => $policy ) ) );
+			$audit = $this->security->audit( 'doctor_ranking_appeal_submitted', array( 'object_type' => 'ranking_appeal', 'object_key' => $uuid, 'metadata' => array( 'doctor_key' => $doctor_key, 'policy_version' => $policy ) ) );
+			if ( is_wp_error( $audit ) ) { return $this->audit_failure_after_mutation( $audit, 'appeal_submitted' ); }
 			do_action( 'sabri_file26_event', 'DoctorRankingAppealSubmitted', array( 'appeal_uuid' => $uuid, 'doctor_key' => $doctor_key ) );
 			return array( 'appeal_uuid' => $uuid, 'status' => 'submitted', 'version' => 1 );
-		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
-		}
+		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); }
 	}
 
 	public function review( $appeal_uuid, $decision, $reason, $expected_version ) {
@@ -105,7 +99,8 @@ final class Doctor_Appeals {
 		$updated = $wpdb->update( self::table(), array( 'status' => $decision, 'reviewer_id' => get_current_user_id(), 'decision_reason' => $reason, 'version' => $version + 1, 'updated_at' => DB::now(), 'decided_at' => $final ? DB::now() : null ), array( 'appeal_uuid' => $appeal_uuid, 'version' => $version ), array( '%s', '%d', '%s', '%d', '%s', '%s' ), array( '%s', '%d' ) );
 		if ( false === $updated ) { return new \WP_Error( 'file26_appeal_write_failed', 'The ranking appeal decision could not be persisted.', array( 'status' => 500 ) ); }
 		if ( 1 !== $updated ) { return new \WP_Error( 'file26_appeal_conflict', 'The appeal changed concurrently. Reload and retry.', array( 'status' => 409 ) ); }
-		$this->security->audit( 'doctor_ranking_appeal_' . $decision, array( 'object_type' => 'ranking_appeal', 'object_key' => $appeal_uuid, 'reason' => $reason, 'metadata' => array( 'doctor_key' => $row['doctor_key'], 'version' => $version + 1 ) ) );
+		$audit = $this->security->audit( 'doctor_ranking_appeal_' . $decision, array( 'object_type' => 'ranking_appeal', 'object_key' => $appeal_uuid, 'reason' => $reason, 'metadata' => array( 'doctor_key' => $row['doctor_key'], 'version' => $version + 1 ) ) );
+		if ( is_wp_error( $audit ) ) { return $this->audit_failure_after_mutation( $audit, 'appeal_reviewed' ); }
 		$projection_pending = false;
 		if ( 'corrected' === $decision ) { $projection_pending = true; do_action( 'sabri_file26_doctor_ranking_recompute_requested', $row['doctor_key'], $appeal_uuid ); }
 		do_action( 'sabri_file26_event', 'DoctorRankingAppealReviewed', array( 'appeal_uuid' => $appeal_uuid, 'decision' => $decision ) );
@@ -118,5 +113,9 @@ final class Doctor_Appeals {
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT appeal_uuid,doctor_key,status,policy_version,rank_snapshot,version,submitted_at,updated_at,decided_at,decision_reason FROM ' . self::table() . ' WHERE appellant_user_id=%d ORDER BY id DESC LIMIT 100', $user_id ), ARRAY_A );
 		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) { return new \WP_Error( 'file26_appeal_list_failed', 'Ranking appeals could not be loaded safely.', array( 'status' => 503 ) ); }
 		return $rows;
+	}
+
+	private function audit_failure_after_mutation( $audit, $stage ) {
+		return new \WP_Error( 'file26_required_audit_failed', 'Ranking-appeal mutation was persisted but required audit evidence failed; File 26 is degraded until audit storage is repaired.', array( 'status' => 500, 'mutation_persisted' => true, 'stage' => sanitize_key( $stage ), 'audit_error' => is_wp_error( $audit ) ? $audit->get_error_code() : 'unknown' ) );
 	}
 }
