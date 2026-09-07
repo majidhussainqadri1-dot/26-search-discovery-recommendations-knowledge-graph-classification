@@ -84,7 +84,7 @@ final class REST {
 	}
 
 	public function feedback( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->record_feedback( (array) $request->get_json_params() ), 201 ); }
-	public function consent( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->set_consent( (bool) $request->get_param( 'consent' ) ) ); }
+	public function consent( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->set_consent( rest_sanitize_boolean( $request->get_param( 'consent' ) ) ) ); }
 	public function interests( \WP_REST_Request $request ) { return $this->respond( $this->recommendations->set_interests( (array) $request->get_param( 'interests' ) ) ); }
 	public function reset() { return $this->respond( $this->recommendations->reset() ); }
 	public function opt_out() { return $this->respond( $this->recommendations->opt_out() ); }
