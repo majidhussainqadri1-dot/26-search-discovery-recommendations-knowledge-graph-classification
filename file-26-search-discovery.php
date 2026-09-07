@@ -41,24 +41,36 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-admin.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-privacy.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-health.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-central-plan.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-evaluation.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-plugin.php';
 
 register_activation_hook( __FILE__, static function () {
 	$result = \Sabri\File26\DB::activate();
 	if ( ! is_wp_error( $result ) ) {
-		\Sabri\File26\Roles::install( true );
+		$result = \Sabri\File26\Roles::install( true );
+	}
+	if ( ! is_wp_error( $result ) ) {
 		$result = \Sabri\File26\Doctor_Appeals::install_schema();
 	}
 	if ( is_wp_error( $result ) ) {
+		// Compensate activation side effects that must not remain operational after a failed gate.
+		\Sabri\File26\DB::deactivate();
+		\Sabri\File26\Roles::uninstall();
+		\Sabri\File26\DB::update_settings( array( 'activated' => false, 'public_search_enabled' => false, 'personalization_enabled' => false ) );
+		update_option( 'sabri_file26_last_activation_failure', array( 'at' => \Sabri\File26\DB::now(), 'code' => $result->get_error_code() ), false );
 		if ( function_exists( 'deactivate_plugins' ) ) { deactivate_plugins( plugin_basename( __FILE__ ), true ); }
 		wp_die( esc_html( $result->get_error_message() ), esc_html__( 'File 26 activation failed safely', 'sabri-file26' ), array( 'back_link' => true ) );
 	}
+	delete_option( 'sabri_file26_last_activation_failure' );
 } );
 register_deactivation_hook( __FILE__, array( 'Sabri\\File26\\DB', 'deactivate' ) );
 
 add_action(
 	'plugins_loaded',
-	static function () { \Sabri\File26\Plugin::instance()->boot(); },
+	static function () {
+		\Sabri\File26\Plugin::instance()->boot();
+		\Sabri\File26\Evaluation::instance()->boot();
+	},
 	5
 );
 
@@ -105,6 +117,16 @@ function sabri_file26_recommendations( array $request = array() ) {
 function sabri_file26_ranking_constitution() {
 	$plugin = sabri_file26_runtime();
 	return is_wp_error( $plugin ) ? $plugin : $plugin->central_plan()->ranking_constitution();
+}
+
+function sabri_file26_record_relevance_evaluation( array $record ) {
+	$plugin = sabri_file26_runtime();
+	return is_wp_error( $plugin ) ? $plugin : \Sabri\File26\Evaluation::instance()->record_evaluation( $record );
+}
+
+function sabri_file26_stage_search_experiment( array $record ) {
+	$plugin = sabri_file26_runtime();
+	return is_wp_error( $plugin ) ? $plugin : \Sabri\File26\Evaluation::instance()->stage_experiment( $record );
 }
 
 /** Recompute the explainable global verified-doctor ranking projection. */
