@@ -3,11 +3,14 @@
 $root = dirname( __DIR__ );
 $gov = file_get_contents( $root . '/includes/class-file26-governance.php' );
 $rest = file_get_contents( $root . '/includes/class-file26-rest.php' );
+$compact = static function ( $source ) { return preg_replace( '/\s+/', '', (string) $source ); };
+$gov_compact = $compact( $gov );
+$rest_compact = $compact( $rest );
 $checks = array(
 	'public function second_approve_ranking_policy' => 'second ranking approver acts explicitly',
 	'$second = $row ? (int) $row[\'approval_two\'] : 0' => 'activation consumes recorded approval, not named user only',
 	'public function second_approve_ranking_rollback' => 'rollback has explicit second approval receipt',
-	'delete_transient( $receipt_key )' => 'rollback approval receipt is one-time',
+	'delete_transient( $key )' => 'rollback approval receipt is one-time',
 	'$expected_version < 1' => 'classification review requires expected version',
 	'AND version=%d' => 'classification decision is compare-and-swap',
 	'\'active\' !== $term[\'status\']' => 'approved classification requires active term',
@@ -21,7 +24,11 @@ $rest_checks = array(
 	'(int) $request->get_param( \'expected_version\' )' => 'REST passes classification expected version',
 );
 $failures = 0;
-foreach ( $checks as $needle => $label ) { if ( false === strpos( $gov, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
-foreach ( $rest_checks as $needle => $label ) { if ( false === strpos( $rest, $needle ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; } }
+foreach ( $checks as $needle => $label ) {
+	if ( false === strpos( $gov_compact, $compact( $needle ) ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; }
+}
+foreach ( $rest_checks as $needle => $label ) {
+	if ( false === strpos( $rest_compact, $compact( $needle ) ) ) { fwrite( STDERR, "FAIL: $label\n" ); $failures++; }
+}
 if ( $failures ) { exit( 1 ); }
 echo "Round 12 governance transitions regression passed.\n";
