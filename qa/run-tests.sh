@@ -50,6 +50,15 @@ grep -q 'Stable tag: 1.2.0' "$ROOT/readme.txt"
 grep -qi '#087a4e' "$ROOT/assets/css/file26.css"
 
 printf '[12/14] Deterministic double build\n'
+# MANIFEST.sha256 is a generated package artifact. A checked-in copy can become stale
+# after an otherwise valid source commit and falsely claim exact-head parity.
+if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git -C "$ROOT" ls-files --error-unmatch MANIFEST.sha256 >/dev/null 2>&1; then
+    echo 'FAIL: MANIFEST.sha256 must be generated from exact source, not tracked in Git' >&2
+    exit 1
+  fi
+fi
+rm -f "$ROOT/MANIFEST.sha256"
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/a.zip"
 python3 "$ROOT/tools/build-package.py" --root "$ROOT" --output "$TMP/b.zip"
 cmp "$TMP/a.zip" "$TMP/b.zip"
