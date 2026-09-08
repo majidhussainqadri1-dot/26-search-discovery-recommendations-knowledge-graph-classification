@@ -1,5 +1,5 @@
 <?php
-/** Round 07 regression: taxonomy merge/split must be previewable, owner-governed, serialized and reindexable. */
+/** Round 07 regression: taxonomy lifecycle must remain previewable, owner-governed, serialized, compensating and reindexable. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-taxonomy.php' );
 $checks = array(
@@ -13,6 +13,9 @@ $checks = array(
 	'sabri_file26_taxonomy_reindex_required' => 'merge/split/deprecation trigger derivative reindex reconciliation',
 	'file26_split_failed' => 'split has atomic failure state',
 	'Alias merge failed.' => 'alias migration failure blocks merge commit',
+	'file26_term_compensation_failed' => 'partial taxonomy creation exposes compensation failure explicitly',
+	"$wpdb->delete( DB::table( 'term_aliases' ), array( 'term_uuid' => $uuid )" => 'partial aliases are removed when create fails',
+	"$wpdb->delete( DB::table( 'terms' ), array( 'term_uuid' => $uuid, 'version' => 1 )" => 'partial draft term is removed when alias persistence fails',
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) {
