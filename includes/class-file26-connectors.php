@@ -127,6 +127,13 @@ final class Connectors {
 				return new \WP_Error( 'file26_invalid_document', sprintf( 'Indexed document is missing %s.', $field ) );
 			}
 		}
+		$object_version = (string) $document['object_version'];
+		if ( ! ctype_digit( $object_version ) || (int) $object_version < 1 ) {
+			return new \WP_Error( 'file26_invalid_object_version', 'Object version must be a positive monotonic integer.' );
+		}
+		if ( isset( $document['freshness_at'] ) && '' !== (string) $document['freshness_at'] && false === strtotime( (string) $document['freshness_at'] ) ) {
+			return new \WP_Error( 'file26_invalid_freshness_at', 'Freshness timestamp is invalid; File 26 will not invent a replacement date.' );
+		}
 		$manifest = $this->get( $document['connector_slug'] );
 		if ( ! $manifest ) {
 			return new \WP_Error( 'file26_unknown_connector', 'Unknown connector; fail closed.' );
