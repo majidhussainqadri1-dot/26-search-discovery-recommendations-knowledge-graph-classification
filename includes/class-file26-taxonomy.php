@@ -46,7 +46,12 @@ final class Taxonomy {
 		}
 		foreach ( isset( $input['aliases'] ) ? (array) $input['aliases'] : array() as $alias ) {
 			if ( ! $this->add_alias( $uuid, $alias, $language ) ) {
-				return new \WP_Error( 'file26_alias_write_failed', 'A taxonomy alias could not be stored.' );
+				$aliases_removed = $wpdb->delete( DB::table( 'term_aliases' ), array( 'term_uuid' => $uuid ), array( '%s' ) );
+				$term_removed = $wpdb->delete( DB::table( 'terms' ), array( 'term_uuid' => $uuid, 'version' => 1 ), array( '%s', '%d' ) );
+				if ( false === $aliases_removed || 1 !== (int) $term_removed ) {
+					return new \WP_Error( 'file26_term_compensation_failed', 'Taxonomy creation failed and its partial draft could not be fully compensated.', array( 'status' => 500 ) );
+				}
+				return new \WP_Error( 'file26_alias_write_failed', 'A taxonomy alias could not be stored; the partial draft was removed.', array( 'status' => 409 ) );
 			}
 		}
 		$this->security->audit( 'taxonomy_term_created', array( 'object_type' => 'taxonomy_term', 'object_key' => $uuid ) );
