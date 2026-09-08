@@ -1,5 +1,5 @@
 <?php
-/** Round 02 regression: connector manifests must remain valid after normalization and durable checkpoints must survive reload. */
+/** Round 02 regression: connector manifests and source facts must fail closed instead of being silently rewritten. */
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-connectors.php' );
 $checks = array(
@@ -11,6 +11,10 @@ $checks = array(
 	'last_event_version=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),last_event_version,0)' => 'same-contract reload preserves event checkpoint',
 	'health_state=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),health_state,\'unknown\')' => 'same-contract reload preserves health state',
 	'last_health=IF(owner_file=VALUES(owner_file) AND contract_version=VALUES(contract_version),last_health,NULL)' => 'same-contract reload preserves last health time',
+	'file26_invalid_object_version' => 'non-positive or non-integer owner versions fail closed',
+	'ctype_digit( $object_version )' => 'owner version is validated as an integer fact',
+	'file26_invalid_freshness_at' => 'invalid owner freshness timestamps fail closed',
+	'false === strtotime( (string) $document[\'freshness_at\'] )' => 'freshness parser failure is explicitly detected',
 );
 $failures = 0;
 foreach ( $checks as $needle => $label ) {
