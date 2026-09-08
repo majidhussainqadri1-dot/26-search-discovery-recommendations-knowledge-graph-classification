@@ -10,8 +10,8 @@ final class Doctor_Appeals {
 	public function __construct( Security $security ) { $this->security = $security; }
 	public static function table() { global $wpdb; return $wpdb->prefix . 'f26_ranking_appeals'; }
 
-	public static function install_schema() {
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) { return; }
+	public static function install_schema( $force = false ) {
+		if ( ! $force && self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) ) { return; }
 		global $wpdb; require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate(); $table = self::table();
 		dbDelta( "CREATE TABLE $table (
 			id bigint unsigned NOT NULL AUTO_INCREMENT,
