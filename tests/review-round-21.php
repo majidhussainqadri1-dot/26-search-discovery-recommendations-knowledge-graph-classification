@@ -6,8 +6,8 @@ if ($routes === false) {
     exit(1);
 }
 $required = array(
-    "$http_status = 404;",
-    "status_header( $http_status );",
+    '$http_status = 404;',
+    'status_header( $http_status );',
     "'topic' !== $route || 200 !== $http_status",
     "'merged' === $term['status']",
 );
@@ -17,7 +17,7 @@ foreach ($required as $needle) {
         exit(1);
     }
 }
-if (strpos($routes, "status_header( 200 );") !== false) {
+if (strpos($routes, 'status_header( 200 );') !== false) {
     fwrite(STDERR, "FAIL: File 26 routes must not force every route to HTTP 200\n");
     exit(1);
 }
