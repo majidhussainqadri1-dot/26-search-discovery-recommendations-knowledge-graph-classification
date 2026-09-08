@@ -8,8 +8,8 @@ if ($routes === false) {
 $required = array(
     '$http_status = 404;',
     'status_header( $http_status );',
-    "'topic' !== $route || 200 !== $http_status",
-    "'merged' === $term['status']",
+    "'topic' !== \$route || 200 !== \$http_status",
+    "'merged' === \$term['status']",
 );
 foreach ($required as $needle) {
     if (strpos($routes, $needle) === false) {
