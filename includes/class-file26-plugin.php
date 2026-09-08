@@ -56,30 +56,73 @@ final class Plugin {
 		DB::schedule();
 	}
 
-	/** Serialize and complete schema changes before connectors/routes/search are exposed. */
+	/** Serialize and verify schema changes before connectors/routes/search are exposed. */
 	private function ensure_schema_current() {
 		global $wpdb;
 		$main_current = SABRI_FILE26_SCHEMA_VERSION === get_option( DB::OPTION_SCHEMA );
 		$appeal_current = Doctor_Appeals::SCHEMA_VERSION === get_option( Doctor_Appeals::OPTION_SCHEMA );
-		if ( $main_current && $appeal_current ) { return true; }
+		$shape = $this->verify_schema_shape();
+		if ( $main_current && $appeal_current && true === $shape ) { return true; }
+
 		$lock_name = 'file26:schema-migration';
 		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock_name ) ) ) { return new \WP_Error( 'file26_migration_busy', 'File 26 schema migration is already running.' ); }
 		try {
-			if ( SABRI_FILE26_SCHEMA_VERSION !== get_option( DB::OPTION_SCHEMA ) ) { DB::install_schema(); }
-			if ( Doctor_Appeals::SCHEMA_VERSION !== get_option( Doctor_Appeals::OPTION_SCHEMA ) ) { Doctor_Appeals::install_schema(); }
-			$required = array( 'connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits' );
-			foreach ( $required as $name ) {
-				$table = DB::table( $name );
-				if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing after migration.' ); }
-			}
-			$appeals = Doctor_Appeals::table();
-			if ( $appeals !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $appeals ) ) ) ) { return new \WP_Error( 'file26_schema_incomplete', 'The ranking appeals table is missing after migration.' ); }
+			// Version options alone never prove schema parity. dbDelta is rerun whenever shape verification fails.
+			if ( ! $main_current || is_wp_error( $shape ) ) { DB::install_schema(); }
+			if ( ! $appeal_current || is_wp_error( $shape ) ) { Doctor_Appeals::install_schema( true ); }
+			$verified = $this->verify_schema_shape();
+			if ( is_wp_error( $verified ) ) { return $verified; }
 			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
 			update_option( Doctor_Appeals::OPTION_SCHEMA, Doctor_Appeals::SCHEMA_VERSION, false );
 			return true;
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
+	}
+
+	/** Table existence is insufficient: verify critical columns required by runtime contracts. */
+	private function verify_schema_shape() {
+		global $wpdb;
+		$requirements = array(
+			'connectors' => array( 'slug', 'owner_file', 'contract_version', 'status', 'manifest', 'last_event_version', 'health_state' ),
+			'documents' => array( 'canonical_key', 'connector_slug', 'object_id', 'object_version', 'entity_type', 'state', 'visibility', 'freshness_at', 'payload', 'source_event_sequence', 'checksum' ),
+			'tombstones' => array( 'canonical_key', 'object_version', 'reason_class', 'expires_at' ),
+			'terms' => array( 'term_uuid', 'slug', 'language', 'owner_file', 'status', 'version', 'redirect_uuid' ),
+			'term_aliases' => array( 'term_uuid', 'alias_normalized', 'language', 'status' ),
+			'classifications' => array( 'object_key', 'term_uuid', 'confidence', 'status', 'provenance', 'version' ),
+			'nodes' => array( 'node_key', 'node_type', 'visibility', 'state', 'version' ),
+			'edges' => array( 'edge_uuid', 'source_key', 'target_key', 'edge_type', 'provenance', 'state', 'visibility', 'version' ),
+			'ranking_policies' => array( 'policy_uuid', 'context_name', 'audience', 'version', 'status', 'features_json', 'approval_one', 'approval_two', 'effective_at' ),
+			'feedback' => array( 'idempotency_key', 'user_id', 'feedback_type', 'active', 'expires_at' ),
+			'profiles' => array( 'user_id', 'consent', 'opted_out', 'interests_json', 'negatives_json', 'version' ),
+			'jobs' => array( 'job_uuid', 'job_type', 'status', 'cursor_value', 'counts_json', 'attempts', 'lock_token', 'available_at' ),
+			'audit' => array( 'action_name', 'actor_id', 'object_type', 'object_key', 'reason_code', 'trace_id', 'metadata', 'created_at' ),
+			'metrics' => array( 'metric_name', 'dimensions_hash', 'bucket_start', 'metric_value' ),
+			'rate_limits' => array( 'bucket_key', 'window_start', 'count_value', 'expires_at' ),
+		);
+		foreach ( $requirements as $name => $required_columns ) {
+			$table = DB::table( $name );
+			if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) {
+				return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing after migration.' );
+			}
+			$columns = (array) $wpdb->get_col( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . '`', 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			foreach ( $required_columns as $column ) {
+				if ( ! in_array( $column, $columns, true ) ) {
+					return new \WP_Error( 'file26_schema_column_missing', sprintf( 'File 26 schema verification failed: %s.%s is missing.', $name, $column ) );
+				}
+			}
+		}
+		$appeals = Doctor_Appeals::table();
+		if ( $appeals !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $appeals ) ) ) ) {
+			return new \WP_Error( 'file26_schema_incomplete', 'The ranking appeals table is missing after migration.' );
+		}
+		$appeal_columns = (array) $wpdb->get_col( 'SHOW COLUMNS FROM `' . esc_sql( $appeals ) . '`', 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		foreach ( array( 'appeal_uuid', 'doctor_key', 'appellant_user_id', 'status', 'reviewer_id', 'policy_version', 'rank_snapshot', 'version', 'submitted_at', 'updated_at', 'decided_at' ) as $column ) {
+			if ( ! in_array( $column, $appeal_columns, true ) ) {
+				return new \WP_Error( 'file26_schema_column_missing', sprintf( 'File 26 ranking-appeal schema verification failed: %s is missing.', $column ) );
+			}
+		}
+		return true;
 	}
 
 	public function maybe_upgrade() { return $this->ensure_schema_current(); }
