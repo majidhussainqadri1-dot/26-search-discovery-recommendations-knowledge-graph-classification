@@ -39,8 +39,19 @@ final class Routes {
 
 	public function template_redirect() {
 		$route = get_query_var( 'sabri_f26_route' ); if ( ! $route ) { return; }
-		$this->enqueue_assets(); status_header( 200 );
-		if ( 'topic' !== $route ) {
+		$this->enqueue_assets();
+		$http_status = 200;
+		if ( 'topic' === $route ) {
+			$term = $this->taxonomy->get( get_query_var( 'sabri_f26_term' ) );
+			if ( ! $term || ! in_array( $term['status'], array( 'active', 'merged' ), true ) ) {
+				$http_status = 404;
+			} elseif ( 'merged' === $term['status'] ) {
+				$target = ! empty( $term['redirect_uuid'] ) ? $this->taxonomy->get( $term['redirect_uuid'] ) : null;
+				if ( ! $target || 'active' !== $target['status'] ) { $http_status = 404; }
+			}
+		}
+		status_header( $http_status );
+		if ( 'topic' !== $route || 200 !== $http_status ) {
 			nocache_headers();
 			add_filter( 'wp_robots', static function ( $robots ) { $robots['noindex'] = true; $robots['follow'] = true; return $robots; } );
 		} else { header( 'Cache-Control: public, max-age=300, stale-while-revalidate=600' ); }
