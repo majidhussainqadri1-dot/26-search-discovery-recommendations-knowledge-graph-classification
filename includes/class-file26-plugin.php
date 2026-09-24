@@ -37,6 +37,9 @@ final class Plugin {
 		add_filter( 'sabri_file26_connector_manifests', array( $this->owner_contracts, 'collect' ), 5 );
 		add_filter( 'sabri_file26_activation_gate_approved', array( $this->owner_contracts, 'activation_gate' ), 10, 3 );
 		$this->connectors->boot();
+		add_filter( 'sabri_file26_accept_file04_contract_v1', array( $this, 'accept_file04_contract' ), 10, 2 );
+		add_action( 'snfla_request_search_reindex', array( $this, 'file04_request_search_reindex' ), 10, 1 );
+		add_filter( 'snfla_verify_cutover_search_reindex', array( $this, 'file04_verify_search_reindex' ), 10, 2 );
 		add_action( 'init', array( $this->routes, 'register' ), 20 );
 		add_action( 'rest_api_init', array( $this->rest, 'register' ) );
 		add_action( 'admin_init', array( $this, 'maybe_upgrade' ) );
@@ -146,6 +149,140 @@ final class Plugin {
 
 	public function source_restrict( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) { return $this->indexer->restrict( $connector, $domain, $object_id, $object_version, $reason ); }
 	public function source_tombstone( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return $this->indexer->tombstone( $connector, $domain, $object_id, $object_version, $reason ); }
+
+
+	public function accept_file04_contract( $existing, $request ) {
+		if ( is_array( $existing ) && ! empty( $existing['accepted'] ) ) { return $existing; }
+		$request = is_array( $request ) ? $request : array();
+		$digest = strtolower( trim( (string) ( $request['manifest_digest'] ?? '' ) ) );
+		$connector = $this->file21_connector();
+		$accepted = 'File 04' === (string) ( $request['consumer'] ?? '' )
+			&& 'legacy_resolution_search_handoff' === sanitize_key( (string) ( $request['purpose'] ?? '' ) )
+			&& $this->sha256( $digest )
+			&& is_array( $connector );
+		return array(
+			'accepted'       => $accepted,
+			'status'         => $accepted ? 'contract_registered' : 'unavailable',
+			'provider_id'    => 'file26_file04_cutover_v1',
+			'manifest_digest'=> $digest,
+			'connector'      => $accepted ? (string) $connector['slug'] : '',
+			'connector_status'=> $accepted ? (string) $connector['status'] : 'missing',
+			'verified_at_utc'=> gmdate( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	public function file04_request_search_reindex( $context ) {
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->valid_file04_cutover_context( $context ) ) { return; }
+		$connector = $this->file21_connector();
+		if ( ! is_array( $connector ) || ! in_array( (string) $connector['status'], array( 'shadow', 'approved', 'active' ), true ) ) {
+			$this->store_file04_reindex_receipt( $context, array( 'status' => 'blocked', 'reason_code' => 'file21_connector_not_index_eligible' ) );
+			return;
+		}
+		$existing = $this->file04_reindex_receipt( (string) $context['request_digest'] );
+		if ( is_array( $existing ) && ! empty( $existing['job_uuid'] ) ) {
+			$job = $this->file04_reindex_job( (string) $existing['job_uuid'] );
+			if ( is_array( $job ) && in_array( (string) $job['status'], array( 'pending', 'running', 'retry', 'completed' ), true ) ) { return; }
+		}
+		$job_uuid = $this->indexer->enqueue_reindex(
+			(string) $connector['slug'],
+			array(
+				'purpose'                 => 'file04_cutover',
+				'source_signature'        => (string) $context['source_signature'],
+				'reconciliation_checksum' => (string) $context['reconciliation_checksum'],
+				'request_digest'          => (string) $context['request_digest'],
+			)
+		);
+		if ( is_wp_error( $job_uuid ) ) {
+			$this->store_file04_reindex_receipt( $context, array( 'status' => 'failed', 'reason_code' => $job_uuid->get_error_code() ) );
+			return;
+		}
+		$this->store_file04_reindex_receipt(
+			$context,
+			array( 'status' => 'accepted', 'job_uuid' => (string) $job_uuid, 'connector' => (string) $connector['slug'] )
+		);
+	}
+
+	public function file04_verify_search_reindex( $existing, $context ) {
+		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) { return $existing; }
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->valid_file04_cutover_context( $context ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file26_file04_cutover_v1', 'status' => 'invalid_request' );
+		}
+		$receipt = $this->file04_reindex_receipt( (string) $context['request_digest'] );
+		$connector = $this->file21_connector();
+		if ( ! is_array( $receipt ) || empty( $receipt['job_uuid'] ) || ! is_array( $connector ) || 'active' !== (string) $connector['status'] ) {
+			return array( 'verified' => false, 'provider_id' => 'file26_file04_cutover_v1', 'status' => 'pending', 'reason_code' => 'receipt_or_active_connector_missing' );
+		}
+		$job = $this->file04_reindex_job( (string) $receipt['job_uuid'] );
+		if ( ! is_array( $job ) ) {
+			return array( 'verified' => false, 'provider_id' => 'file26_file04_cutover_v1', 'status' => 'pending', 'reason_code' => 'job_missing' );
+		}
+		$counts = json_decode( (string) ( $job['counts_json'] ?? '{}' ), true );
+		$failed = is_array( $counts ) ? max( 0, (int) ( $counts['failed'] ?? 0 ) ) : 1;
+		$complete = 'completed' === (string) $job['status'] && 0 === $failed;
+		return array(
+			'verified'                => $complete,
+			'provider_id'             => 'file26_file04_cutover_v1',
+			'status'                  => $complete ? 'completed' : sanitize_key( (string) $job['status'] ),
+			'job_uuid'                => (string) $receipt['job_uuid'],
+			'connector'               => (string) $connector['slug'],
+			'source_signature'        => (string) $context['source_signature'],
+			'reconciliation_checksum' => (string) $context['reconciliation_checksum'],
+			'request_digest'          => (string) $context['request_digest'],
+			'failed_count'            => $failed,
+			'verified_at_utc'         => gmdate( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	private function file21_connector() {
+		foreach ( (array) $this->connectors->all() as $connector ) {
+			if ( ! is_array( $connector ) || 'File 21' !== (string) ( $connector['owner_file'] ?? '' ) ) { continue; }
+			$types = array_map( 'sanitize_key', (array) ( $connector['entity_types'] ?? array() ) );
+			if ( ! array_diff( array( 'post', 'news', 'article' ), $types ) ) { return $connector; }
+		}
+		return null;
+	}
+
+	private function valid_file04_cutover_context( array $context ) {
+		return 'File 21' === (string) ( $context['canonical_owner'] ?? '' )
+			&& $this->sha256( strtolower( (string) ( $context['source_signature'] ?? '' ) ) )
+			&& $this->sha256( strtolower( (string) ( $context['reconciliation_checksum'] ?? '' ) ) )
+			&& $this->sha256( strtolower( (string) ( $context['request_digest'] ?? '' ) ) );
+	}
+
+	private function store_file04_reindex_receipt( array $context, array $receipt ) {
+		$key = strtolower( (string) $context['request_digest'] );
+		$store = get_option( 'sabri_file26_file04_reindex_receipts_v1', array() );
+		$store = is_array( $store ) ? $store : array();
+		$store[ $key ] = array_merge(
+			array(
+				'source_signature' => strtolower( (string) $context['source_signature'] ),
+				'reconciliation_checksum' => strtolower( (string) $context['reconciliation_checksum'] ),
+				'request_digest' => $key,
+				'updated_at_utc' => gmdate( 'Y-m-d H:i:s' ),
+			),
+			$receipt
+		);
+		if ( count( $store ) > 50 ) { $store = array_slice( $store, -50, null, true ); }
+		update_option( 'sabri_file26_file04_reindex_receipts_v1', $store, false );
+	}
+
+	private function file04_reindex_receipt( $digest ) {
+		$store = get_option( 'sabri_file26_file04_reindex_receipts_v1', array() );
+		return is_array( $store ) && isset( $store[ $digest ] ) && is_array( $store[ $digest ] ) ? $store[ $digest ] : null;
+	}
+
+	private function file04_reindex_job( $job_uuid ) {
+		global $wpdb;
+		if ( '' === $job_uuid ) { return null; }
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT job_uuid,status,counts_json,error_code,finished_at FROM ' . DB::table( 'jobs' ) . ' WHERE job_uuid=%s LIMIT 1', $job_uuid ), ARRAY_A );
+		return is_array( $row ) ? $row : null;
+	}
+
+	private function sha256( $value ) {
+		return is_string( $value ) && 1 === preg_match( '/^[a-f0-9]{64}$/', $value );
+	}
 
 	public function assurance_manifest( $manifests ) {
 		$manifests = is_array( $manifests ) ? $manifests : array();

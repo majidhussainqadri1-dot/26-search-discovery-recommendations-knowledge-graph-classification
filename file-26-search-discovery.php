@@ -3,7 +3,7 @@
  * Plugin Name: File 26 — Search, Discovery, Recommendations, Knowledge Graph and Classification
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Federated, privacy-safe search, discovery, recommendations, taxonomy, knowledge graph and content-classification infrastructure for the Sabri Social Homeopathy Platform.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SABRI_FILE26_VERSION', '1.2.0' );
+define( 'SABRI_FILE26_VERSION', '1.2.1' );
 define( 'SABRI_FILE26_SCHEMA_VERSION', '1.0.0' );
 define( 'SABRI_FILE26_CONTRACT_VERSION', '1.2' );
 define( 'SABRI_FILE26_FILE', __FILE__ );

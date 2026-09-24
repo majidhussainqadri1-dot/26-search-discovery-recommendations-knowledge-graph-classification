@@ -26,6 +26,7 @@ php "$ROOT/tests/corrective-contract-tests.php"
 
 printf '[6/14] New governing-plan completion regressions\n'
 php "$ROOT/tests/central-plan-contract-tests.php"
+php "$ROOT/tests/file04-cutover-contract.php"
 
 printf '[7/14] Sequential 20-round review regressions\n'
 shopt -s nullglob
@@ -43,10 +44,10 @@ printf '[10/14] Required release files\n'
 for file in README.md readme.txt CHANGELOG.md DECISION-LOG.md LICENSE docs/ARCHITECTURE.md docs/CONNECTOR-CONTRACT.md docs/REST-CONTRACT.md docs/SECURITY-THREAT-MODEL.md docs/PRIVACY-RETENTION.md docs/MIGRATION.md docs/ROLLBACK.md docs/STAGING-ACCEPTANCE.md docs/REQUIREMENTS-TRACEABILITY.md docs/REVIEW-AND-CORRECTION-1.0.0.md docs/REVIEW-AND-CORRECTION-1.1.0.md docs/NEW-GOVERNING-PLANS-COMPLETION-1.2.0.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-1.md docs/REVIEW-AND-CORRECTION-1.2.0-ROUND-2.md docs/FILE26-20-ROUND-CORRECTIVE-AUDIT-2026-08-13.md docs/QA-REPORT.md docs/SBOM.md; do test -s "$ROOT/$file"; done
 
 printf '[11/14] Version and governance parity\n'
-grep -q 'Version: 1.2.0' "$ROOT/file-26-search-discovery.php"
-grep -q "SABRI_FILE26_VERSION', '1.2.0'" "$ROOT/file-26-search-discovery.php"
+grep -q 'Version: 1.2.1' "$ROOT/file-26-search-discovery.php"
+grep -q "SABRI_FILE26_VERSION', '1.2.1'" "$ROOT/file-26-search-discovery.php"
 grep -q "SABRI_FILE26_CONTRACT_VERSION', '1.2'" "$ROOT/file-26-search-discovery.php"
-grep -q 'Stable tag: 1.2.0' "$ROOT/readme.txt"
+grep -q 'Stable tag: 1.2.1' "$ROOT/readme.txt"
 grep -qi '#087a4e' "$ROOT/assets/css/file26.css"
 
 printf '[12/14] Deterministic double build\n'
@@ -83,12 +84,13 @@ php "$PACKAGE/tests/test-normalizer-ranking.php" >/dev/null
 php "$PACKAGE/tests/contract-tests.php" >/dev/null
 php "$PACKAGE/tests/corrective-contract-tests.php" >/dev/null
 php "$PACKAGE/tests/central-plan-contract-tests.php" >/dev/null
+php "$PACKAGE/tests/file04-cutover-contract.php" >/dev/null
 for test_file in "$PACKAGE"/tests/review-round-*.php; do php "$test_file" >/dev/null; done
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
 
 mkdir -p "$ROOT/release"
-cp "$TMP/a.zip" "$ROOT/release/26-sabri-file26-search-discovery-1.2.0.zip"
-sha256sum "$ROOT/release/26-sabri-file26-search-discovery-1.2.0.zip" > "$ROOT/release/CHECKSUMS.sha256"
+cp "$TMP/a.zip" "$ROOT/release/26-sabri-file26-search-discovery-1.2.1.zip"
+sha256sum "$ROOT/release/26-sabri-file26-search-discovery-1.2.1.zip" > "$ROOT/release/CHECKSUMS.sha256"
 printf 'ALL LOCAL QA CHECKS PASSED\n'
 cat "$ROOT/release/CHECKSUMS.sha256"
