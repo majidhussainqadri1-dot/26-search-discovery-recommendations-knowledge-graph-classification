@@ -104,6 +104,15 @@ function sabri_file26_ranking_constitution() {
 	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
 }
 
+/** Resolve a File 04 legacy publication reference through the currently loaded migration adapter. */
+function sabri_file26_resolve_file04_legacy( $legacy_id ) {
+	$legacy_id = is_scalar( $legacy_id ) && preg_match( '/^[1-9][0-9]*$/', (string) $legacy_id ) ? (int) $legacy_id : 0;
+	if ( $legacy_id <= 0 ) {
+		return array( 'status'=>'invalid', 'indexable'=>false, 'legacy_id'=>0 );
+	}
+	return apply_filters( 'sabri_file26_legacy_resolution_v1', array( 'status'=>'unmapped', 'indexable'=>false, 'legacy_id'=>$legacy_id ), $legacy_id );
+}
+
 /**
  * Recompute the explainable global verified-doctor ranking projection.
  * Manual calls remain capability-gated inside the service.
