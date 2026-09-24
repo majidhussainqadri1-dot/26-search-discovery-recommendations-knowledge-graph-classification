@@ -3,7 +3,7 @@
  * Plugin Name: File 26 — Search, Discovery, Recommendations, Knowledge Graph and Classification
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Federated, privacy-safe search, discovery, recommendations, taxonomy, knowledge graph and content-classification infrastructure for the Sabri Social Homeopathy Platform.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SABRI_FILE26_VERSION', '1.2.0' );
+define( 'SABRI_FILE26_VERSION', '1.2.1' );
 define( 'SABRI_FILE26_SCHEMA_VERSION', '1.0.0' );
 define( 'SABRI_FILE26_CONTRACT_VERSION', '1.2' );
 define( 'SABRI_FILE26_FILE', __FILE__ );
@@ -102,6 +102,15 @@ function sabri_file26_recommendations( array $request = array() ) {
 
 function sabri_file26_ranking_constitution() {
 	return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution();
+}
+
+/** Resolve a File 04 legacy publication reference through the currently loaded migration adapter. */
+function sabri_file26_resolve_file04_legacy( $legacy_id ) {
+	$legacy_id = is_scalar( $legacy_id ) && preg_match( '/^[1-9][0-9]*$/', (string) $legacy_id ) ? (int) $legacy_id : 0;
+	if ( $legacy_id <= 0 ) {
+		return array( 'status'=>'invalid', 'indexable'=>false, 'legacy_id'=>0 );
+	}
+	return apply_filters( 'sabri_file26_legacy_resolution_v1', array( 'status'=>'unmapped', 'indexable'=>false, 'legacy_id'=>$legacy_id ), $legacy_id );
 }
 
 /**
