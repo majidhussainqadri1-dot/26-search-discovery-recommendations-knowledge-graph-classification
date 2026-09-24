@@ -26,3 +26,10 @@ Rules:
 - Payload is allowlisted and cannot carry secrets, raw clinical/message/payment data or identity documents.
 - `download_allowed` and `download_url` are owner grants, revalidated by the owner at click/delivery time.
 - Delete/restrict events must call the tombstone/restriction contract and be replay-safe.
+
+
+## File 19 saved-search notification ownership contract
+
+File 26 is the canonical owner of saved-query records. File 19 may register a saved search as a notification watch only after the versioned runtime filter `sun_validate_saved_search_ownership` returns an authoritative ownership result for the exact user, owner identifier, and saved-query UUID.
+
+The contract returns only `true`, `false`, or a bounded `WP_Error`. It does not expose query text, encrypted query envelopes, filters, personalization state, or private File 26 storage. Foreign owner identifiers are left untouched for their own canonical owner. Expired or missing File 26 saved queries never authorize a File 19 watch.
