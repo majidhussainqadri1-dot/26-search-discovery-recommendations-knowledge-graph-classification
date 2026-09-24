@@ -37,6 +37,7 @@ final class Central_Plan {
 		add_filter( 'rest_post_dispatch', array( $this, 'secure_route_response' ), 40, 3 );
 		add_filter( 'wp_privacy_personal_data_exporters', array( $this, 'register_exporter' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( $this, 'register_eraser' ) );
+		add_filter( 'sun_validate_saved_search_ownership', array( $this, 'validate_saved_search_ownership' ), 10, 4 );
 		add_action( DB::CRON_RETENTION, array( $this, 'retention' ), 40 );
 		$this->migrate_settings();
 	}
@@ -294,6 +295,43 @@ final class Central_Plan {
 			if ( ! $found ) {
 				return false;
 			}
+		}
+		return true;
+	}
+
+	/**
+	 * Canonical File 26 ownership assertion for notification watches.
+	 *
+	 * File 19 receives only a boolean/WP_Error ownership fact. Query text,
+	 * filters, encrypted envelopes and other private saved-query state never
+	 * cross the owner boundary.
+	 *
+	 * @param mixed  $current Existing result from another owner.
+	 * @param int    $user_id User ID.
+	 * @param string $owner Owner identifier.
+	 * @param string $search_id Saved-query UUID.
+	 * @return mixed
+	 */
+	public function validate_saved_search_ownership( $current, $user_id, $owner, $search_id ) {
+		$owner = sanitize_key( (string) $owner );
+		if ( ! in_array( $owner, array( 'file26', 'file-26', 'search', 'sabri-file26' ), true ) ) {
+			return $current;
+		}
+		$user_id = absint( $user_id );
+		$search_id = strtolower( trim( (string) $search_id ) );
+		if ( $user_id < 1 || ! preg_match( '/^[a-f0-9-]{36}$/', $search_id ) ) {
+			return new \WP_Error( 'file26_saved_query_identity_invalid', 'The saved-query ownership identity is invalid.', array( 'status' => 400 ) );
+		}
+		$queries = $this->load_saved_queries( $user_id );
+		if ( ! isset( $queries[ $search_id ] ) || ! is_array( $queries[ $search_id ] ) ) {
+			return false;
+		}
+		$record = $queries[ $search_id ];
+		if ( empty( $record['id'] ) || ! hash_equals( $search_id, strtolower( (string) $record['id'] ) ) ) {
+			return false;
+		}
+		if ( ! empty( $record['expires_at'] ) && $this->parse_timestamp( $record['expires_at'] ) <= time() ) {
+			return new \WP_Error( 'file26_saved_query_expired', 'The saved query has expired.', array( 'status' => 410 ) );
 		}
 		return true;
 	}
