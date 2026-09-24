@@ -37,6 +37,9 @@ final class Central_Plan {
 		add_filter( 'rest_post_dispatch', array( $this, 'secure_route_response' ), 40, 3 );
 		add_filter( 'wp_privacy_personal_data_exporters', array( $this, 'register_exporter' ) );
 		add_filter( 'wp_privacy_personal_data_erasers', array( $this, 'register_eraser' ) );
+		/* File 26 remains the sole owner of saved-query storage. File 19 may
+		 * ask only this ownership question and never read File 26 private meta. */
+		add_filter( 'sun_validate_saved_search_ownership', array( $this, 'validate_saved_search_ownership' ), 10, 4 );
 		add_action( DB::CRON_RETENTION, array( $this, 'retention' ), 40 );
 		$this->migrate_settings();
 	}
@@ -294,6 +297,24 @@ final class Central_Plan {
 			if ( ! $found ) {
 				return false;
 			}
+		}
+		return true;
+	}
+
+	/** Canonical cross-file ownership assertion for File 19 saved-search watches. */
+	public function validate_saved_search_ownership( $current, $user_id, $owner, $search_id ) {
+		$owner = sanitize_key( (string) $owner );
+		if ( ! in_array( $owner, array( 'file26', 'file-26', 'search', 'sabri-file26' ), true ) ) {
+			return $current;
+		}
+		$user_id = absint( $user_id );
+		$search_id = strtolower( substr( sanitize_text_field( (string) $search_id ), 0, 191 ) );
+		if ( $user_id < 1 || ! preg_match( '/^[a-f0-9-]{36}$/', $search_id ) ) {
+			return new \WP_Error( 'file26_saved_query_identity_invalid', 'The saved-query ownership request is invalid.', array( 'status' => 400 ) );
+		}
+		$queries = $this->load_saved_queries( $user_id );
+		if ( ! isset( $queries[ $search_id ] ) || ! is_array( $queries[ $search_id ] ) ) {
+			return new \WP_Error( 'file26_saved_query_not_owned', 'Saved query not found for this account.', array( 'status' => 403 ) );
 		}
 		return true;
 	}
