@@ -53,6 +53,9 @@ final class Plugin {
 		add_action( 'sabri_file26_source_tombstone', array( $this, 'source_tombstone' ), 10, 5 );
 		add_filter( 'sabri_file24_module_manifest', array( $this, 'assurance_manifest' ) );
 		add_filter( 'sabri_file25_search_provider', array( $this, 'visual_provider' ) );
+		add_filter( 'sabri_file26_accept_file04_contract_v1', array( $this, 'accept_file04_contract' ), 10, 2 );
+		add_action( 'snfla_request_search_reindex', array( $this, 'file04_request_reindex' ), 10, 1 );
+		add_filter( 'snfla_verify_cutover_search_reindex', array( $this, 'file04_verify_reindex' ), 10, 2 );
 		DB::schedule();
 	}
 
@@ -146,6 +149,86 @@ final class Plugin {
 
 	public function source_restrict( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) { return $this->indexer->restrict( $connector, $domain, $object_id, $object_version, $reason ); }
 	public function source_tombstone( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return $this->indexer->tombstone( $connector, $domain, $object_id, $object_version, $reason ); }
+
+
+	/** Accept File 04 migration handoff only when the canonical File 21 connector exists in an index-eligible lane. */
+	public function accept_file04_contract( $existing, $request ) {
+		if ( is_array( $existing ) && ! empty( $existing['accepted'] ) ) { return $existing; }
+		$request = is_array( $request ) ? $request : array();
+		$digest = strtolower( trim( (string) ( $request['manifest_digest'] ?? '' ) ) );
+		$connector = $this->connectors->get( 'file21-publication' );
+		$eligible = is_array( $connector ) && $this->connectors->is_index_eligible( 'file21-publication' );
+		return array(
+			'accepted'         => $eligible && 1 === preg_match( '/^[a-f0-9]{64}$/', $digest ),
+			'status'           => $eligible ? 'accepted' : 'connector_not_index_eligible',
+			'provider_id'      => 'file26-file04-migration-v1',
+			'manifest_digest'  => $digest,
+			'connector'        => 'file21-publication',
+			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+			'verified_at_utc'  => gmdate( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	/** Queue a bounded File 21 reindex for File 04 cutover and persist an acceptance receipt. */
+	public function file04_request_reindex( $context ) {
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->file04_cutover_context_valid( $context ) || ! $this->connectors->is_index_eligible( 'file21-publication' ) ) {
+			return;
+		}
+		$job = $this->indexer->enqueue_reindex(
+			'file21-publication',
+			array(
+				'reason'                  => 'file04_cutover',
+				'source_signature'        => strtolower( (string) $context['source_signature'] ),
+				'reconciliation_checksum' => strtolower( (string) $context['reconciliation_checksum'] ),
+				'request_digest'          => strtolower( (string) $context['request_digest'] ),
+			)
+		);
+		if ( is_wp_error( $job ) ) {
+			$this->security->audit( 'file04_cutover_reindex_rejected', array( 'object_type'=>'migration','object_key'=>'file04','reason'=>$job->get_error_code() ) );
+			return;
+		}
+		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
+		$receipts = is_array( $receipts ) ? $receipts : array();
+		$key = strtolower( (string) $context['request_digest'] );
+		$receipts[ $key ] = array(
+			'verified'                 => true,
+			'provider_id'              => 'file26-file04-reindex-v1',
+			'status'                   => 'accepted',
+			'job_uuid'                 => sanitize_text_field( (string) $job ),
+			'connector'                => 'file21-publication',
+			'source_signature'         => strtolower( (string) $context['source_signature'] ),
+			'reconciliation_checksum'  => strtolower( (string) $context['reconciliation_checksum'] ),
+			'request_digest'           => $key,
+			'verified_at_utc'          => gmdate( 'Y-m-d H:i:s' ),
+		);
+		if ( count( $receipts ) > 32 ) { $receipts = array_slice( $receipts, -32, null, true ); }
+		update_option( 'sabri_file26_file04_cutover_receipts_v1', $receipts, false );
+	}
+
+	/** Return only a fresh, exact-request acceptance receipt to File 04. */
+	public function file04_verify_reindex( $existing, $context ) {
+		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) { return $existing; }
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->file04_cutover_context_valid( $context ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
+		$key = strtolower( (string) $context['request_digest'] );
+		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
+		$row = is_array( $receipts ) && isset( $receipts[ $key ] ) && is_array( $receipts[ $key ] ) ? $receipts[ $key ] : array();
+		if ( empty( $row ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
+		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
+			if ( empty( $row[ $field ] ) || ! hash_equals( strtolower( (string) $context[ $field ] ), strtolower( (string) $row[ $field ] ) ) ) {
+				return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' );
+			}
+		}
+		return $row;
+	}
+
+	private function file04_cutover_context_valid( array $context ) {
+		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
+			if ( empty( $context[ $field ] ) || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( (string) $context[ $field ] ) ) ) { return false; }
+		}
+		return true;
+	}
 
 	public function assurance_manifest( $manifests ) {
 		$manifests = is_array( $manifests ) ? $manifests : array();
