@@ -98,3 +98,8 @@ This record is not a production or staging approval. New candidate branch `integ
 ## Preserved historical R82–R101 closure (original 2026-09-06 review-branch evidence only)
 
 The historical `docs/FILE26-R82-R101-SEQUENTIAL-REVIEW-2026-09-06.md` records **20/20 rounds completed**, including **19 defect-bearing rounds** and one clean round. The closing defect series is R92, R93, R94, R95, R96, R97, R98, R99, R100, R101. These numbers describe the old audited branch, **not** the new integrated-head review, and do not imply current staging or live acceptance.
+
+
+## File 26 v1.3.0 — combined repository QA candidate (not staging/live)
+
+Contract version: `1.3`. This combines the approved Future-24 source with the new main parity changes. The historical R62–R81 results belong to their original separately tested SHAs. Current integration acceptance requires an exact combined-HEAD passing CI run and package integrity; real domain connectors and live deployment remain unverified.
