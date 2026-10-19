@@ -88,3 +88,8 @@ Official GitHub Actions are pinned by immutable SHA; the current checkout, setup
 No live/production claim is made by this report. Exact deployed code, deployed database/schema version and migration state must be verified independently before any live diagnosis or “resolved” claim.
 
 Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
+
+
+## Integration candidate — 2026-10-19 (non-deployment)
+
+This record is not a production or staging approval. New candidate branch `integrate/file26-future24-main-parity-20261019` reconciles the 24 approved Future Search capabilities (v1.3.0) with latest main File 04 cutover, File 19 saved-search contract, owner-revocation cache and schema-verification safeguards. The historical R82–R101 and earlier reviews remain evidence for their own original SHAs, **not** the new combined SHA. Current exact-head PHP/JS/contract/ZIP tests must pass independently. Hostinger deployment/version, database migration state, runtime owner adapters, browser, security and load acceptance remain unverified.
