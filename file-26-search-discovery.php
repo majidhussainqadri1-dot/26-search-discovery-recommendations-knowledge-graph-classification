@@ -102,5 +102,15 @@ function sabri_file26_tombstone_document( $connector, $domain, $object_id, $obje
 function sabri_file26_search( array $request ) { $plugin = \Sabri\File26\Plugin::instance(); $result = $plugin->search()->run( $request ); return $plugin->central_plan()->augment_search_result( $result, $request ); }
 function sabri_file26_recommendations( array $request = array() ) { return \Sabri\File26\Plugin::instance()->recommendations()->get( $request ); }
 function sabri_file26_ranking_constitution() { return \Sabri\File26\Plugin::instance()->central_plan()->ranking_constitution(); }
+/** Resolve a File 04 legacy publication reference through the currently loaded migration adapter. */
+function sabri_file26_resolve_file04_legacy( $legacy_id ) {
+	$legacy_id = is_scalar( $legacy_id ) && preg_match( '/^[1-9][0-9]*$/', (string) $legacy_id ) ? (int) $legacy_id : 0;
+	if ( $legacy_id <= 0 ) {
+		return array( 'status'=>'invalid', 'indexable'=>false, 'legacy_id'=>0 );
+	}
+	return apply_filters( 'sabri_file26_legacy_resolution_v1', array( 'status'=>'unmapped', 'indexable'=>false, 'legacy_id'=>$legacy_id ), $legacy_id );
+}
+
+
 function sabri_file26_future_capabilities() { $future = isset( $GLOBALS['sabri_file26_future_intelligence'] ) ? $GLOBALS['sabri_file26_future_intelligence'] : null; return $future instanceof \Sabri\File26\Future_Intelligence ? $future->capability_manifest() : array(); }
 function sabri_file26_recompute_doctor_ranking( $reason = 'manual' ) { return \Sabri\File26\Plugin::instance()->doctor_ranking()->recompute( (string) $reason ); }
