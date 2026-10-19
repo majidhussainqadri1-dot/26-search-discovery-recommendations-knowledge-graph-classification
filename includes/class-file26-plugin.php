@@ -100,7 +100,7 @@ final class Plugin {
 			'profiles' => array( 'user_id', 'consent', 'opted_out', 'interests_json', 'negatives_json', 'version' ),
 			'jobs' => array( 'job_uuid', 'job_type', 'status', 'cursor_value', 'counts_json', 'attempts', 'lock_token', 'available_at' ),
 			'audit' => array( 'action_name', 'actor_id', 'object_type', 'object_key', 'reason_code', 'trace_id', 'metadata', 'created_at' ),
-			'metrics' => array( 'metric_name', 'dimensions_hash', 'bucket_start', 'metric_value' ),
+			'metrics' => array( 'metric_date', 'metric_key', 'bucket_hash', 'locale', 'count_value', 'sum_value', 'updated_at' ),
 			'rate_limits' => array( 'bucket_key', 'window_start', 'count_value', 'expires_at' ),
 		);
 		foreach ( $requirements as $name => $required_columns ) {
