@@ -35,7 +35,7 @@ jobs:
   forty_round_verification:
     name: Forty full QA review repetitions
     needs: qa
-    if: github.event_name == 'pull_request' && github.head_ref == 'integrate/file26-future24-main-parity-20261019'
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integrate/file26-future24-main-parity-20261019' || github.head_ref == 'audit/file26-fresh40-and-crossrepo-parity-20261019')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -52,5 +52,5 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: file26-forty-full-review-ledger
-          path: release/FILE26-40-AUTOMATED-REVIEW-RESULTS.tsv
+          path: release/FILE26-20261019-FRESH40-RESULTS.tsv
           if-no-files-found: error
