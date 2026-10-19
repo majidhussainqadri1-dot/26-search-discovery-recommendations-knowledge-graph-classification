@@ -12,10 +12,10 @@ final class Doctor_Appeals {
 	public static function required_columns(){return array('id','appeal_uuid','doctor_key','appellant_user_id','reason_text','evidence_json','status','reviewer_id','decision_reason','policy_version','rank_snapshot','version','submitted_at','updated_at','decided_at');}
 	public static function schema_physical_ok(){global $wpdb;$table=self::table();$wpdb->last_error='';$exists=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));if($table!==$exists||''!==(string)$wpdb->last_error){return false;}$wpdb->last_error='';$columns=$wpdb->get_col("SHOW COLUMNS FROM `{$table}`",0);return is_array($columns)&&''===(string)$wpdb->last_error&&!array_diff(self::required_columns(),$columns);}
 
-	public static function install_schema() {
+	public static function install_schema( $force = false ) {
 		global $wpdb;
 		$table = self::table();
-		if ( self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) && self::schema_physical_ok() ) { return true; }
+		if ( ! $force && self::SCHEMA_VERSION === get_option( self::OPTION_SCHEMA ) && self::schema_physical_ok() ) { return true; }
 		delete_option( self::OPTION_SCHEMA );
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php'; $charset = $wpdb->get_charset_collate();
 		dbDelta( "CREATE TABLE $table (
