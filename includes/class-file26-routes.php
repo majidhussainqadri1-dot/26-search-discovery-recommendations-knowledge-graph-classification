@@ -39,11 +39,22 @@ final class Routes {
 
 	public function template_redirect() {
 		$route = get_query_var( 'sabri_f26_route' ); if ( ! $route ) { return; }
-		$this->enqueue_assets(); status_header( 200 );
-		// All File 26 route HTML remains no-store until visibility-aware mutation-bound
-		// cache invalidation/epoch support exists. Public indexability is separate from caching.
+		$this->enqueue_assets();
+		$http_status = 200;
+		if ( 'topic' === $route ) {
+			$term = $this->taxonomy->get( get_query_var( 'sabri_f26_term' ) );
+			if ( ! $term || ! in_array( $term['status'], array( 'active', 'merged' ), true ) ) {
+				$http_status = 404;
+			} elseif ( 'merged' === $term['status'] ) {
+				$target = ! empty( $term['redirect_uuid'] ) ? $this->taxonomy->get( $term['redirect_uuid'] ) : null;
+				if ( ! $target || 'active' !== $target['status'] ) { $http_status = 404; }
+			}
+		}
+		status_header( $http_status );
+		// A topic is derived from owner records that can be restricted or deleted at any time.
+		// Never publish personalized or revoked topic projections to a shared cache.
 		nocache_headers();
-		if ( 'topic' !== $route ) {
+		if ( 'topic' !== $route || 200 !== $http_status ) {
 			add_filter( 'wp_robots', static function ( $robots ) { $robots['noindex'] = true; $robots['follow'] = true; return $robots; } );
 		}
 		get_header(); echo '<main id="primary" class="sabri-f26-page" tabindex="-1">';
