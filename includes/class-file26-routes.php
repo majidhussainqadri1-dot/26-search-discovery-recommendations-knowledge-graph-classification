@@ -51,10 +51,12 @@ final class Routes {
 			}
 		}
 		status_header( $http_status );
+		// A topic is derived from owner records that can be restricted or deleted at any time.
+		// Never publish personalized or revoked topic projections to a shared cache.
+		nocache_headers();
 		if ( 'topic' !== $route || 200 !== $http_status ) {
-			nocache_headers();
 			add_filter( 'wp_robots', static function ( $robots ) { $robots['noindex'] = true; $robots['follow'] = true; return $robots; } );
-		} else { header( 'Cache-Control: public, max-age=300, stale-while-revalidate=600' ); }
+		}
 		get_header(); echo '<main id="primary" class="sabri-f26-page" tabindex="-1">';
 		if ( 'search' === $route ) { echo $this->search_shortcode(); }
 		elseif ( 'discover' === $route ) { echo $this->discover_shortcode(); }

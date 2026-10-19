@@ -107,7 +107,7 @@ final class REST {
 	public function review_doctor_appeal( \WP_REST_Request $request ) { $p = (array) $request->get_json_params(); return $this->respond( $this->doctor_appeals->review( $request['appeal'], isset( $p['decision'] ) ? $p['decision'] : '', isset( $p['reason'] ) ? $p['reason'] : '', isset( $p['expected_version'] ) ? $p['expected_version'] : 0 ) ); }
 	public function health() { return $this->respond( $this->health->snapshot() ); }
 	public function reindex( \WP_REST_Request $request ) { $job = $this->indexer->enqueue_reindex( sanitize_key( $request->get_param( 'connector' ) ), (array) $request->get_param( 'scope' ) ); return is_wp_error( $job ) ? $job : $this->respond( array( 'job_uuid' => $job ), 202 ); }
-	public function reconcile() { $this->indexer->reconcile(); return $this->respond( array( 'reconciled' => true ) ); }
+	public function reconcile() { return $this->respond( $this->indexer->reconcile() ); }
 	public function create_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->create( (array) $request->get_json_params() ), 201 ); }
 	public function submit_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->submit( $request['term'] ) ); }
 	public function approve_term( \WP_REST_Request $request ) { return $this->respond( $this->taxonomy->approve( $request['term'] ) ); }
@@ -138,8 +138,9 @@ final class REST {
 		$response = new \WP_REST_Response( $data, $status );
 		$response->header( 'X-Sabri-File26-Contract', SABRI_FILE26_CONTRACT_VERSION );
 		$response->header( 'X-Content-Type-Options', 'nosniff' );
-		if ( $public_cache && ! is_user_logged_in() ) { $response->header( 'Cache-Control', 'public, max-age=60, stale-while-revalidate=120' ); $response->header( 'ETag', '"' . hash( 'sha256', wp_json_encode( $data ) ) . '"' ); }
-		else { $response->header( 'Cache-Control', 'private, no-store' ); }
+		// Any public projection can be revoked by a native owner. Without verified purge
+		// across CDN/proxy/client layers, no File 26 dynamic response is shared-cacheable.
+		$response->header( 'Cache-Control', 'private, no-store' );
 		return $response;
 	}
 }

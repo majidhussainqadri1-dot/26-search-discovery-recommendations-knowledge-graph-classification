@@ -46,19 +46,8 @@ final class Search {
 		}
 
 		$audience = $this->security->audience();
-		$sensitive_query = $this->security->contains_sensitive_query( $query );
-		$public_cache = empty( $audience['authenticated'] ) && empty( $filters['availability'] ) && ! $sensitive_query;
-		$cache_key = 'search:' . hash( 'sha256', wp_json_encode( array(
-			'q' => $query, 'locale' => $locale, 'filters' => $filters, 'offset' => $offset,
-			'limit' => $limit, 'policy' => $policy_version,
-		) ) );
-		if ( $public_cache ) {
-			$cached = wp_cache_get( $cache_key, 'sabri_file26' );
-			if ( is_array( $cached ) ) {
-				$cached['trace_id'] = $trace;
-				return $cached;
-			}
-		}
+		// Dynamic owner visibility and emergency revocations prohibit shared result caching.
+		// Re-enable only with owner-validated, cross-layer revocation and cache eviction evidence.
 
 		$where = array( "d.state IN ('published','active','corrected','retracted')" );
 		$args = array();
@@ -202,9 +191,6 @@ final class Search {
 		);
 		if ( DB::setting( 'telemetry_enabled', true ) ) {
 			$this->record_metric( $query, $locale, count( $results ), $trace, ( microtime( true ) - $started_at ) * 1000 );
-		}
-		if ( $public_cache ) {
-			wp_cache_set( $cache_key, $response, 'sabri_file26', 300 );
 		}
 		return $response;
 	}
