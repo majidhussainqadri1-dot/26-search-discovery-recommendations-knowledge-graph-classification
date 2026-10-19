@@ -61,7 +61,43 @@ final class Plugin {
 
 	private function main_schema_tables_present(){global $wpdb;$required=array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits');foreach($required as $name){$table=DB::table($name);if($table!==$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)))){return false;}}return ! is_wp_error( $this->verify_schema_shape() );}
 	private function appeals_schema_table_present(){global $wpdb;$table=Doctor_Appeals::table();return $table===$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));}
-	private function ensure_schema_current(){global $wpdb;$main_current=SABRI_FILE26_SCHEMA_VERSION===(string)get_option(DB::OPTION_SCHEMA);$appeal_current=Doctor_Appeals::SCHEMA_VERSION===(string)get_option(Doctor_Appeals::OPTION_SCHEMA);$main_present=$this->main_schema_tables_present();$appeal_present=$this->appeals_schema_table_present();if($main_current&&$appeal_current&&$main_present&&$appeal_present){return true;}$lock_name='file26:schema-migration';if('1'!==(string)$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)',$lock_name))){return new \WP_Error('file26_migration_busy','File 26 schema migration is already running.');}try{$main_current=SABRI_FILE26_SCHEMA_VERSION===(string)get_option(DB::OPTION_SCHEMA);$appeal_current=Doctor_Appeals::SCHEMA_VERSION===(string)get_option(Doctor_Appeals::OPTION_SCHEMA);$main_present=$this->main_schema_tables_present();$appeal_present=$this->appeals_schema_table_present();if((!$main_current||!$main_present)&&!DB::install_schema()){return new \WP_Error('file26_schema_incomplete','The main File 26 schema migration could not be verified.');}if((!$appeal_current||!$appeal_present)&&!Doctor_Appeals::install_schema()){return new \WP_Error('file26_schema_incomplete','The ranking appeals schema migration could not be verified.');}if(!$this->main_schema_tables_present()){return new \WP_Error('file26_schema_incomplete','A required File 26 table is missing after migration.');}if(!$this->appeals_schema_table_present()){return new \WP_Error('file26_schema_incomplete','The ranking appeals table is missing after migration.');}if(SABRI_FILE26_SCHEMA_VERSION!==(string)get_option(DB::OPTION_SCHEMA)||Doctor_Appeals::SCHEMA_VERSION!==(string)get_option(Doctor_Appeals::OPTION_SCHEMA)){return new \WP_Error('file26_schema_marker_incomplete','Schema version evidence does not match installed tables.');}return true;}finally{$wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)',$lock_name));}}
+	private function ensure_schema_current() {
+		global $wpdb;
+		$main_current = SABRI_FILE26_SCHEMA_VERSION === (string) get_option( DB::OPTION_SCHEMA );
+		$appeal_current = Doctor_Appeals::SCHEMA_VERSION === (string) get_option( Doctor_Appeals::OPTION_SCHEMA );
+		$main_present = $this->main_schema_tables_present();
+		$appeal_present = $this->appeals_schema_table_present();
+		$shape = $this->verify_schema_shape();
+		if($main_current&&$appeal_current&&$main_present&&$appeal_present && true === $shape) { return true; }
+		$lock_name = 'file26:schema-migration';
+		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock_name ) ) ) {
+			return new \WP_Error( 'file26_migration_busy', 'File 26 schema migration is already running.' );
+		}
+		try {
+			// Fresh deployed table/column evidence overrides stale version options.
+			$shape = $this->verify_schema_shape();
+			if ( ! $main_current || is_wp_error( $shape ) ) {
+				if ( ! DB::install_schema() ) { return new \WP_Error( 'file26_schema_incomplete', 'File 26 schema upgrade failed.' ); }
+			}
+			if ( ! $appeal_current || is_wp_error( $shape ) ) {
+				if ( ! Doctor_Appeals::install_schema( true ) ) { return new \WP_Error( 'file26_appeal_schema_incomplete', 'Ranking appeals schema upgrade failed.' ); }
+			}
+			$verified = $this->verify_schema_shape();
+			if ( is_wp_error( $verified ) ) { return $verified; }
+			if ( ! $this->main_schema_tables_present() || ! $this->appeals_schema_table_present() ) {
+				return new \WP_Error( 'file26_schema_incomplete', 'File 26 tables did not pass post-migration verification.' );
+			}
+			update_option( DB::OPTION_SCHEMA, SABRI_FILE26_SCHEMA_VERSION, false );
+			update_option( Doctor_Appeals::OPTION_SCHEMA, Doctor_Appeals::SCHEMA_VERSION, false );
+			if ( SABRI_FILE26_SCHEMA_VERSION !== (string) get_option( DB::OPTION_SCHEMA ) || Doctor_Appeals::SCHEMA_VERSION !== (string) get_option( Doctor_Appeals::OPTION_SCHEMA ) ) {
+				return new \WP_Error( 'file26_schema_marker_incomplete', 'Schema options are inconsistent with installed structures.' );
+			}
+			return true;
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
+	}
+
 	public function maybe_upgrade(){return $this->ensure_schema_current();}
 	public function cron_schedules($schedules){$schedules['sabri_file26_monthly']=array('interval'=>30*DAY_IN_SECONDS,'display'=>'Every 30 days — File 26');return $schedules;}
 	public function retain_doctor_appeals(){global $wpdb;$table=Doctor_Appeals::table();$final_days=max(365,min(3650,(int)DB::setting('ranking_appeal_retention_days',1095)));$open_days=max($final_days,min(3650,(int)DB::setting('ranking_appeal_open_retention_days',1460)));$final_cutoff=gmdate('Y-m-d H:i:s',time()-($final_days*DAY_IN_SECONDS));$open_cutoff=gmdate('Y-m-d H:i:s',time()-($open_days*DAY_IN_SECONDS));if(false===$wpdb->query('START TRANSACTION')){$this->security->audit('doctor_ranking_appeal_retention_failed',array('object_type'=>'ranking_appeal','object_key'=>'retention','reason'=>'transaction_unavailable'));return new \WP_Error('file26_appeal_retention_transaction_unavailable','Ranking appeal retention transaction could not be started safely.');}try{$withdrawn=$wpdb->query($wpdb->prepare("UPDATE $table SET status='withdrawn',reason_text=%s,evidence_json='[]',decision_reason=%s,appellant_user_id=0,version=version+1,updated_at=%s,decided_at=%s WHERE status IN ('submitted','under_review','changes_requested') AND submitted_at<%s",'[redacted after retention expiry]','Closed after the documented maximum open-appeal retention period.',DB::now(),DB::now(),$open_cutoff));if(false===$withdrawn){throw new \RuntimeException('Appeal withdrawal retention failed.');}$deleted=$wpdb->query($wpdb->prepare("DELETE FROM $table WHERE status IN ('upheld','corrected','rejected','withdrawn') AND COALESCE(decided_at,updated_at)<%s",$final_cutoff));if(false===$deleted){throw new \RuntimeException('Appeal deletion retention failed.');}if(false===$wpdb->query('COMMIT')){throw new \RuntimeException('Appeal retention commit failed.');}}catch(\Throwable $e){$wpdb->query('ROLLBACK');$this->security->audit('doctor_ranking_appeal_retention_failed',array('object_type'=>'ranking_appeal','object_key'=>'retention'));return new \WP_Error('file26_appeal_retention_failed','Ranking appeal retention failed atomically.');}if($withdrawn||$deleted){$this->security->audit('doctor_ranking_appeal_retention',array('object_type'=>'ranking_appeal','object_key'=>'retention','metadata'=>array('withdrawn_count'=>(int)$withdrawn,'deleted_count'=>(int)$deleted,'final_retention_days'=>$final_days,'open_retention_days'=>$open_days)));}return array('withdrawn'=>(int)$withdrawn,'deleted'=>(int)$deleted);}
