@@ -60,6 +60,17 @@ This record contains **40 distinct scoped source-level checks**, each mapped to 
 2. **D26-20261019-02: Revoked result retention in caches.** Search results used `wp_cache_get/wp_cache_set` for 300 seconds, with no complete owner-revocation eviction; REST projections advertised public max-age for up to 60 seconds. Tombstone/restriction could not guarantee instantaneous cache removal. **Correction:** disable shared result object caching and force `Cache-Control: private, no-store` for dynamic File 26 REST projections until proven distributed revocation is installed. Tradeoff: relevance performance/load must be rebenchmarked before staging acceptance.
 3. **D26-20261019-03: False reconciliation success.** `REST::reconcile()` discarded the return value of `Indexer::reconcile()` and always sent `reconciled=true`, even when it returned `WP_Error`. **Correction:** propagate the actual result through `REST::respond()`.
 
+4. **D26-20261019-04: Invalid schema-verifier column requirements.** Source `Plugin::verify_schema_shape()` required obsolete metrics columns while `DB` and metric consumers use `metric_date,metric_key,bucket_hash,locale,count_value,sum_value,updated_at`. That could fail closed on otherwise correctly migrated installations. **Correction:** verifier aligned to current canonical SQL shape and `tests/review-round-26-metrics-schema-parity.php` added (also independently documented in historic PR #14).
+
+## Authoritative Future-24 amendment gap (found after basic 40 checks)
+
+The supplied File 26 v1.1 document has **Chapter 17**, approved 13 August 2026, introducing requirements **F26-FUT-01 through F26-FUT-24**, runtime target **1.3.0** and future contract `sabri.file26.future.v1.3`. These are in addition to the original 36 FRs and were **not** covered by the initial 40 source-symbol checks; source-presence is not plan completeness.
+
+- Current default `main` at the frozen HEAD declares runtime **1.2.0** and does **not** have the Future 24 runtime files, Future JavaScript, contract tests or `/future/*` route manifest: **24/24 approved Future capabilities not integrated into current main**.
+- The completed Future-24 code is held in **separate unmerged branches**, notably `review/file26-v1.3.0-r102-r121-2026-09-06` at `8c3a4be15dbebd6f197876a65e2374be14f8f7b6`. That branch reports earlier green GitHub QA, but it is **260 commits ahead and 26 commits behind main** relative to their merge base `89fd57bb9408dddf5f6390982ba4c55d87752286`. Its older CI does **not** validate a newly combined main build.
+- Existing Future PRs #7–#10 are separate historical candidates/reviews; do not conflate them with the default branch or live code. A safe Feature Integration/Deployment-Parity review must reconcile File04 cutover, File19 saved-search delivery, metrics schema verifier, revocation caching and each upstream owner contract, then run **exact integrated HEAD** QA and staging acceptance.
+- **Defects in current main requiring branch integration:** 24 Future contract gaps (one umbrella unmerged integration blocker), not falsely asserted to be 24 distinct proven runtime defects. Do not 'fix' by automatically overwriting later `main` with an older branch tree.
+
 ## Tests and restrictions
 
 - Existing Round 03 source check updated to assert that the revoked-result shared cache cannot run.
