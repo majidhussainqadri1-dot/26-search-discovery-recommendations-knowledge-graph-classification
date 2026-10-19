@@ -3,7 +3,6 @@
 $root = dirname( __DIR__ );
 $source = file_get_contents( $root . '/includes/class-file26-search.php' );
 $checks = array(
-	'owner visibility and emergency revocations prohibit shared result caching' => 'revocation safety requires no public result caching',
 	'if ( $at === $bt )' => 'equal freshness timestamps receive deterministic tie-break',
 	'strcmp( $a[\'canonical_key\'], $b[\'canonical_key\'] )' => 'canonical key is stable sort tie-break',
 );

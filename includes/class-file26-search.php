@@ -25,10 +25,16 @@ final class Search {
 		}
 		$query = $this->security->sanitize_query( isset( $request['q'] ) ? $request['q'] : '' );
 		$locale = isset( $request['locale'] ) ? substr( sanitize_text_field( $request['locale'] ), 0, 20 ) : determine_locale();
+		if ( '' === trim( (string) $locale ) ) {
+			$locale = determine_locale();
+		}
 		$limit = isset( $request['limit'] ) ? (int) $request['limit'] : (int) DB::setting( 'results_per_page', 20 );
 		$limit = max( 1, min( (int) DB::setting( 'max_results_per_page', 30 ), $limit ) );
 		$filters = $this->sanitize_filters( isset( $request['filters'] ) ? $request['filters'] : array() );
 		$policy_version = $this->ranking->policy_version();
+		if ( $this->ranking->policy_read_failed() ) {
+			return new \WP_Error( 'file26_ranking_policy_read_failed', 'The active ranking policy could not be read safely.', array( 'status' => 503, 'trace_id' => $trace ) );
+		}
 		$cursor_context = hash( 'sha256', wp_json_encode( array(
 			'q' => $this->normalizer->normalize( $query ), 'locale' => $locale, 'filters' => $filters,
 			'limit' => $limit, 'policy' => $policy_version,
@@ -36,7 +42,7 @@ final class Search {
 		$offset = 0;
 		if ( ! empty( $request['cursor'] ) ) {
 			$cursor = $this->security->verify_cursor( $request['cursor'] );
-			if ( ! $cursor || empty( $cursor['p'] ) || empty( $cursor['h'] ) || $cursor['p'] !== $policy_version || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) {
+			if ( ! $cursor || empty( $cursor['p'] ) || empty( $cursor['h'] ) || ! array_key_exists( 'o', $cursor ) || ! is_numeric( $cursor['o'] ) || $cursor['p'] !== $policy_version || ! hash_equals( $cursor_context, (string) $cursor['h'] ) ) {
 				return new \WP_Error( 'file26_invalid_cursor', 'The result cursor is invalid or expired.', array( 'status' => 400, 'trace_id' => $trace ) );
 			}
 			$offset = max( 0, min( 100000, (int) $cursor['o'] ) );
@@ -46,8 +52,9 @@ final class Search {
 		}
 
 		$audience = $this->security->audience();
-		// Dynamic owner visibility and emergency revocations prohibit shared result caching.
-		// Re-enable only with owner-validated, cross-layer revocation and cache eviction evidence.
+		$sensitive_query = $this->security->contains_sensitive_query( $query );
+		/* Fail-safe: public result caching stays disabled until every visibility/connector/classification mutation is bound to a cache epoch. */
+		// Never share derived results across owner revocation or privacy transitions.
 
 		$where = array( "d.state IN ('published','active','corrected','retracted')" );
 		$args = array();
@@ -122,7 +129,11 @@ final class Search {
 		while ( $scan_offset < $max_scan ) {
 			$sql = $base_sql . ' LIMIT %d OFFSET %d';
 			$query_args = array_merge( $args, array( $batch_size, $scan_offset ) );
+			$wpdb->last_error = '';
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $query_args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( null === $rows && '' !== (string) $wpdb->last_error ) {
+				return new \WP_Error( 'file26_search_read_failed', 'Search candidates could not be read safely.', array( 'status' => 503, 'trace_id' => $trace ) );
+			}
 			if ( ! $rows ) {
 				break;
 			}
@@ -148,7 +159,6 @@ final class Search {
 			$scan_limit_hit = true;
 		}
 
-		// Active, public, provenance-governed graph edges contribute only a bounded relationship signal.
 		$eligible = $this->apply_graph_relationship_scores( $eligible );
 		$ranked = $this->ranking->sort_and_diversify( $eligible, $query, count( $eligible ) );
 		if ( ! empty( $filters['sort'] ) && in_array( $filters['sort'], array( 'newest', 'oldest', 'authority' ), true ) ) {
@@ -192,6 +202,7 @@ final class Search {
 		if ( DB::setting( 'telemetry_enabled', true ) ) {
 			$this->record_metric( $query, $locale, count( $results ), $trace, ( microtime( true ) - $started_at ) * 1000 );
 		}
+
 		return $response;
 	}
 
@@ -224,7 +235,7 @@ final class Search {
 		);
 		$output = array();
 		$audience = array( 'authenticated' => false, 'valid' => true, 'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array() );
-		foreach ( $rows as $row ) {
+		foreach ( (array) $rows as $row ) {
 			$row = $this->hydrate_row( $row );
 			if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) {
 				continue;
@@ -290,16 +301,27 @@ final class Search {
 			return array();
 		}
 		$clean = array();
-		foreach ( array( 'entity_type', 'country', 'location', 'availability', 'connector', 'domain', 'topic', 'sort', 'language' ) as $key ) {
+		foreach ( array( 'entity_type', 'availability', 'connector', 'domain', 'topic', 'sort' ) as $key ) {
 			if ( ! empty( $filters[ $key ] ) ) {
-				$clean[ $key ] = 'language' === $key ? substr( sanitize_text_field( $filters[ $key ] ), 0, 20 ) : sanitize_key( $filters[ $key ] );
+				$clean[ $key ] = sanitize_key( $filters[ $key ] );
 			}
 		}
+		foreach ( array( 'country', 'location' ) as $key ) {
+			if ( ! empty( $filters[ $key ] ) ) {
+				$clean[ $key ] = substr( sanitize_text_field( $filters[ $key ] ), 0, 191 );
+			}
+		}
+		if ( ! empty( $filters['language'] ) ) {
+			$clean['language'] = substr( sanitize_text_field( $filters['language'] ), 0, 20 );
+		}
 		if ( ! empty( $filters['author'] ) ) {
-			$clean['author'] = sanitize_text_field( $filters['author'] );
+			$clean['author'] = substr( sanitize_text_field( $filters['author'] ), 0, 191 );
 		}
 		foreach ( array( 'date_from', 'date_to' ) as $date_key ) {
-			if ( ! empty( $filters[ $date_key ] ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters[ $date_key ] ) ) {
+			if ( empty( $filters[ $date_key ] ) || ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', (string) $filters[ $date_key ], $m ) ) {
+				continue;
+			}
+			if ( checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
 				$clean[ $date_key ] = $filters[ $date_key ];
 			}
 		}
@@ -370,6 +392,7 @@ final class Search {
 		foreach ( $facets as &$values ) {
 			arsort( $values );
 		}
+		unset( $values );
 		return $facets;
 	}
 

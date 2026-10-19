@@ -27,7 +27,7 @@ $dangerous_vars = '(?:this|wpdb|audience|query|document|manifest|target|source|e
 foreach ( $tests as $test ) {
 	if ( basename( $test ) === basename( __FILE__ ) ) { continue; }
 	$content = file_get_contents( $test );
-	if ( preg_match( '/"[^"\n]*\$' . $dangerous_vars . '(?:->|\[|\b)[^"\n]*"/', $content, $match ) ) {
+	if ( preg_match( '/"[^"\n]*(?<!\\\\)\$' . $dangerous_vars . '(?:->|\[|\b)[^"\n]*"/', $content, $match ) ) {
 		fwrite( STDERR, 'FAIL: interpolation-prone regression literal in ' . basename( $test ) . ': ' . $match[0] . "\n" );
 		$failures++;
 	}
