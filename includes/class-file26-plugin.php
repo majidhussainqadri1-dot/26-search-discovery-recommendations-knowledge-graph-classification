@@ -147,12 +147,6 @@ final class Plugin {
 		return true;
 	}
 
-	public function assurance_manifest( $manifests ) {
-		$manifests = is_array( $manifests ) ? $manifests : array();
-		$manifests['file26'] = array( 'file' => 26, 'name' => 'Search, Discovery, Recommendations, Knowledge Graph and Classification', 'version' => SABRI_FILE26_VERSION, 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'data_classes' => array( 'C1-public-derivative', 'C2-internal', 'C3-private-derived' ), 'native_controls' => array( 'three-stage-visibility','production-lane-connector-isolation','tombstone-purge','query-redaction','bounded-graph','consent-controls','separation-of-duties','dual-approved-policy-rollback','doctor-ranking-appeals','doctor-ranking-appeal-retention','required-owner-contract-gate','advanced-search','account-owned-saved-queries','zero-result-recovery','search-safety-diversion','index-freshness-evidence','privacy-minimized-editorial-radar','public-ranking-constitution','single-free-tier-rank-parity','rate-limits','audit' ), 'health' => array( $this->health, 'snapshot' ) );
-		return $manifests;
-	}
-
 	public function search_contract(array $request){$result=$this->search->run($request);return $this->central_plan->augment_search_result($result,$request);}public function visual_provider($providers){$providers=is_array($providers)?$providers:array();$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.3','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers;}
 	public function connectors(){return $this->connectors;}public function owner_contracts(){return $this->owner_contracts;}public function indexer(){return $this->indexer;}public function search(){return $this->search;}public function recommendations(){return $this->recommendations;}public function taxonomy(){return $this->taxonomy;}public function graph(){return $this->graph;}public function doctor_ranking(){return $this->doctor_ranking;}public function doctor_appeals(){return $this->doctor_appeals;}public function governance(){return $this->governance;}public function health(){return $this->health;}public function central_plan(){return $this->central_plan;}
 }
