@@ -11,10 +11,55 @@ final class Plugin {
 		if($this->booted){return;}$this->booted=true;load_plugin_textdomain('sabri-file26',false,dirname(plugin_basename(SABRI_FILE26_FILE)).'/languages');
 		$migration=$this->ensure_schema_current();if(is_wp_error($migration)){$this->fail_closed_notice(__('File 26 is fail-closed because its database migration could not be verified. Review migration evidence before reactivation.','sabri-file26'));return;}
 		if(!Roles::install()){$this->fail_closed_notice(__('File 26 is fail-closed because its separation-of-duties role model could not be verified.','sabri-file26'));return;}
-		add_filter('sabri_file26_connector_manifests',array($this->owner_contracts,'collect'),5);add_filter('sabri_file26_activation_gate_approved',array($this->owner_contracts,'activation_gate'),10,3);$this->connectors->boot();add_action('init',array($this->routes,'register'),20);add_action('rest_api_init',array($this->rest,'register'));add_action('admin_init',array($this,'maybe_upgrade'));$this->admin->register();$this->privacy->register();$this->central_plan->boot();add_action(DB::CRON_QUEUE,array($this->indexer,'process_queue'));add_action(DB::CRON_RECONCILE,array($this->indexer,'reconcile'));add_action(DB::CRON_RETENTION,array($this->indexer,'retention'));add_action(DB::CRON_RETENTION,array($this,'retain_doctor_appeals'),20);add_action(DB::CRON_DOCTOR_RANKING,array($this->doctor_ranking,'recompute'));add_action('sabri_file26_doctor_ranking_recompute_requested',array($this,'recompute_doctor_ranking_after_appeal'),10,2);add_filter('cron_schedules',array($this,'cron_schedules'));add_action('sabri_file26_source_upsert',array($this->indexer,'upsert'),10,1);add_action('sabri_file26_source_restrict',array($this,'source_restrict'),10,5);add_action('sabri_file26_source_tombstone',array($this,'source_tombstone'),10,5);add_filter('sabri_file24_module_manifest',array($this,'assurance_manifest'));add_filter('sabri_file25_search_provider',array($this,'visual_provider'));
+		add_filter('sabri_file26_connector_manifests',array($this->owner_contracts,'collect'),5);add_filter('sabri_file26_activation_gate_approved',array($this->owner_contracts,'activation_gate'),10,3);$this->connectors->boot();add_action('init',array($this->routes,'register'),20);add_action('rest_api_init',array($this->rest,'register'));add_action('admin_init',array($this,'maybe_upgrade'));$this->admin->register();$this->privacy->register();$this->central_plan->boot();add_action(DB::CRON_QUEUE,array($this->indexer,'process_queue'));add_action(DB::CRON_RECONCILE,array($this->indexer,'reconcile'));add_action(DB::CRON_RETENTION,array($this->indexer,'retention'));add_action(DB::CRON_RETENTION,array($this,'retain_doctor_appeals'),20);add_action(DB::CRON_DOCTOR_RANKING,array($this->doctor_ranking,'recompute'));add_action('sabri_file26_doctor_ranking_recompute_requested',array($this,'recompute_doctor_ranking_after_appeal'),10,2);add_filter('cron_schedules',array($this,'cron_schedules'));add_action('sabri_file26_source_upsert',array($this->indexer,'upsert'),10,1);add_action('sabri_file26_source_restrict',array($this,'source_restrict'),10,5);add_action('sabri_file26_source_tombstone',array($this,'source_tombstone'),10,5);add_filter('sabri_file24_module_manifest',array($this,'assurance_manifest'));add_filter('sabri_file25_search_provider',array($this,'visual_provider'));add_filter( 'sabri_file26_accept_file04_contract_v1', array( $this, 'accept_file04_contract' ), 10, 2 );add_action( 'snfla_request_search_reindex', array( $this, 'file04_request_reindex' ), 10, 1 );add_filter( 'snfla_verify_cutover_search_reindex', array( $this, 'file04_verify_reindex' ), 10, 2 );
 		if(!DB::schedule()){$this->fail_closed_notice(__('File 26 is fail-closed because required background schedules could not be verified.','sabri-file26'));}
 	}
-	private function main_schema_tables_present(){global $wpdb;$required=array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits');foreach($required as $name){$table=DB::table($name);if($table!==$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)))){return false;}}return true;}
+	/** Table existence is insufficient: verify critical columns required by runtime contracts. */
+	private function verify_schema_shape() {
+		global $wpdb;
+		$requirements = array(
+			'connectors' => array( 'slug', 'owner_file', 'contract_version', 'status', 'manifest', 'last_event_version', 'health_state' ),
+			'documents' => array( 'canonical_key', 'connector_slug', 'object_id', 'object_version', 'entity_type', 'state', 'visibility', 'freshness_at', 'payload', 'source_event_sequence', 'checksum' ),
+			'tombstones' => array( 'canonical_key', 'object_version', 'reason_class', 'expires_at' ),
+			'terms' => array( 'term_uuid', 'slug', 'language', 'owner_file', 'status', 'version', 'redirect_uuid' ),
+			'term_aliases' => array( 'term_uuid', 'alias_normalized', 'language', 'status' ),
+			'classifications' => array( 'object_key', 'term_uuid', 'confidence', 'status', 'provenance', 'version' ),
+			'nodes' => array( 'node_key', 'node_type', 'visibility', 'state', 'version' ),
+			'edges' => array( 'edge_uuid', 'source_key', 'target_key', 'edge_type', 'provenance', 'state', 'visibility', 'version' ),
+			'ranking_policies' => array( 'policy_uuid', 'context_name', 'audience', 'version', 'status', 'features_json', 'approval_one', 'approval_two', 'effective_at' ),
+			'feedback' => array( 'idempotency_key', 'user_id', 'feedback_type', 'active', 'expires_at' ),
+			'profiles' => array( 'user_id', 'consent', 'opted_out', 'interests_json', 'negatives_json', 'version' ),
+			'jobs' => array( 'job_uuid', 'job_type', 'status', 'cursor_value', 'counts_json', 'attempts', 'lock_token', 'available_at' ),
+			'audit' => array( 'action_name', 'actor_id', 'object_type', 'object_key', 'reason_code', 'trace_id', 'metadata', 'created_at' ),
+			'metrics' => array( 'metric_date', 'metric_key', 'bucket_hash', 'locale', 'count_value', 'sum_value', 'updated_at' ),
+			'rate_limits' => array( 'bucket_key', 'window_start', 'count_value', 'expires_at' ),
+		);
+		foreach ( $requirements as $name => $required_columns ) {
+			$table = DB::table( $name );
+			if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) {
+				return new \WP_Error( 'file26_schema_incomplete', 'A required File 26 table is missing after migration.' );
+			}
+			$columns = (array) $wpdb->get_col( 'SHOW COLUMNS FROM `' . esc_sql( $table ) . '`', 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			foreach ( $required_columns as $column ) {
+				if ( ! in_array( $column, $columns, true ) ) {
+					return new \WP_Error( 'file26_schema_column_missing', sprintf( 'File 26 schema verification failed: %s.%s is missing.', $name, $column ) );
+				}
+			}
+		}
+		$appeals = Doctor_Appeals::table();
+		if ( $appeals !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $appeals ) ) ) ) {
+			return new \WP_Error( 'file26_schema_incomplete', 'The ranking appeals table is missing after migration.' );
+		}
+		$appeal_columns = (array) $wpdb->get_col( 'SHOW COLUMNS FROM `' . esc_sql( $appeals ) . '`', 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		foreach ( array( 'appeal_uuid', 'doctor_key', 'appellant_user_id', 'status', 'reviewer_id', 'policy_version', 'rank_snapshot', 'version', 'submitted_at', 'updated_at', 'decided_at' ) as $column ) {
+			if ( ! in_array( $column, $appeal_columns, true ) ) {
+				return new \WP_Error( 'file26_schema_column_missing', sprintf( 'File 26 ranking-appeal schema verification failed: %s is missing.', $column ) );
+			}
+		}
+		return true;
+	}
+
+	private function main_schema_tables_present(){global $wpdb;$required=array('connectors','documents','tombstones','terms','term_aliases','classifications','nodes','edges','ranking_policies','feedback','profiles','jobs','audit','metrics','rate_limits');foreach($required as $name){$table=DB::table($name);if($table!==$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)))){return false;}}return ! is_wp_error( $this->verify_schema_shape() );}
 	private function appeals_schema_table_present(){global $wpdb;$table=Doctor_Appeals::table();return $table===$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($table)));}
 	private function ensure_schema_current(){global $wpdb;$main_current=SABRI_FILE26_SCHEMA_VERSION===(string)get_option(DB::OPTION_SCHEMA);$appeal_current=Doctor_Appeals::SCHEMA_VERSION===(string)get_option(Doctor_Appeals::OPTION_SCHEMA);$main_present=$this->main_schema_tables_present();$appeal_present=$this->appeals_schema_table_present();if($main_current&&$appeal_current&&$main_present&&$appeal_present){return true;}$lock_name='file26:schema-migration';if('1'!==(string)$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)',$lock_name))){return new \WP_Error('file26_migration_busy','File 26 schema migration is already running.');}try{$main_current=SABRI_FILE26_SCHEMA_VERSION===(string)get_option(DB::OPTION_SCHEMA);$appeal_current=Doctor_Appeals::SCHEMA_VERSION===(string)get_option(Doctor_Appeals::OPTION_SCHEMA);$main_present=$this->main_schema_tables_present();$appeal_present=$this->appeals_schema_table_present();if((!$main_current||!$main_present)&&!DB::install_schema()){return new \WP_Error('file26_schema_incomplete','The main File 26 schema migration could not be verified.');}if((!$appeal_current||!$appeal_present)&&!Doctor_Appeals::install_schema()){return new \WP_Error('file26_schema_incomplete','The ranking appeals schema migration could not be verified.');}if(!$this->main_schema_tables_present()){return new \WP_Error('file26_schema_incomplete','A required File 26 table is missing after migration.');}if(!$this->appeals_schema_table_present()){return new \WP_Error('file26_schema_incomplete','The ranking appeals table is missing after migration.');}if(SABRI_FILE26_SCHEMA_VERSION!==(string)get_option(DB::OPTION_SCHEMA)||Doctor_Appeals::SCHEMA_VERSION!==(string)get_option(Doctor_Appeals::OPTION_SCHEMA)){return new \WP_Error('file26_schema_marker_incomplete','Schema version evidence does not match installed tables.');}return true;}finally{$wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)',$lock_name));}}
 	public function maybe_upgrade(){return $this->ensure_schema_current();}
@@ -23,6 +68,91 @@ final class Plugin {
 	public function recompute_doctor_ranking_after_appeal($doctor_key,$appeal_uuid){$result=$this->doctor_ranking->recompute('appeal_corrected');$this->security->audit('doctor_ranking_appeal_recompute',array('object_type'=>'ranking_appeal','object_key'=>sanitize_text_field($appeal_uuid),'metadata'=>array('doctor_key'=>sanitize_text_field($doctor_key),'success'=>!is_wp_error($result))));return $result;}
 	public function source_restrict($connector,$domain,$object_id,$object_version,$reason='restricted'){return $this->indexer->restrict($connector,$domain,$object_id,$object_version,$reason);}public function source_tombstone($connector,$domain,$object_id,$object_version,$reason='deleted'){return $this->indexer->tombstone($connector,$domain,$object_id,$object_version,$reason);}
 	public function assurance_manifest($manifests){$manifests=is_array($manifests)?$manifests:array();$manifests['file26']=array('file'=>26,'name'=>'Search, Discovery, Recommendations, Knowledge Graph and Classification','version'=>SABRI_FILE26_VERSION,'contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'data_classes'=>array('C1-public-derivative','C2-internal','C3-private-derived'),'native_controls'=>array('three-stage-visibility','production-lane-connector-isolation','tombstone-purge','query-redaction','bounded-graph','consent-controls','separation-of-duties','dual-approved-policy-rollback','doctor-ranking-appeals','doctor-ranking-appeal-retention','required-owner-contract-gate','advanced-search','account-owned-saved-queries','zero-result-recovery','search-safety-diversion','index-freshness-evidence','privacy-minimized-editorial-radar','public-ranking-constitution','single-free-tier-rank-parity','rate-limits','audit'),'health'=>array($this->health,'snapshot'));return $manifests;}
+	/** Accept File 04 migration handoff only when the canonical File 21 connector exists in an index-eligible lane. */
+	public function accept_file04_contract( $existing, $request ) {
+		if ( is_array( $existing ) && ! empty( $existing['accepted'] ) ) { return $existing; }
+		$request = is_array( $request ) ? $request : array();
+		$digest = strtolower( trim( (string) ( $request['manifest_digest'] ?? '' ) ) );
+		$connector = $this->connectors->get( 'file21-publication' );
+		$eligible = is_array( $connector ) && $this->connectors->is_index_eligible( 'file21-publication' );
+		return array(
+			'accepted'         => $eligible && 1 === preg_match( '/^[a-f0-9]{64}$/', $digest ),
+			'status'           => $eligible ? 'accepted' : 'connector_not_index_eligible',
+			'provider_id'      => 'file26-file04-migration-v1',
+			'manifest_digest'  => $digest,
+			'connector'        => 'file21-publication',
+			'contract_version' => SABRI_FILE26_CONTRACT_VERSION,
+			'verified_at_utc'  => gmdate( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	/** Queue a bounded File 21 reindex for File 04 cutover and persist an acceptance receipt. */
+	public function file04_request_reindex( $context ) {
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->file04_cutover_context_valid( $context ) || ! $this->connectors->is_index_eligible( 'file21-publication' ) ) {
+			return;
+		}
+		$job = $this->indexer->enqueue_reindex(
+			'file21-publication',
+			array(
+				'reason'                  => 'file04_cutover',
+				'source_signature'        => strtolower( (string) $context['source_signature'] ),
+				'reconciliation_checksum' => strtolower( (string) $context['reconciliation_checksum'] ),
+				'request_digest'          => strtolower( (string) $context['request_digest'] ),
+			)
+		);
+		if ( is_wp_error( $job ) ) {
+			$this->security->audit( 'file04_cutover_reindex_rejected', array( 'object_type'=>'migration','object_key'=>'file04','reason'=>$job->get_error_code() ) );
+			return;
+		}
+		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
+		$receipts = is_array( $receipts ) ? $receipts : array();
+		$key = strtolower( (string) $context['request_digest'] );
+		$receipts[ $key ] = array(
+			'verified'                 => true,
+			'provider_id'              => 'file26-file04-reindex-v1',
+			'status'                   => 'accepted',
+			'job_uuid'                 => sanitize_text_field( (string) $job ),
+			'connector'                => 'file21-publication',
+			'source_signature'         => strtolower( (string) $context['source_signature'] ),
+			'reconciliation_checksum'  => strtolower( (string) $context['reconciliation_checksum'] ),
+			'request_digest'           => $key,
+			'verified_at_utc'          => gmdate( 'Y-m-d H:i:s' ),
+		);
+		if ( count( $receipts ) > 32 ) { $receipts = array_slice( $receipts, -32, null, true ); }
+		update_option( 'sabri_file26_file04_cutover_receipts_v1', $receipts, false );
+	}
+
+	/** Return only a fresh, exact-request acceptance receipt to File 04. */
+	public function file04_verify_reindex( $existing, $context ) {
+		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) { return $existing; }
+		$context = is_array( $context ) ? $context : array();
+		if ( ! $this->file04_cutover_context_valid( $context ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
+		$key = strtolower( (string) $context['request_digest'] );
+		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
+		$row = is_array( $receipts ) && isset( $receipts[ $key ] ) && is_array( $receipts[ $key ] ) ? $receipts[ $key ] : array();
+		if ( empty( $row ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
+		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
+			if ( empty( $row[ $field ] ) || ! hash_equals( strtolower( (string) $context[ $field ] ), strtolower( (string) $row[ $field ] ) ) ) {
+				return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' );
+			}
+		}
+		return $row;
+	}
+
+	private function file04_cutover_context_valid( array $context ) {
+		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
+			if ( empty( $context[ $field ] ) || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( (string) $context[ $field ] ) ) ) { return false; }
+		}
+		return true;
+	}
+
+	public function assurance_manifest( $manifests ) {
+		$manifests = is_array( $manifests ) ? $manifests : array();
+		$manifests['file26'] = array( 'file' => 26, 'name' => 'Search, Discovery, Recommendations, Knowledge Graph and Classification', 'version' => SABRI_FILE26_VERSION, 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'data_classes' => array( 'C1-public-derivative', 'C2-internal', 'C3-private-derived' ), 'native_controls' => array( 'three-stage-visibility','production-lane-connector-isolation','tombstone-purge','query-redaction','bounded-graph','consent-controls','separation-of-duties','dual-approved-policy-rollback','doctor-ranking-appeals','doctor-ranking-appeal-retention','required-owner-contract-gate','advanced-search','account-owned-saved-queries','zero-result-recovery','search-safety-diversion','index-freshness-evidence','privacy-minimized-editorial-radar','public-ranking-constitution','single-free-tier-rank-parity','rate-limits','audit' ), 'health' => array( $this->health, 'snapshot' ) );
+		return $manifests;
+	}
+
 	public function search_contract(array $request){$result=$this->search->run($request);return $this->central_plan->augment_search_result($result,$request);}public function visual_provider($providers){$providers=is_array($providers)?$providers:array();$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.3','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers;}
 	public function connectors(){return $this->connectors;}public function owner_contracts(){return $this->owner_contracts;}public function indexer(){return $this->indexer;}public function search(){return $this->search;}public function recommendations(){return $this->recommendations;}public function taxonomy(){return $this->taxonomy;}public function graph(){return $this->graph;}public function doctor_ranking(){return $this->doctor_ranking;}public function doctor_appeals(){return $this->doctor_appeals;}public function governance(){return $this->governance;}public function health(){return $this->health;}public function central_plan(){return $this->central_plan;}
 }
