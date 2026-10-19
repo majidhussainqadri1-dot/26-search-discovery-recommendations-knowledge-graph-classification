@@ -44,7 +44,7 @@ add_action(
 	static function () {
 		$plugin = Plugin::instance();
 		$health = $plugin->health()->snapshot();
-		if ( ! is_array( $health ) || 'unavailable' === ( isset( $health['status'] ) ? $health['status'] : 'unavailable' ) || ! empty( $health['schema_drift'] ) ) {
+		if ( ! is_array( $health ) || 'unavailable' === ( isset( $health['status'] ) ? $health['status'] : 'unavailable' ) || ! empty( $health['schema_drift'] ) || empty( $health['activated'] ) ) {
 			return;
 		}
 		$future = new Future_Intelligence( $plugin->search(), $plugin->recommendations(), new Normalizer(), new Security(), $plugin->central_plan(), $plugin->health() );
