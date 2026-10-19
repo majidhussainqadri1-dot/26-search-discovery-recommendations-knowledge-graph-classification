@@ -14,7 +14,7 @@ $get_filter = static function ( $key ) use ( $filters ) { return isset( $filters
 		<div class="sabri-f26__search-form">
 			<div class="sabri-f26__search-field">
 				<label class="screen-reader-text" for="sabri-f26-q"><?php esc_html_e( 'Search', 'sabri-file26' ); ?></label>
-				<input id="sabri-f26-q" class="sabri-f26__input" type="search" name="q" value="<?php echo esc_attr( $query ); ?>" maxlength="200" autocomplete="off" data-f26-suggest aria-autocomplete="list" aria-expanded="false">
+				<input id="sabri-f26-q" class="sabri-f26__input" type="search" name="q" value="<?php echo esc_attr( $query ); ?>" maxlength="200" autocomplete="off" data-f26-suggest role="combobox" aria-autocomplete="list" aria-expanded="false">
 			</div>
 			<button class="sabri-f26__button" type="submit"><span class="dashicons dashicons-search" aria-hidden="true"></span><span><?php esc_html_e( 'Search', 'sabri-file26' ); ?></span></button>
 		</div>

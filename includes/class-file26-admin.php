@@ -36,13 +36,27 @@ final class Admin {
 
 	public function save_settings() {
 		if ( ! $this->security->can_manage() ) { wp_die( esc_html__( 'Forbidden.', 'sabri-file26' ), '', array( 'response' => 403 ) ); }
-		check_admin_referer( 'sabri_file26_save_settings' ); $activate_requested = ! empty( $_POST['activated'] );
+		check_admin_referer( 'sabri_file26_save_settings' );
+		$activate_requested = ! empty( $_POST['activated'] );
 		if ( $activate_requested ) {
-			$connectors = array_filter( $this->connectors->all(), static function ( $connector ) { return in_array( $connector['status'], array( 'approved', 'active' ), true ); } ); $health = $this->health->snapshot(); $approved = (bool) apply_filters( 'sabri_file26_activation_gate_approved', false, $health, $connectors );
+			$connectors = array_filter( $this->connectors->all(), static function ( $connector ) { return in_array( $connector['status'], array( 'approved', 'active' ), true ); } );
+			$health = $this->health->snapshot();
+			$approved = (bool) apply_filters( 'sabri_file26_activation_gate_approved', false, $health, $connectors );
 			if ( ! $connectors || ! $approved || ! $this->security->require_step_up( 'runtime_activate' ) ) { wp_die( esc_html__( 'Runtime activation is blocked until an approved owner connector, staging evidence, external gate approval and fresh authorization are present.', 'sabri-file26' ), '', array( 'response' => 403 ) ); }
+			if ( ! DB::schedule() ) { wp_die( esc_html__( 'Runtime activation is blocked because required background schedules could not be verified.', 'sabri-file26' ), '', array( 'response' => 503 ) ); }
 		}
-		DB::update_settings( array( 'activated' => $activate_requested, 'public_search_enabled' => ! empty( $_POST['public_search_enabled'] ), 'personalization_enabled' => ! empty( $_POST['personalization_enabled'] ), 'telemetry_enabled' => ! empty( $_POST['telemetry_enabled'] ), 'results_per_page' => isset( $_POST['results_per_page'] ) ? max( 1, min( 30, (int) $_POST['results_per_page'] ) ) : 20 ) );
-		$this->security->audit( 'search_settings_updated', array( 'object_type' => 'settings' ) ); wp_safe_redirect( admin_url( 'admin.php?page=sabri-file26&updated=1' ) ); exit;
+		$updated = DB::update_settings(
+			array(
+				'activated' => $activate_requested,
+				'public_search_enabled' => ! empty( $_POST['public_search_enabled'] ),
+				'personalization_enabled' => ! empty( $_POST['personalization_enabled'] ),
+				'telemetry_enabled' => ! empty( $_POST['telemetry_enabled'] ),
+				'results_per_page' => isset( $_POST['results_per_page'] ) ? max( 1, min( 30, (int) $_POST['results_per_page'] ) ) : 20,
+			)
+		);
+		if ( false === $updated ) { wp_die( esc_html__( 'File 26 settings could not be persisted. No success state is reported.', 'sabri-file26' ), '', array( 'response' => 500 ) ); }
+		$this->security->audit( 'search_settings_updated', array( 'object_type' => 'settings' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=sabri-file26&updated=1' ) ); exit;
 	}
 
 	public function reindex() {

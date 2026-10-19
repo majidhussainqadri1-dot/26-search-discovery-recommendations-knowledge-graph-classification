@@ -29,6 +29,7 @@
     let requestSequence = 0;
     let activeIndex = -1;
     const listId = input.getAttribute('aria-controls') || ('sabri-f26-suggestions-' + inputIndex);
+    input.setAttribute('role', 'combobox');
     input.setAttribute('aria-controls', listId);
     input.setAttribute('aria-autocomplete', 'list');
 
@@ -37,6 +38,11 @@
       return host && host.querySelector('.sabri-f26__suggestions');
     };
     const options = () => Array.from((currentList() || {querySelectorAll: () => []}).querySelectorAll('[role="option"]'));
+    const optionUrl = (item) => item && item.getAttribute('data-url') || '';
+    const activate = (item) => {
+      const url = optionUrl(item);
+      if (url) window.location.assign(url);
+    };
     const setActive = (index) => {
       const items = options();
       if (!items.length) {
@@ -70,11 +76,8 @@
         event.preventDefault();
         setActive(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
       } else if (event.key === 'Enter' && activeIndex >= 0 && items[activeIndex]) {
-        const link = items[activeIndex].querySelector('a[href]');
-        if (link) {
-          event.preventDefault();
-          link.click();
-        }
+        event.preventDefault();
+        activate(items[activeIndex]);
       }
     });
 
@@ -98,7 +101,20 @@
           list.id = listId;
           list.className = 'sabri-f26__suggestions';
           list.setAttribute('role', 'listbox');
-          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false"><a href="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</a></li>').join('');
+          list.innerHTML = suggestions.map((item, i) => '<li id="' + listId + '-option-' + i + '" role="option" aria-selected="false" tabindex="-1" data-url="' + escapeHtml(item.url) + '">' + escapeHtml(item.label) + '</li>').join('');
+          list.addEventListener('mousedown', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option) return;
+            event.preventDefault();
+            activate(option);
+          });
+          list.addEventListener('mousemove', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option) return;
+            const items = options();
+            const index = items.indexOf(option);
+            if (index >= 0) setActive(index);
+          });
           host.appendChild(list);
           activeIndex = -1;
           input.setAttribute('aria-expanded', 'true');
@@ -123,7 +139,7 @@
     try {
       await api('feedback', {method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce || ''},body:JSON.stringify({item_key:button.getAttribute('data-object-key'),type:button.getAttribute('data-f26-feedback'),scope_key:button.getAttribute('data-scope-key') || '',idempotency_key:actionId,context:button.getAttribute('data-context') || 'discover'})});
       button.textContent=(cfg.strings&&cfg.strings.done)||'Saved';button.setAttribute('aria-pressed','true');const type=button.getAttribute('data-f26-feedback');const card=button.closest('.sabri-f26-card');
-      if(card&&['not_interested','hide_item','hide_author','hide_topic'].includes(type)){card.hidden=true;const live=root.querySelector('[data-f26-live]');if(live){live.textContent='';const text=document.createElement('span');text.textContent=(cfg.strings&&cfg.strings.done)||'Saved';const undo=document.createElement('button');undo.type='button';undo.className='sabri-f26__action';undo.textContent=(cfg.strings&&cfg.strings.undo)||'Undo';undo.addEventListener('click',async()=>{undo.disabled=true;try{await api('feedback',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({type:'undo',item_key:button.getAttribute('data-object-key'),idempotency_key:newId(),undo_idempotency_key:actionId})});card.hidden=false;live.textContent=(cfg.strings&&cfg.strings.done)||'Saved';const restoredFocus=card.querySelector('.sabri-f26-card__title a, a[href], button:not([disabled]), summary');if(restoredFocus&&restoredFocus.focus)restoredFocus.focus();}catch(error){undo.disabled=false;announce(error.message,true);}});live.append(text,document.createTextNode(' '),undo);undo.focus();}}
+      if(card&&['not_interested','hide_item','hide_author','hide_topic'].includes(type)){card.hidden=true;const live=root.querySelector('[data-f26-live]');if(live){live.textContent='';const text=document.createElement('span');text.textContent=(cfg.strings&&cfg.strings.done)||'Saved';const undo=document.createElement('button');undo.type='button';undo.className='sabri-f26__action';undo.textContent=(cfg.strings&&cfg.strings.undo)||'Undo';undo.addEventListener('click',async()=>{undo.disabled=true;try{await api('feedback',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce||''},body:JSON.stringify({type:'undo',item_key:button.getAttribute('data-object-key'),idempotency_key:newId(),undo_idempotency_key:actionId})});card.hidden=false;live.textContent=(cfg.strings&&cfg.strings.done)||'Saved';card.focus&&card.focus();}catch(error){undo.disabled=false;announce(error.message,true);}});live.append(text,document.createTextNode(' '),undo);undo.focus();}}
     } catch(error){button.textContent=original;button.removeAttribute('aria-pressed');announce(error.message,true);} finally{button.disabled=false;}
   });
 

@@ -7,6 +7,7 @@ namespace {
 	$GLOBALS['f26_test_filter_values'] = array();
 	$GLOBALS['wpdb'] = new class {
 		public $row = null;
+		public $last_error = '';
 		public function prepare( $query ) { return $query; }
 		public function get_row() { return $this->row; }
 	};
