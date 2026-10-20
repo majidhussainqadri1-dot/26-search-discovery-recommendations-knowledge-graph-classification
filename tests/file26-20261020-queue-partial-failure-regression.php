@@ -14,7 +14,7 @@ $checks=array(
  array(strpos($code, 'if($batch_failed>0)') < strpos($code, '$done=!empty($batch[\'done\']);'),'failure guard precedes completion'),
  array(strpos($code, 'catch(\\Throwable $e){$this->fail_job(')!==false,'retry/dead-letter handler invoked after failure'),
  array(strpos($src,"'dead_letter'")!==false,'permanent failures are dead-lettered'),
- array(strpos($code, "if($counts['failed']>0)")===false,'prior attempts do not poison later successful retries'),
+ array(strpos($code, 'if($counts[\'failed\']>0)')===false,'prior attempts do not poison later successful retries'),
 );
 $failures=0;foreach($checks as $check){if(!$check[0]){fwrite(STDERR,'FAIL: '.$check[1]."\n");$failures++;}}
 if($failures){exit(1);}
