@@ -44,6 +44,7 @@ ROUND_TESTS=("$ROOT"/tests/review-round-*.php)
 for test_file in "${ROUND_TESTS[@]}"; do run_php_test "$test_file"; done
 printf '[8/15] Future and current review-cycle regressions\n'
 run_php_test "$ROOT/tests/future-intelligence-contract-tests.php"
+run_php_test "$ROOT/tests/file26-20261020-queue-and-tombstone-regressions.php"
 run_php_test "$ROOT/tests/review-second-forty-round-contract-tests.php"
 run_php_test "$ROOT/tests/review-r62-r81-contract-tests.php"
 
