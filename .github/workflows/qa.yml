@@ -35,7 +35,7 @@ jobs:
   forty_round_verification:
     name: Forty full QA review repetitions
     needs: qa
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integrate/file26-future24-main-parity-20261019' || github.head_ref == 'audit/file26-fresh40-and-crossrepo-parity-20261019' || github.head_ref == 'audit/file26-20261020-forty-reliability-and-owner-parity')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integrate/file26-future24-main-parity-20261019' || github.head_ref == 'audit/file26-fresh40-and-crossrepo-parity-20261019' || github.head_ref == 'audit/file26-20261020-forty-reliability-and-owner-parity' || github.head_ref == 'audit/file26-20261020-merged-parity-graph-cursor')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
