@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 mkdir -p release
-LEDGER="$ROOT/release/FILE26-20261019-FRESH40-RESULTS.tsv"
+LEDGER="$ROOT/release/FILE26-20261020-FRESH40-RESULTS.tsv"
 TRACE="$(git rev-parse HEAD)"
 cat >"$LEDGER" <<EOF
 round\tfocus\tgit_sha\tresult\tverified_package
@@ -48,10 +48,10 @@ FOCI=(
   'Operations and health'
   'Privacy export and erasure'
   'Degraded service states'
-  'File 00 identity and Files 04/19 bridges'
-  'File 20/25 shell and visual ownership'
-  'Future-24 owner/source/privacy contracts'
-  'Package reproducibility and release gates'
+  'File 00 membership authorization'
+  'File 20 and 25 shell/visual contracts'
+  'Files 04/19 event-owner migration'
+  'Future 24 manifest and build'
 )
 if [[ ${#FOCI[@]} -ne 40 ]]; then
   echo 'FAIL: exactly 40 scope labels must exist' >&2
@@ -59,7 +59,7 @@ if [[ ${#FOCI[@]} -ne 40 ]]; then
 fi
 for (( round=1; round<=40; round++ )); do
   topic="${FOCI[round-1]}"
-  php -d error_reporting=E_ALL "$ROOT/tests/file26-20261019-fresh40-focus-contract.php" "$round" || { echo "FAIL: targeted File26 plan contract round $round" >&2; exit 1; }
+  php -d error_reporting=E_ALL "$ROOT/tests/file26-20261020-fr36-and-owner40.php" "$round" || { echo "FAIL: targeted File26 plan contract round $round" >&2; exit 1; }
   printf 'FILE26_REVIEW_START %02d/40 — %s — %s\n' "$round" "$topic" "$TRACE"
   log="$(mktemp)"
   if bash "$ROOT/qa/run-tests.sh" >"$log" 2>&1; then
