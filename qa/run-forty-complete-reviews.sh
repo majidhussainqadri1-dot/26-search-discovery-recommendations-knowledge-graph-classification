@@ -57,6 +57,10 @@ if [[ ${#FOCI[@]} -ne 40 ]]; then
   echo 'FAIL: exactly 40 scope labels must exist' >&2
   exit 1
 fi
+# Fail fast on missing plan-to-code scope markers before the expensive 40 full builds.
+for (( check=1; check<=40; check++ )); do
+  php "$ROOT/tests/file26-20261020-fr36-and-owner40.php" "$check" >/dev/null
+done
 for (( round=1; round<=40; round++ )); do
   topic="${FOCI[round-1]}"
   php -d error_reporting=E_ALL "$ROOT/tests/file26-20261020-fr36-and-owner40.php" "$round" || { echo "FAIL: targeted File26 plan contract round $round" >&2; exit 1; }
