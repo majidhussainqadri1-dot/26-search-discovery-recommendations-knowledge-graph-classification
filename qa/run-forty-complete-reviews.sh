@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 mkdir -p release
-LEDGER="$ROOT/release/FILE26-20261019-FRESH40-RESULTS.tsv"
+LEDGER="$ROOT/release/FILE26-20261020-FRESH40-RESULTS.tsv"
 TRACE="$(git rev-parse HEAD)"
 cat >"$LEDGER" <<EOF
 round\tfocus\tgit_sha\tresult\tverified_package
@@ -59,8 +59,8 @@ if [[ ${#FOCI[@]} -ne 40 ]]; then
 fi
 for (( round=1; round<=40; round++ )); do
   topic="${FOCI[round-1]}"
-  php -d error_reporting=E_ALL "$ROOT/tests/file26-20261019-fresh40-focus-contract.php" "$round" || { echo "FAIL: targeted File26 plan contract round $round" >&2; exit 1; }
-  printf 'FILE26_REVIEW_START %02d/40 — %s — %s\n' "$round" "$topic" "$TRACE"
+  php -d error_reporting=E_ALL "$ROOT/tests/file26-20261020-fresh40-focus-contract.php" "$round" || { echo "FAIL: targeted File26 plan contract round $round" >&2; exit 1; }
+  printf 'FILE26_20261020_REVIEW_START %02d/40 — %s — %s\n' "$round" "$topic" "$TRACE"
   log="$(mktemp)"
   if bash "$ROOT/qa/run-tests.sh" >"$log" 2>&1; then
     if ! grep -q 'ALL LOCAL QA CHECKS PASSED' "$log"; then
@@ -75,12 +75,12 @@ for (( round=1; round<=40; round++ )); do
       exit 1
     fi
     printf '%02d\t%s\t%s\tPASS\tYES\n' "$round" "$topic" "$TRACE" >> "$LEDGER"
-    printf 'FILE26_REVIEW_PASS %02d/40 — all 15 gates, source + clean ZIP\n' "$round"
+    printf 'FILE26_20261020_REVIEW_PASS %02d/40 — all 15 gates, source + clean ZIP\n' "$round"
     rm -f "$log"
   else
     tail -100 "$log" >&2
     printf '%02d\t%s\t%s\tFAIL\tNO\n' "$round" "$topic" "$TRACE" >> "$LEDGER"
-    echo "FILE26_REVIEW_FAILED $round — investigation required before continuing" >&2
+    echo "FILE26_20261020_REVIEW_FAILED $round — investigation required before continuing" >&2
     rm -f "$log"
     exit 1
   fi
@@ -89,5 +89,5 @@ if [[ $(grep -c $'\tPASS\tYES' "$LEDGER") -ne 40 ]]; then
   echo 'FAIL: fewer than forty complete automated review passes' >&2
   exit 1
 fi
-echo "ALL 40 AUTOMATED FULL-SUITE REVIEWS PASSED AT $TRACE"
+echo "ALL 40 NEW 20261020 FULL-SUITE REVIEWS PASSED AT $TRACE"
 cat "$LEDGER"
