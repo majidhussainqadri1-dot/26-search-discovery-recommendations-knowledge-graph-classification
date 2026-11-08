@@ -140,13 +140,42 @@ final class Shadow_Index {
 		$lock=self::lock();if(is_wp_error($lock)){return $lock;}
 		try{return self::verify_locked($uuid,$names);}finally{self::unlock($lock);}
 	}
+	/** A separate auditor binds approval to the actual shadow-generation checksum. */
+	public static function second_approve($uuid,$operation){
+		$operation=sanitize_key((string)$operation);
+		if(!in_array($operation,array('swap','rollback'),true)){return new \WP_Error('file26_shadow_invalid_approval','Invalid shadow release command.');}
+		$security=new Security();$actor=(int)get_current_user_id();
+		if($actor<=0||!$security->can_audit()||!$security->require_step_up('shadow_second_'.$operation)){
+			return new \WP_Error('file26_shadow_second_approver_forbidden','A separate authorized auditor must complete recent step-up verification.');
+		}
+		$names=self::names($uuid);if(is_wp_error($names)){return $names;}
+		$lock=self::lock();if(is_wp_error($lock)){return $lock;}
+		try{
+			$record=get_option(self::opt($uuid),false);
+			if(!is_array($record)){return new \WP_Error('file26_shadow_missing','No matching recorded index generation.');}
+			if('swap'===$operation){
+				$proof=self::verify_locked($uuid,$names);if(is_wp_error($proof)){return $proof;}
+				$fingerprint=$proof['candidate']['sha256'];
+			}else{
+				if('swapped'!==$record['state']){return new \WP_Error('file26_shadow_not_swapped','Rollback approval requires a recorded cutover.');}
+				$current=self::digest($names,'live');if(is_wp_error($current)){return $current;}
+				if(!hash_equals((string)$record['candidate']['sha256'],$current['sha256'])){return new \WP_Error('file26_shadow_rollback_drift','Live writes exist; rollback approval denied.');}
+				$fingerprint=$current['sha256'];
+			}
+			$record['approvals'][$operation]=array('auditor_id'=>$actor,'sha256'=>$fingerprint,'at_utc'=>gmdate('c'));
+			if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_approval_persist_failed','The independent approval was not stored.');}
+			$security->audit('shadow_index_second_approval',array('object_type'=>'shadow_index','object_key'=>$uuid,'reason'=>$operation,'metadata'=>array('auditor_id'=>$actor,'sha256'=>$fingerprint)));
+			return array('approved'=>true,'operation'=>$operation,'auditor_id'=>$actor);
+		}finally{self::unlock($lock);}
+	}
 	private static function authorized($operation,$uuid){
-		if(!current_user_can('manage_options')){return false;}
-		$s=new Security();
-		if(!$s->require_step_up('shadow_'.$operation)){return false;}
-		$founder=$s->normalize_authorization(apply_filters('sabri_file26_shadow_release_approved',false,$uuid,$operation,get_current_user_id()));
-		$independent=$s->normalize_authorization(apply_filters('sabri_file26_shadow_distinct_reviewer_approved',false,$uuid,$operation,get_current_user_id()));
-		return true===$founder&&true===$independent;
+		$actor=(int)get_current_user_id();
+		if($actor<=0||!current_user_can('manage_options')){return false;}
+		$s=new Security();if(!$s->require_step_up('shadow_'.$operation)){return false;}
+		$record=get_option(self::opt($uuid),false);
+		$approval=is_array($record)&&isset($record['approvals'][$operation])?$record['approvals'][$operation]:null;
+		if(!is_array($approval)||empty($approval['sha256'])||(int)($approval['auditor_id']??0)<=0||(int)$approval['auditor_id']===$actor){return false;}
+		return true===$s->normalize_authorization(apply_filters('sabri_file26_shadow_release_approved',false,$uuid,$operation,$actor));
 	}
 	public static function swap($uuid){
 		$names=self::names($uuid);if(is_wp_error($names)){return $names;}
@@ -154,6 +183,8 @@ final class Shadow_Index {
 		$lock=self::lock();if(is_wp_error($lock)){return $lock;}
 		try{
 			$proof=self::verify_locked($uuid,$names);if(is_wp_error($proof)){return $proof;}
+			$approval=get_option(self::opt($uuid),array());
+			if(!isset($approval['approvals']['swap']['sha256'])||!hash_equals((string)$approval['approvals']['swap']['sha256'],(string)$proof['candidate']['sha256'])){return new \WP_Error('file26_shadow_second_approval_stale','Independent approval for this generation is absent or stale.');}
 			$record=get_option(self::opt($uuid),array());$record['state']='swapping';
 			if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_transition','Cannot record pre-cutover state.');}
 			$pairs=array();foreach($names as $tables){$pairs[]=$tables['live'].' TO '.$tables['previous'];$pairs[]=$tables['shadow'].' TO '.$tables['live'];}
@@ -172,6 +203,7 @@ final class Shadow_Index {
 			if(!is_array($record)||'swapped'!==$record['state']){return new \WP_Error('file26_shadow_no_cutover','No accepted cutover is recorded.');}
 			$now=self::digest($names,'live');if(is_wp_error($now)){return $now;}
 			if(!hash_equals((string)$record['candidate']['sha256'],$now['sha256'])){return new \WP_Error('file26_shadow_rollback_drift','New writes exist; rollback would lose data. Reconcile instead.');}
+			if(!isset($record['approvals']['rollback']['sha256'])||!hash_equals((string)$record['approvals']['rollback']['sha256'],$now['sha256'])){return new \WP_Error('file26_shadow_rollback_approval_stale','Separate auditor approval for this rollback is absent or stale.');}
 			$record['state']='rolling_back';if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_rollback_record','Cannot record rollback transition.');}
 			$pairs=array();foreach($names as $tables){$pairs[]=$tables['live'].' TO '.$tables['failed'];$pairs[]=$tables['previous'].' TO '.$tables['live'];}
 			$r=self::run('RENAME TABLE '.implode(',',$pairs),'file26_shadow_atomic_rollback');if(is_wp_error($r)){return $r;}
