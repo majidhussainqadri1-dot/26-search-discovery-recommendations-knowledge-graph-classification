@@ -51,7 +51,7 @@ $generation_tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $gen
 $generation_regex = '/^' . preg_quote( $wpdb->prefix, '/' ) . 'f26_[spf][dnec]_[0-9a-f]{32}$/D';
 foreach ( (array) $generation_tables as $generation_table ) {
 	if ( preg_match( $generation_regex, (string) $generation_table ) ) {
-		$wpdb->query( "DROP TABLE IF EXISTS \`$generation_table\`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS `$generation_table`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 }
 $generation_option_like = $wpdb->esc_like( 'sabri_f26_shadow_' ) . '%';
