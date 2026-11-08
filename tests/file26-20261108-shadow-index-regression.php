@@ -29,6 +29,8 @@ $checks=array(
 	'doctor ranking writes serialized'=>strpos(file_get_contents($root.'/includes/class-file26-doctor-ranking.php'),'Shadow_Index::lock()')!==false,
 	'taxonomy classification writes serialized'=>strpos(file_get_contents($root.'/includes/class-file26-taxonomy.php'),'Shadow_Index::lock()')!==false,
 	'approval is checksum bound'=>strpos($shadow,'file26_shadow_second_approval_stale')!==false,
+	'generation uninstall honors destructive-only data policy'=>strpos(file_get_contents($root.'/uninstall.php'),"if ( ! $"."destructive ) { return; }")!==false,
+	'generated shadow tables have bounded uninstall matching'=>strpos(file_get_contents($root.'/uninstall.php'),'f26_[spf][dnec]_[0-9a-f]{32}')!==false,
 	'no dangerous automatic promotion'=>strpos($index,'Shadow_Index::swap(')===false,
 	'manual administration entry is present'=>strpos($entry,'function sabri_file26_shadow_validate(')!==false
 );
