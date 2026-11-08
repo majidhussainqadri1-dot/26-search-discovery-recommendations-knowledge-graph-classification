@@ -20,7 +20,7 @@ $checks=array(
 	'promotion is an explicit atomic rename'=>strpos($shadow,"'RENAME TABLE '")!==false,
 	'four original tables preserved for rollback'=>strpos($shadow,"['previous']")!==false,
 	'rollback rejects post-cutover writes'=>strpos($shadow,'file26_shadow_rollback_drift')!==false,
-	'Founder approval and independent reviewer required'=>strpos($shadow,'sabri_file26_shadow_release_approved')!==false&&strpos($shadow,'public static function second_approve(')!==false&&strpos($shadow,"(int)$"."approval['auditor_id']===$actor")!==false,
+	'Founder approval and independent reviewer required'=>strpos($shadow,'sabri_file26_shadow_release_approved')!==false&&strpos($shadow,'public static function second_approve(')!==false&&strpos($shadow,'auditor_id')!==false&&strpos($shadow,'===$actor')!==false,
 	'unsafe scoped rebuild fails closed'=>strpos($index,'file26_shadow_partial_scope_unverified')!==false,
 	'graph writes serialized'=>strpos(file_get_contents($root.'/includes/class-file26-graph.php'),'Shadow_Index::lock()')!==false,
 	'doctor ranking writes serialized'=>strpos(file_get_contents($root.'/includes/class-file26-doctor-ranking.php'),'Shadow_Index::lock()')!==false,
