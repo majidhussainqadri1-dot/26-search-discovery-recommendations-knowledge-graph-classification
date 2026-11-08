@@ -104,7 +104,7 @@ File 26 only holds derivative records. Real canonical owner contracts require ve
 3. A candidate cannot be promoted unless the complete owner job was marked complete, the serving generation still matches its starting fingerprint, node/edge constraints and tombstones are checked, and an independent auditor has approved the **candidate checksum** from a separate authenticated account.
 4. Founder/admin step-up and external Founder approval remain required; `RENAME TABLE` moves all four projections together. Previous tables are retained for explicitly approved, no-post-cutover-write rollback.
 5. Source writes from Indexer, Graph, Taxonomy and Doctor Ranking are serialized with the cutover advisory lock; real MySQL transaction/race/load acceptance must still be measured.
-6. **Not complete:** owner-certified bounded partial index generation; independently verified source-to-shadow counts and golden-query equivalence; real host-level staging and disaster-recovery rehearsal; UX/admin acceptance and live deploy/retest.
+6. **Not yet accepted:** source now supports a bounded single-object partial scope, but the owner must actually honor that contract. General multi-object/filtered partial rebuild remains unsupported and fails closed. Independently verified source-to-shadow counts/golden-query equivalence, MySQL staging, disaster-recovery, UX/admin and live deploy/retest remain open.
 
 ## Blockers, distinct realities and release gates
 
