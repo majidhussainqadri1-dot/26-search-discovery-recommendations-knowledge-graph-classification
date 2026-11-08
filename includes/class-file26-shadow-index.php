@@ -61,13 +61,16 @@ final class Shadow_Index {
 			}
 			$baseline=self::digest($names,'live');if(is_wp_error($baseline)){return $baseline;}
 			$d=$names['documents'];$n=$names['nodes'];
+			$wpdb->last_error='';
+			$baseline_owner_raw=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$d['live']} WHERE connector_slug=%s",$connector));
+			if(null===$baseline_owner_raw||''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_owner_count_read_failed','Cannot prove current owner population.');}
 			if(''===$object_id){
 			$r=self::run($wpdb->prepare("DELETE n FROM {$n['shadow']} n INNER JOIN {$d['shadow']} d ON n.node_key=d.canonical_key WHERE d.connector_slug=%s",$connector),'file26_shadow_clear_nodes');
 			if(is_wp_error($r)){return $r;}
 			$r=self::run($wpdb->prepare("DELETE FROM {$d['shadow']} WHERE connector_slug=%s",$connector),'file26_shadow_clear_docs');
 			if(is_wp_error($r)){return $r;}
 			}
-			$record=array('state'=>'prepared','connector'=>$connector,'partial_object_id'=>$object_id,'baseline'=>$baseline,'started_at'=>gmdate('c'));
+			$record=array('state'=>'prepared','connector'=>$connector,'partial_object_id'=>$object_id,'baseline_owner_count'=>(int)$baseline_owner_raw,'baseline'=>$baseline,'started_at'=>gmdate('c'));
 			if(!add_option(self::opt($uuid),$record,'',false)){return new \WP_Error('file26_shadow_provenance','Cannot persist shadow provenance.');}
 			$created=array();return $baseline;
 		}finally{
@@ -141,7 +144,13 @@ final class Shadow_Index {
 		$revoked=$wpdb->get_var("SELECT COUNT(*) FROM $d d INNER JOIN $t t ON d.canonical_key=t.canonical_key WHERE t.object_version>=d.object_version");
 		if(null===$revoked||(int)$revoked!==0){return new \WP_Error('file26_shadow_tombstones','Revoked documents must not reappear.');}
 		$shadow=self::digest($names,'shadow');if(is_wp_error($shadow)){return $shadow;}
-		return array('verified'=>true,'source'=>$live,'candidate'=>$shadow,'processed'=>(int)($counts['processed']??0));
+		$wpdb->last_error='';
+		$staged_owner_raw=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $d WHERE connector_slug=%s",$record['connector']));
+		if(null===$staged_owner_raw||''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_owner_count_read_failed','Cannot verify candidate owner population.');}
+		if(empty($record['partial_object_id'])&&(int)$staged_owner_raw<(int)($record['baseline_owner_count']??0)){
+			return new \WP_Error('file26_shadow_owner_population_shrank','Owner population shrank without existing live revocation; cutover requires reconciliation and certified snapshot.');
+		}
+		return array('verified'=>true,'source'=>$live,'candidate'=>$shadow,'processed'=>(int)($counts['processed']??0),'owner_count'=>(int)$staged_owner_raw);
 	}
 	public static function validate($uuid){
 		$names=self::names($uuid);if(is_wp_error($names)){return $names;}
