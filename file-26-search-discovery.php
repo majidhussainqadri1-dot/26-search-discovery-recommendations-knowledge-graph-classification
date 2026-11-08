@@ -26,6 +26,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-normalizer.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-ranking.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-connectors.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-owner-contracts.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-shadow-index.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-indexer.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-search.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-recommendations.php';
@@ -98,6 +99,17 @@ add_action( 'plugins_loaded', static function () { \Sabri\File26\Plugin::instanc
 function sabri_file26_register_connector( array $manifest ) { return \Sabri\File26\Plugin::instance()->connectors()->register( $manifest ); }
 function sabri_file26_upsert_document( array $document ) { return \Sabri\File26\Plugin::instance()->indexer()->upsert( $document ); }
 function sabri_file26_restrict_document( $connector, $domain, $object_id, $object_version, $reason = 'restricted' ) { return \Sabri\File26\Plugin::instance()->indexer()->restrict( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason ); }
+/**
+ * Explicit FR-005 commands; promotion and rollback require current step-up,
+ * an authorized Founder decision, and independent approval.
+ */
+function sabri_file26_shadow_validate( $job_uuid ) {
+	if ( ! current_user_can( 'manage_options' ) ) { return new \WP_Error( 'file26_shadow_forbidden', 'Search administration is required.' ); }
+	return \Sabri\File26\Shadow_Index::validate( (string) $job_uuid );
+}
+function sabri_file26_shadow_swap( $job_uuid ) { return \Sabri\File26\Shadow_Index::swap( (string) $job_uuid ); }
+function sabri_file26_shadow_rollback( $job_uuid ) { return \Sabri\File26\Shadow_Index::rollback( (string) $job_uuid ); }
+
 function sabri_file26_tombstone_document( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return \Sabri\File26\Plugin::instance()->indexer()->tombstone( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason ); }
 function sabri_file26_search( array $request ) { $plugin = \Sabri\File26\Plugin::instance(); $result = $plugin->search()->run( $request ); return $plugin->central_plan()->augment_search_result( $result, $request ); }
 function sabri_file26_recommendations( array $request = array() ) { return \Sabri\File26\Plugin::instance()->recommendations()->get( $request ); }
