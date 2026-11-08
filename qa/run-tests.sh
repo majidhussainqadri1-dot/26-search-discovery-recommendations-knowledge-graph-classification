@@ -48,6 +48,7 @@ run_php_test "$ROOT/tests/review-second-forty-round-contract-tests.php"
 run_php_test "$ROOT/tests/review-r62-r81-contract-tests.php"
 run_php_test "$ROOT/tests/file26-20261020-queue-partial-failure-regression.php"
 run_php_test "$ROOT/tests/file26-20261020-graph-cursor-parity-regression.php"
+run_php_test "$ROOT/tests/file26-20261108-shadow-index-regression.php"
 
 printf '[9/15] Dangerous execution primitive scan\n'
 if grep -RInE --include='*.php' '(eval\s*\(|shell_exec\s*\(|passthru\s*\(|proc_open\s*\(|popen\s*\()' "$ROOT"; then echo 'FAIL: dangerous execution primitive'; exit 1; fi
@@ -109,6 +110,8 @@ run_php_test "$PACKAGE/tests/future-intelligence-contract-tests.php"
 run_php_test "$PACKAGE/tests/review-second-forty-round-contract-tests.php"
 run_php_test "$PACKAGE/tests/review-r62-r81-contract-tests.php"
 run_php_test "$PACKAGE/tests/file26-20261020-queue-partial-failure-regression.php"
+run_php_test "$PACKAGE/tests/file26-20261020-graph-cursor-parity-regression.php"
+run_php_test "$PACKAGE/tests/file26-20261108-shadow-index-regression.php"
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
 mkdir -p "$ROOT/release"
