@@ -45,9 +45,11 @@ final class Shadow_Index {
 		}
 		return array('sha256'=>hash_final($h),'counts'=>$counts);
 	}
-	public static function prepare($uuid,$connector){
+	public static function prepare($uuid,$connector,array $scope=array()){
 		global $wpdb;$names=self::names($uuid);if(is_wp_error($names)){return $names;}
 		$connector=sanitize_key($connector);if(''===$connector){return new \WP_Error('file26_shadow_connector','Missing owner connector.');}
+		$object_id=isset($scope['object_id'])?substr(sanitize_text_field((string)$scope['object_id']),0,191):'';
+		if($scope&&(''===$object_id||count($scope)!==1)){return new \WP_Error('file26_shadow_partial_scope_unverified','Only an explicit canonical single-object scope is supported.');}
 		$lock=self::lock();if(is_wp_error($lock)){return $lock;}$created=array();
 		try {
 			if(false!==get_option(self::opt($uuid),false)){return new \WP_Error('file26_shadow_exists','This generation already exists.');}
@@ -59,11 +61,13 @@ final class Shadow_Index {
 			}
 			$baseline=self::digest($names,'live');if(is_wp_error($baseline)){return $baseline;}
 			$d=$names['documents'];$n=$names['nodes'];
+			if(''===$object_id){
 			$r=self::run($wpdb->prepare("DELETE n FROM {$n['shadow']} n INNER JOIN {$d['shadow']} d ON n.node_key=d.canonical_key WHERE d.connector_slug=%s",$connector),'file26_shadow_clear_nodes');
 			if(is_wp_error($r)){return $r;}
 			$r=self::run($wpdb->prepare("DELETE FROM {$d['shadow']} WHERE connector_slug=%s",$connector),'file26_shadow_clear_docs');
 			if(is_wp_error($r)){return $r;}
-			$record=array('state'=>'prepared','connector'=>$connector,'baseline'=>$baseline,'started_at'=>gmdate('c'));
+			}
+			$record=array('state'=>'prepared','connector'=>$connector,'partial_object_id'=>$object_id,'baseline'=>$baseline,'started_at'=>gmdate('c'));
 			if(!add_option(self::opt($uuid),$record,'',false)){return new \WP_Error('file26_shadow_provenance','Cannot persist shadow provenance.');}
 			$created=array();return $baseline;
 		}finally{
@@ -83,6 +87,9 @@ final class Shadow_Index {
 		$record=get_option(self::opt($uuid),false);
 		if(!is_array($record)||'prepared'!==$record['state']||$record['connector']!==$doc['connector_slug']){
 			return new \WP_Error('file26_shadow_wrong_owner','No active isolated generation for this owner.');
+		}
+		if(!empty($record['partial_object_id'])&&$record['partial_object_id']!==$doc['object_id']){
+			return new \WP_Error('file26_shadow_partial_owner_violation','Owner batch returned an object outside the approved partial scope.');
 		}
 		$d=$names['documents']['shadow'];$n=$names['nodes']['shadow'];$key=$doc['canonical_key'];
 		$wpdb->last_error='';$revoked=$wpdb->get_var($wpdb->prepare('SELECT object_version FROM '.DB::table('tombstones').' WHERE canonical_key=%s',$key));
@@ -118,6 +125,7 @@ final class Shadow_Index {
 		if(!is_array($job)||'completed'!==$job['status']){return new \WP_Error('file26_shadow_incomplete','The complete owner source has not been processed.');}
 		$counts=json_decode($job['counts_json'],true);
 		if(!is_array($counts)||!empty($counts['failed'])){return new \WP_Error('file26_shadow_failed_batch','Unresolved owner batch errors prohibit cutover.');}
+		if(!empty($record['partial_object_id'])&&(int)($counts['processed']??0)<1){return new \WP_Error('file26_shadow_partial_incomplete','The scoped owner did not attest a current object state; refusing stale partial promotion.');}
 		$live=self::digest($names,'live');if(is_wp_error($live)){return $live;}
 		if(!hash_equals((string)$record['baseline']['sha256'],$live['sha256'])){
 			return new \WP_Error('file26_shadow_source_drift','Active documents or graph changed since snapshot; build a fresh generation.');
