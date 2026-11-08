@@ -103,6 +103,7 @@ function sabri_file26_restrict_document( $connector, $domain, $object_id, $objec
  * Explicit FR-005 commands; promotion and rollback require current step-up,
  * an authorized Founder decision, and independent approval.
  */
+function sabri_file26_shadow_second_approve( $job_uuid, $operation ) { return \Sabri\File26\Shadow_Index::second_approve( (string) $job_uuid, (string) $operation ); }
 function sabri_file26_shadow_validate( $job_uuid ) {
 	if ( ! current_user_can( 'manage_options' ) ) { return new \WP_Error( 'file26_shadow_forbidden', 'Search administration is required.' ); }
 	return \Sabri\File26\Shadow_Index::validate( (string) $job_uuid );
