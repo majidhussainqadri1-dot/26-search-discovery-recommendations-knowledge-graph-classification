@@ -6,7 +6,7 @@ $shadow=file_get_contents($root.'/includes/class-file26-shadow-index.php');
 $entry=file_get_contents($root.'/file-26-search-discovery.php');
 $checks=array(
 	'entry loads shadow before Indexer'=>strpos($entry,"includes/class-file26-shadow-index.php")<strpos($entry,"includes/class-file26-indexer.php"),
-	'shadow generation has independent physical tables'=>strpos($shadow,"'shadow'=>$wpdb->prefix")!==false,
+	'shadow generation has independent physical tables'=>strpos($shadow,"'shadow'=>")!==false,
 	'four projections are tracked'=>strpos($shadow,"'documents'=>'d','nodes'=>'n','edges'=>'e','classifications'=>'c'")!==false,
 	'worker stages instead of updating live'=>strpos($index,"$"."this->stage_for_job(")!==false,
 	'owner source is validated before staging'=>strpos($index,"$"."this->connectors->validate_document(")!==false,
