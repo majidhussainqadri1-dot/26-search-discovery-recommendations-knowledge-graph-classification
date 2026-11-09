@@ -20,7 +20,7 @@ The branch `audit/file26-v12-shadow-index-20261108` remains a release **candidat
 
 ## Ephemeral integration acceptance
 
-Verified in GitHub Actions on 2026-11-09, using a disposable **WordPress 6.8.3 / PHP 8.3 / MariaDB 10.11** installation, synthetic connector, synthetic Founder/admin identity and separate synthetic auditor:
+Verified in GitHub Actions on 2026-11-09, using disposable **WordPress 6.8.3, 7.0.1 and 7.1.4 / PHP 8.3 / MariaDB 10.11** installations, synthetic connector, synthetic Founder/admin identity and separate synthetic auditor:
 - Successful plugin activation and complete real schema.
 - Real WordPress connector registration and canonical serving document write.
 - Owner full reindex using `CREATE TABLE ... LIKE`, physical shadow staging and queue lease.
@@ -46,7 +46,7 @@ Verified in GitHub Actions on 2026-11-09, using a disposable **WordPress 6.8.3 /
 - Real source inventory completeness from owner `list_batch`, multi-object filtered partial rebuild (intentionally unsupported/fail-closed), and performance budgets on production-scale records.
 - Production backup/restore drill, staged installation/upgrade/revert, live incident retest and exact deployed parity.
 
-**Owner-source reality:** default branches of Files 03, 07, 08, 10, 15 contain executable code; Files 05, 06, 11, 12 and 18 had no executable owner module on their inspected `main`; no canonical File 21 repository was established in the accessible repository list. This audit does not prove other branches or deployments are empty.
+**Owner-source reality:** default branches of Files 03, 07, 08, 10, 15 contain executable code; Files 05, 06, 11, 12 and 18 had no executable owner module on their inspected `main`; canonical File21 is now identified as public repository `sabri-complete-home-news-feed`, with a genuinely installed native `file21-publication` connector handshake tested on three isolated WordPress versions. This audit does not prove other branches or deployments are empty.
 
 ## Open release gates, in order
 
@@ -72,3 +72,23 @@ Verified in GitHub Actions on 2026-11-09, using a disposable **WordPress 6.8.3 /
 - **Live Verification Status:** not verified.
 
 The previous site connection via WPVibe returned HTTP 530; this does not establish the failing hop or root cause. **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
+## Extended 2026-11-09 corrections and native-owner acceptance
+
+**New exact-branch source safety closures beyond the initial three concurrency defects:**
+
+1. Per-object serving-version monotonicity: a full owner rebuild cannot replay older events, or change the checksum at the same version/sequence.
+2. Per-object canonical removal proof: candidates that omit even one live document without a sufficiently new tombstone fail validation, including cases with an **equal total document count**. Shadow deletion/restriction without a live revocation record fails closed.
+3. Canonical File04 cutover contract: its three hashes belong in an idempotent, exact-request `wp_options` acceptance receipt, not Indexer scope. File04 explicitly accepts an asynchronously queued search job; the receipt now verifies a real existing queue job, its full-snapshot connector and non-dead-letter state, checks File04's canonical SHA-256 request digest, and never claims candidate promotion or a completed rebuild.
+4. Interrupted atomic cutover/rollback: journal source/candidate checksums before MySQL RENAME; step-up-authorized `sabri_file26_shadow_recover_interrupted` determines whether the entire rename happened, validates **both** physical generations against the journal, and corrects only the provenance option. Unexpected/partial table inventories or inconsistent checksums fail closed, without a second RENAME or any table deletion.
+5. Read-only `tools/live-reality-freeze.php`: WP-CLI-only privacy-minimized installed-source tree fingerprint, installed plugin/declared schema/DB version and actual table shape/counts, File03..File21 source-owner readiness, and review/migration metadata. Its executable CI smoke passed; this tool has **not** run on actual Hostinger Live.
+
+**Executable acceptance on actual SQL:** `tests/file26-20261109-wordpress-mysql-integration.php` checks initial guest search, isolated owner rebuild, checksum, distinct approver, atomic swap, exact rollback, private exclusions, source drift, stale owner events, equal-count unrevoked omissions, tombstone failure, and interrupted post-swap/rollback state restoration. `tests/file26-20261109-file04-cutover-integration.php` checks File04 acceptance semantics on MariaDB. `tests/file26-20261109-owner-gate-runtime.php` tests eleven synthetic owner shapes and all seven separate activation approvals.
+
+**First genuine File21 installed-owner handshake:** the exact source HEAD `626b380328d4400014504e679032291cd023bbdb` from the public repository `majidhussainqadri1-dot/sabri-complete-home-news-feed` is fetched by the CI and installed alongside File26 on a disposable WordPress 6.8.3, 7.0.1 and 7.1.4 matrix. Tests prove actual `Sabri\\HomeNewsFeed\\SearchProviderRegistry` registration, callable native `list_batch`, `can_view`, `health`, bounded batch and fail-closed `proposed` lane. No synthetic owner substitutes for this evidence. The real native content *lifecycle* is not yet accepted, due in part to File21's source-version incompatibility documented in its Issue #58.
+
+**Unresolved non-File26 owner blocker:** the canonical File21 metadata-only visibility/review changes can reuse the same post `post_modified_gmt`-derived source version, conflicting with File26 tombstone and checksum precedence. This remains an open owner-source defect (Issue #58), NOT a verified Live incident and NOT a valid reason to weaken File26's anti-resurrection rules.
+
+**All final acceptance evidence must be exact-HEAD:** recompute SHA and validate current PHP 7.4/8.3 CI, full forty sequential QA job, and three real WordPress/MariaDB integration matrix runs on the last PR #22 commit. No older green run can certify a later documentation or code commit.
+
+**Physical Hostinger staging and production acceptance are still missing.** All 11 launched canonical owner journeys, realistic medical/linguistic gold queries, performance/load, restore, security penetration, and Founder deployment approvals remain mandatory. Owner File21 source handshake is now evidenced, but no real deployed owner/version claims are made.
