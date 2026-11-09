@@ -61,6 +61,13 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-wordpress-mysql-integration.php --path=/tmp/file26-ci-wp --allow-root
 
+      - name: Run canonical File04 to File26 asynchronous queue receipt contract
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-file04-cutover-integration.php --path=/tmp/file26-ci-wp --allow-root
       - name: Verify read-only runtime/deployment freeze on disposable WordPress
         shell: bash
         run: |
