@@ -343,3 +343,24 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file18-marketplace.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact native File08 public clinic owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/08-worldwide-clinic-and-appointments-foundation
+          ref: cc09e7fe85a06b9fd54c96fb71a03bc26c987a60
+          path: native-file08
+          persist-credentials: false
+      - name: Materialize File08 without any clinic identity or staging migration writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/worldwide-clinic
+          tar -C native-file08 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/worldwide-clinic -xf -
+      - name: Verify real File08 clinic owner identity and clinical privacy boundary
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file08-public-clinic.php --path=/tmp/file26-ci-wp --allow-root
