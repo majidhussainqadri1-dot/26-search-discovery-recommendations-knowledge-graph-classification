@@ -117,6 +117,11 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-integration.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Prove exact source/DB migration parity checks refuse all partial evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/file26-20261109-parity-guard.py
       - name: Test local Ollama embedding HTTP adapter and failsafe without external network
         env:
           FILE26_CI_EPHEMERAL_DB: yes
