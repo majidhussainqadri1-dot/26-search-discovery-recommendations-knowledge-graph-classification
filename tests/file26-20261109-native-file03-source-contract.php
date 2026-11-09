@@ -22,6 +22,6 @@ f26f03_assert(call_user_func($c['can_view'],$fake,array('authenticated'=>false))
 $bad=call_user_func($c['list_batch'],'x',10,array('connector'=>'file03-profiles'));
 f26f03_assert(is_wp_error($bad),'Missing schema/invalid cursor fails closed');
 $source=(string)file_get_contents(WP_PLUGIN_DIR.'/sabri-profiles-doctors/includes/class-spd-contracts.php');
-f26f03_assert(strpos($source,"'freshness_at' => sanitize_text_field( (string) ( \\$projection['generated_at']")===false,'Volatile request-time source data no longer changes a stable version checksum');
+f26f03_assert(strpos($source,"'freshness_at' =>")===false,'Volatile request-time source data no longer changes a stable version checksum');
 f26f03_assert($plugin->owner_contracts()->readiness()['file03']['registered']&& !$plugin->owner_contracts()->readiness()['file03']['production_ready'],'Native File03 discovered but release gate remains denied');
 echo "PASS: genuine File03 owner outage and checksum-source regressions\n";
