@@ -128,6 +128,10 @@ $state = array(
         'declared_plugin_version' => $plugin_version,
         'declared_schema_option' => get_option('sabri_file26_schema_version', null),
         'declared_contract_version' => defined('SABRI_FILE26_CONTRACT_VERSION') ? SABRI_FILE26_CONTRACT_VERSION : null,
+        'doctor_appeals_schema_option' => class_exists('Sabri\\File26\\Doctor_Appeals')
+            ? get_option(\\Sabri\\File26\\Doctor_Appeals::OPTION_SCHEMA, null) : null,
+        'owner_runtime_readiness' => class_exists('Sabri\\File26\\Plugin') && defined('SABRI_FILE26_VERSION')
+            ? \\Sabri\\File26\\Plugin::instance()->owner_contracts()->readiness() : null,
         'entry_file_sha256' => is_file($plugin_file) ? hash_file('sha256', $plugin_file) : null,
         'all_plugin_file_count' => $file_count,
         'all_plugin_files_sha256' => $source_hash,
