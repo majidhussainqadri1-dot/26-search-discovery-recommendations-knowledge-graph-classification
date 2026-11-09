@@ -88,6 +88,8 @@ jobs:
           assert len(report['file26']['all_plugin_files_sha256']) == 64
           assert report['file26']['tables']['documents']['status'] == 'present'
           assert report['file26']['tables']['nodes']['status'] == 'present'
+          assert len(report['file26']['owner_runtime_readiness']) == 11
+          assert report['file26']['doctor_appeals_schema_option'] is not None
           assert report['live_verified_end_to_end'] is False
           assert report['read_errors'] == []
           print('PASS: read-only WP CLI exact-deployed-artifact and schema freeze')
