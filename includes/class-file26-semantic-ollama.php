@@ -30,7 +30,7 @@ final class Semantic_Ollama {
 			return false;
 		}
 		$model = SABRI_FILE26_SEMANTIC_OLLAMA_MODEL;
-		return is_string( $model ) && in_array( $model, array( 'bge-m3', 'embeddinggemma', 'qwen3-embedding' ), true ) &&
+		return is_string( $model ) && in_array( $model, array( 'bge-m3', 'embeddinggemma', 'qwen3-embedding:0.6b' ), true ) &&
 			function_exists( 'wp_remote_post' );
 	}
 
