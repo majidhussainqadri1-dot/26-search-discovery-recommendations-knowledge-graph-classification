@@ -3,6 +3,7 @@
 if('yes'!==getenv('FILE26_CI_EPHEMERAL_DB')||false===strpos(home_url('/'),'file26-ci.local')){
     fwrite(STDERR, "REFUSED: native File21 integration requires disposable WP/MariaDB.\n");exit(2);
 }
+if(!function_exists('is_plugin_active')){require_once ABSPATH.'wp-admin/includes/plugin.php';}
 function f26native($condition,$description){
     if(!$condition){fwrite(STDERR,"FAIL: ".$description."\n");exit(1);}
     echo "PASS: ".$description."\n";
