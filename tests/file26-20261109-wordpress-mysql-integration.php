@@ -43,14 +43,15 @@ $owner_doc['object_version'] = 2;
 $owner_doc['source_event_sequence'] = 2;
 $owner_doc['title'] = 'Shadow Updated Article';
 $owner_doc['excerpt'] = 'New source content';
+$owner_items = array($owner_doc);
 $manifest = array(
     'slug'=>'file26_ci_fixture','owner_file'=>'File 26 CI only','contract_version'=>'1.0',
     'entity_types'=>array('article'),'privacy_classes'=>array('public'),
     'visibility_fields'=>array('public'),'deletion_semantics'=>'versioned_tombstone',
     'status'=>'active',
-    'list_batch'=>static function($cursor, $limit, $scope) use (&$owner_doc) {
+    'list_batch'=>static function($cursor, $limit, $scope) use (&$owner_items) {
         if ($cursor !== '') { return array('items'=>array(), 'done'=>true); }
-        return array('items'=>array($owner_doc), 'done'=>true);
+        return array('items'=>$owner_items, 'done'=>true);
     },
     'can_view'=>static function($record, $audience) { return true; }
 );
@@ -154,5 +155,48 @@ $live_change['title'] = 'Concurrent Owner Live Update';
 file26_ci_assert_ok(sabri_file26_upsert_document($live_change), 'Concurrent live owner update made after snapshot');
 $drift_proof = \Sabri\File26\Shadow_Index::validate($drift_uuid);
 file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()==='file26_shadow_source_drift', 'Real database drift correctly blocks stale candidate promotion');
+
+
+// A full rebuild must never replace a newer serving owner event with stale data.
+$stale_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+file26_ci_assert_ok($stale_uuid, 'Stale owner snapshot negative-test generation created');
+$plugin->indexer()->process_queue();
+$stale_job_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$stale_uuid));
+file26_ci_require($stale_job_status==='retry', 'Stale owner reindex is retried, never falsely completed');
+$stale_proof = \Sabri\File26\Shadow_Index::validate($stale_uuid);
+file26_ci_require(is_wp_error($stale_proof) && $stale_proof->get_error_code()==='file26_shadow_incomplete', 'Stale owner batch cannot be promoted');
+
+// Equal total count cannot hide omitted canonical records without deletion proof.
+$substitute_a = $doc;
+$substitute_a['object_id'] = 'substitute-a';
+$substitute_a['canonical_url'] = home_url('/file26-ci/substitute-a');
+$substitute_a['title'] = 'Unexpected Substitute A';
+$substitute_b = $doc;
+$substitute_b['object_id'] = 'substitute-b';
+$substitute_b['canonical_url'] = home_url('/file26-ci/substitute-b');
+$substitute_b['title'] = 'Unexpected Substitute B';
+$owner_items = array($substitute_a, $substitute_b);
+$omission_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+file26_ci_assert_ok($omission_uuid, 'Equal-count omission negative-test generation created');
+$plugin->indexer()->process_queue();
+$omission_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$omission_uuid));
+file26_ci_require($omission_status==='completed', 'Substitution fixture staged without a batch error');
+$omission_proof = \Sabri\File26\Shadow_Index::validate($omission_uuid);
+file26_ci_require(is_wp_error($omission_proof) && $omission_proof->get_error_code()==='file26_shadow_unrevoked_omission', 'Equal-count omission rejected without canonical tombstone');
+
+// Explicit deletion received from the owner must already be published as a
+// versioned live tombstone, otherwise a later stale upsert could resurrect it.
+$unsigned_delete = $live_change;
+$unsigned_delete['object_version'] = 4;
+$unsigned_delete['source_event_sequence'] = 4;
+$unsigned_delete['state'] = 'deleted';
+$owner_items = array($unsigned_delete);
+$unsigned_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+file26_ci_assert_ok($unsigned_uuid, 'Unconfirmed deletion negative-test generation created');
+$plugin->indexer()->process_queue();
+$unsigned_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$unsigned_uuid));
+file26_ci_require($unsigned_status==='retry', 'Owner deletion with no live tombstone cannot complete generation');
+$still_present = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$key));
+file26_ci_require((int)$still_present===3, 'Unconfirmed deletion never mutates active serving document');
 
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
