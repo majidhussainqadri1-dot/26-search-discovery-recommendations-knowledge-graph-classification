@@ -37,7 +37,9 @@ $checks=array(
 	'generation uninstall honors destructive-only data policy'=>strpos(file_get_contents($root.'/uninstall.php'),"if ( ! $"."destructive ) { return; }")!==false,
 	'generated shadow tables have bounded uninstall matching'=>strpos(file_get_contents($root.'/uninstall.php'),'f26_[spf][dnec]_[0-9a-f]{32}')!==false,
 	'no dangerous automatic promotion'=>strpos($index,'Shadow_Index::swap(')===false,
-	'manual administration entry is present'=>strpos($entry,'function sabri_file26_shadow_validate(')!==false
+	'manual administration entry is present'=>strpos($entry,'function sabri_file26_shadow_validate(')!==false,
+	'atomic operations journal pre-rename checksums'=>strpos($shadow,"'transition'=">0)===false?strpos($shadow,"$"."record['transition']=array('operation'=>'swap'")!==false&&strpos($shadow,"$"."record['transition']=array('operation'=>'rollback'")!==false:false,
+	'failed rename recovery never issues a second RENAME'=>strpos($shadow,'public static function recover_interrupted(')!==false&&strpos($shadow,"'file26_shadow_recovery_checksum_mismatch'")!==false&&strpos($entry,'function sabri_file26_shadow_recover_interrupted(')!==false
 );
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"FAIL: $label\n");exit(1);}echo "PASS: $label\n";}
 echo "PASS: FR005 source-contract checks ".count($checks)."\n";
