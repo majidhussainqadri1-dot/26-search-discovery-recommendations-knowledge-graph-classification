@@ -322,3 +322,24 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file15-trends.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact unmerged File18 marketplace owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/18-sabri-marketplace
+          ref: ff2519a1ae5bc59f309cd126740192de0de20d7a
+          path: native-file18
+          persist-credentials: false
+      - name: Materialize native File18 without bypassing seller/recall/commerce dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/18-marketplace
+          tar -C native-file18/18-marketplace -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/18-marketplace -xf -
+      - name: Verify real File18 owner public listing eligibility and fail-closed catalog
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file18-marketplace.php --path=/tmp/file26-ci-wp --allow-root
