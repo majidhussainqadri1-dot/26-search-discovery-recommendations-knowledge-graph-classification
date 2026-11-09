@@ -1,0 +1,58 @@
+name: File 26 Disposable WordPress MariaDB Integration
+on:
+  pull_request:
+    paths:
+      - 'includes/**'
+      - 'file-26-search-discovery.php'
+      - 'tests/file26-20261109-wordpress-mysql-integration.php'
+      - '.github/workflows/file26-mysql-integration.yml'
+  push:
+    branches: ['audit/file26-v12-shadow-index-20261108']
+permissions:
+  contents: read
+jobs:
+  shadow-mysql:
+    name: Real WordPress / MariaDB shadow, swap and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wp-ephemeral
+          MARIADB_ROOT_PASSWORD: root-ephemeral
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da90b1c3be6e8f667e8f3d # v7.0.1
+      - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
+        with:
+          php-version: '8.3'
+          extensions: mysqli, mbstring, curl, json
+      - name: Install WordPress CLI and disposable WordPress
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          mkdir -p /tmp/file26-ci-wp
+          php /tmp/wp-cli.phar core download --version=6.8.3 --path=/tmp/file26-ci-wp --allow-root --quiet
+          php /tmp/wp-cli.phar config create --path=/tmp/file26-ci-wp --dbname=wordpress --dbuser=wordpress --dbpass=wp-ephemeral --dbhost=127.0.0.1:3306 --allow-root --quiet
+          php /tmp/wp-cli.phar core install --path=/tmp/file26-ci-wp --url=http://file26-ci.local --title='File26 Disposable CI' --admin_user=admin --admin_password=ci-ephemeral-long-password --admin_email=file26-ci-admin@example.test --skip-email --allow-root --quiet
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery
+          tar -C "$GITHUB_WORKSPACE" --exclude=.git --exclude=release -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery -xf -
+          php /tmp/wp-cli.phar plugin activate sabri-file26-search-discovery --path=/tmp/file26-ci-wp --allow-root
+      - name: Execute real SQL FR-005 cutover and rollback acceptance
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-wordpress-mysql-integration.php --path=/tmp/file26-ci-wp --allow-root
