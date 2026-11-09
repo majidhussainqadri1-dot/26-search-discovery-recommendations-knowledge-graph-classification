@@ -128,4 +128,31 @@ $search_rollback = sabri_file26_search(array('q'=>'Original Article','locale'=>'
 file26_ci_require(!is_wp_error($search_rollback) && !empty($search_rollback['results']) && $search_rollback['results'][0]['title']==='Original Article', 'Guest search reflects rollback immediately');
 file26_ci_require((int)$wpdb->get_var($wpdb->prepare("SELECT version FROM $nodes WHERE node_key=%s",$key))===1, 'Rollback restored exact graph node version');
 file26_ci_require(get_option('sabri_f26_shadow_'.str_replace('-','',$uuid))['state']==='rolled_back', 'Rollback provenance recorded');
+
+// Privacy and drift checks run AFTER successful rollback; all data is disposable.
+$member_doc = $doc;
+$member_doc['object_id'] = 'fixture-private-18';
+$member_doc['canonical_url'] = home_url('/file26-ci/fixture-private-18');
+$member_doc['title'] = 'Members Only Learning Notes';
+$member_doc['visibility'] = 'members';
+wp_set_current_user((int)$admin->ID);
+file26_ci_assert_ok(sabri_file26_upsert_document($member_doc), 'Members-only indexed result stored for the privacy gate');
+wp_set_current_user(0);
+$guest_private = sabri_file26_search(array('q'=>'Members Only Learning Notes','locale'=>'ur'));
+file26_ci_require(!is_wp_error($guest_private) && empty($guest_private['results']), 'Anonymous user cannot discover members-only document');
+wp_set_current_user((int)$admin->ID);
+$member_private = sabri_file26_search(array('q'=>'Members Only Learning Notes','locale'=>'ur'));
+file26_ci_require(!is_wp_error($member_private) && !empty($member_private['results']), 'Authenticated valid member can discover permitted member result');
+
+$drift_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+file26_ci_assert_ok($drift_uuid, 'Second generation started for drift negative test');
+$plugin->indexer()->process_queue();
+$live_change = $doc;
+$live_change['object_version'] = 3;
+$live_change['source_event_sequence'] = 3;
+$live_change['title'] = 'Concurrent Owner Live Update';
+file26_ci_assert_ok(sabri_file26_upsert_document($live_change), 'Concurrent live owner update made after snapshot');
+$drift_proof = \Sabri\File26\Shadow_Index::validate($drift_uuid);
+file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()==='file26_shadow_source_drift', 'Real database drift correctly blocks stale candidate promotion');
+
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
