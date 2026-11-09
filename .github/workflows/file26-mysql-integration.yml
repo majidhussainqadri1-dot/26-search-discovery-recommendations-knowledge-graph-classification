@@ -99,7 +99,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/sabri-complete-home-news-feed
-          ref: 372bcfdc454d6639e9344cf614567d33d4417880
+          ref: fb8663f52054462571f132ac001473bfa1628381
           path: native-file21
           persist-credentials: false
       - name: Install real File21 plugin beside File26, without the synthetic connector
