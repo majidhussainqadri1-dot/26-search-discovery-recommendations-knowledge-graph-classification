@@ -56,3 +56,28 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-wordpress-mysql-integration.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Verify read-only runtime/deployment freeze on disposable WordPress
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tools/live-reality-freeze.php --path=/tmp/file26-ci-wp --allow-root > /tmp/file26-ci-freeze.json
+          python3 - <<'PY'
+          import json
+          path = '/tmp/file26-ci-freeze.json'
+          with open(path, encoding='utf-8') as f:
+              report = json.load(f)
+          assert report['audit_contract'] == 'sabri.file26.live-reality-freeze.v1'
+          assert report['file26']['plugin_installed'] is True
+          assert report['file26']['plugin_active'] is True
+          assert report['file26']['declared_plugin_version'] == '1.3.0'
+          assert report['file26']['all_plugin_file_count'] > 100
+          assert report['file26']['tree_inventory_complete'] is True
+          assert len(report['file26']['entry_file_sha256']) == 64
+          assert len(report['file26']['all_plugin_files_sha256']) == 64
+          assert report['file26']['tables']['documents']['status'] == 'present'
+          assert report['file26']['tables']['nodes']['status'] == 'present'
+          assert report['live_verified_end_to_end'] is False
+          assert report['read_errors'] == []
+          print('PASS: read-only WP CLI exact-deployed-artifact and schema freeze')
+          PY
