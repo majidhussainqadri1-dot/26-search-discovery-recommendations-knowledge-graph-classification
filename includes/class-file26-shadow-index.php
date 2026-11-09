@@ -242,6 +242,7 @@ final class Shadow_Index {
 			$approval=get_option(self::opt($uuid),array());
 			if(!isset($approval['approvals']['swap']['sha256'])||!hash_equals((string)$approval['approvals']['swap']['sha256'],(string)$proof['candidate']['sha256'])){return new \WP_Error('file26_shadow_second_approval_stale','Independent approval for this generation is absent or stale.');}
 			$record=get_option(self::opt($uuid),array());$record['state']='swapping';
+			$record['transition']=array('operation'=>'swap','source_sha256'=>$proof['source']['sha256'],'candidate_sha256'=>$proof['candidate']['sha256'],'at_utc'=>gmdate('c'));
 			if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_transition','Cannot record pre-cutover state.');}
 			$pairs=array();foreach($names as $tables){$pairs[]=$tables['live'].' TO '.$tables['previous'];$pairs[]=$tables['shadow'].' TO '.$tables['live'];}
 			$r=self::run('RENAME TABLE '.implode(',',$pairs),'file26_shadow_atomic_swap');if(is_wp_error($r)){return $r;}
@@ -260,7 +261,9 @@ final class Shadow_Index {
 			$now=self::digest($names,'live');if(is_wp_error($now)){return $now;}
 			if(!hash_equals((string)$record['candidate']['sha256'],$now['sha256'])){return new \WP_Error('file26_shadow_rollback_drift','New writes exist; rollback would lose data. Reconcile instead.');}
 			if(!isset($record['approvals']['rollback']['sha256'])||!hash_equals((string)$record['approvals']['rollback']['sha256'],$now['sha256'])){return new \WP_Error('file26_shadow_rollback_approval_stale','Separate auditor approval for this rollback is absent or stale.');}
-			$record['state']='rolling_back';if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_rollback_record','Cannot record rollback transition.');}
+			$record['state']='rolling_back';
+			$record['transition']=array('operation'=>'rollback','source_sha256'=>$record['baseline']['sha256'],'candidate_sha256'=>$record['candidate']['sha256'],'at_utc'=>gmdate('c'));
+			if(!update_option(self::opt($uuid),$record,false)){return new \WP_Error('file26_shadow_rollback_record','Cannot record rollback transition.');}
 			$pairs=array();foreach($names as $tables){$pairs[]=$tables['live'].' TO '.$tables['failed'];$pairs[]=$tables['previous'].' TO '.$tables['live'];}
 			$r=self::run('RENAME TABLE '.implode(',',$pairs),'file26_shadow_atomic_rollback');if(is_wp_error($r)){return $r;}
 			$record['state']='rolled_back';$record['rolled_back_at']=gmdate('c');
@@ -268,4 +271,79 @@ final class Shadow_Index {
 			return array('state'=>'rolled_back','job'=>$uuid);
 		}finally{self::unlock($lock);}
 	}
+	/**
+	 * Read-only inspection of the atomic MySQL rename result, followed by one
+	 * provenance-state repair. Never executes a second RENAME or deletes tables.
+	 * Called only by a recently step-up authorized administrator.
+	 */
+	public static function recover_interrupted($uuid){
+		global $wpdb;
+		$security=new Security();
+		if(!current_user_can('manage_options')||!$security->require_step_up('shadow_recover')){
+			return new \WP_Error('file26_shadow_recovery_forbidden','Privileged recent step-up is required to reconcile an interrupted index transition.');
+		}
+		$names=self::names($uuid);if(is_wp_error($names)){return $names;}
+		$lock=self::lock();if(is_wp_error($lock)){return $lock;}
+		try{
+			$record=get_option(self::opt($uuid),false);
+			if(!is_array($record)||!in_array($record['state']??'',array('swapping','rolling_back'),true)){
+				return new \WP_Error('file26_shadow_recovery_not_pending','Only a recorded incomplete transition can be reconciled.');
+			}
+			$transition=$record['transition']??array();
+			$source=(string)($transition['source_sha256']??'');
+			$candidate=(string)($transition['candidate_sha256']??'');
+			$operation=(string)($transition['operation']??'');
+			if(!preg_match('/^[a-f0-9]{64}$/D',$source)||!preg_match('/^[a-f0-9]{64}$/D',$candidate)
+				||('swapping'===$record['state']&&'swap'!==$operation)
+				||('rolling_back'===$record['state']&&'rollback'!==$operation)){
+				return new \WP_Error('file26_shadow_recovery_provenance','Missing or mismatched pre-transition checksums; manual investigation required.');
+			}
+			$exists=array();
+			foreach(array('live','shadow','previous','failed') as $side){
+				$found=0;
+				foreach($names as $tables){
+					$wpdb->last_error='';
+					$seen=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$wpdb->esc_like($tables[$side])));
+					if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_recovery_inventory','Cannot read physical table inventory.');}
+					if($seen===$tables[$side]){$found++;}
+				}
+				if($found!==0&&$found!==count($names)){
+					return new \WP_Error('file26_shadow_recovery_partial_inventory','Partial or ambiguous table layout; do not attempt automatic recovery.');
+				}
+				$exists[$side]=$found===count($names);
+			}
+			if(!$exists['live']){return new \WP_Error('file26_shadow_recovery_no_serving','Serving tables missing; human recovery mandatory.');}
+			if('swapping'===$record['state']){
+				$applied=$exists['previous']&&!$exists['shadow']&&!$exists['failed'];
+				$unapplied=$exists['shadow']&&!$exists['previous']&&!$exists['failed'];
+				if(!$applied&&!$unapplied){return new \WP_Error('file26_shadow_recovery_ambiguous','Unexpected cutover table layout.');}
+				$serving=self::digest($names,'live');if(is_wp_error($serving)){return $serving;}
+				$other=self::digest($names,$applied?'previous':'shadow');if(is_wp_error($other)){return $other;}
+				if(!hash_equals($applied?$candidate:$source,$serving['sha256'])||!hash_equals($applied?$source:$candidate,$other['sha256'])){
+					return new \WP_Error('file26_shadow_recovery_checksum_mismatch','Physical transition contents differ from pre-rename evidence.');
+				}
+				$record['state']=$applied?'swapped':'prepared';
+				if($applied){$record['candidate']=$serving;$record['swapped_at']=gmdate('c');}
+			}else{
+				$applied=$exists['failed']&&!$exists['previous']&&!$exists['shadow'];
+				$unapplied=$exists['previous']&&!$exists['failed']&&!$exists['shadow'];
+				if(!$applied&&!$unapplied){return new \WP_Error('file26_shadow_recovery_ambiguous','Unexpected rollback table layout.');}
+				$serving=self::digest($names,'live');if(is_wp_error($serving)){return $serving;}
+				$other=self::digest($names,$applied?'failed':'previous');if(is_wp_error($other)){return $other;}
+				if(!hash_equals($applied?$source:$candidate,$serving['sha256'])||!hash_equals($applied?$candidate:$source,$other['sha256'])){
+					return new \WP_Error('file26_shadow_recovery_checksum_mismatch','Rollback contents differ from recorded pre-rename evidence.');
+				}
+				$record['state']=$applied?'rolled_back':'swapped';
+				if($applied){$record['rolled_back_at']=gmdate('c');}
+			}
+			$record['recovered_at']=gmdate('c');
+			$record['recovery_layout']=$applied?'rename_applied':'rename_not_applied';
+			if(!update_option(self::opt($uuid),$record,false)){
+				return new \WP_Error('file26_shadow_recovery_record_failed','Physical state was verified, but provenance repair could not be recorded.');
+			}
+			$security->audit('shadow_index_transition_recovered',array('object_type'=>'shadow_index','object_key'=>$uuid,'reason'=>$record['recovery_layout'],'metadata'=>array('state'=>$record['state'])));
+			return array('recovered'=>true,'state'=>$record['state'],'rename_applied'=>$applied);
+		}finally{self::unlock($lock);}
+	}
+
 }
