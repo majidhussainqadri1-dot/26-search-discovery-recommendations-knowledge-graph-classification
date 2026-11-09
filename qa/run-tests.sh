@@ -49,6 +49,7 @@ run_php_test "$ROOT/tests/review-r62-r81-contract-tests.php"
 run_php_test "$ROOT/tests/file26-20261020-queue-partial-failure-regression.php"
 run_php_test "$ROOT/tests/file26-20261020-graph-cursor-parity-regression.php"
 run_php_test "$ROOT/tests/file26-20261108-shadow-index-regression.php"
+run_php_test "$ROOT/tests/file26-20261109-shadow-worker-runtime.php"
 run_php_test "$ROOT/tests/file26-20261108-v12-source-traceability.php"
 
 printf '[9/15] Dangerous execution primitive scan\n'
@@ -113,6 +114,7 @@ run_php_test "$PACKAGE/tests/review-r62-r81-contract-tests.php"
 run_php_test "$PACKAGE/tests/file26-20261020-queue-partial-failure-regression.php"
 run_php_test "$PACKAGE/tests/file26-20261020-graph-cursor-parity-regression.php"
 run_php_test "$PACKAGE/tests/file26-20261108-shadow-index-regression.php"
+run_php_test "$PACKAGE/tests/file26-20261109-shadow-worker-runtime.php"
 run_php_test "$PACKAGE/tests/file26-20261108-v12-source-traceability.php"
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
