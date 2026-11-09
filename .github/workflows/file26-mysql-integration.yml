@@ -132,21 +132,40 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-lifecycle.php --path=/tmp/file26-ci-wp --allow-root
 
+      - name: Checkout exact unmerged compatible File10 owner source
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/10-video-wall-and-educational-broadcasting-foundation
+          ref: 2e11747147e5e8300a6236b3325dfe8dfa53468f
+          path: native-file10
+          persist-credentials: false
+      - name: Install real File10 media owner on supported disposable WordPress
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/video-wall-and-live-broadcasting
+          tar -C native-file10/video-wall-and-live-broadcasting -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/video-wall-and-live-broadcasting -xf -
+          php /tmp/wp-cli.phar plugin activate video-wall-and-live-broadcasting --path=/tmp/file26-ci-wp --allow-root
       - name: Checkout exact unmerged File11 source candidate
+        if: matrix.wordpress != '6.8.3'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/11-reels-and-short-video-discovery-foundation
           ref: 1df22845452419b3e67686d41b4ea178bfd9f484
           path: native-file11
           persist-credentials: false
-      - name: Install native File11 on disposable WordPress with File10 intentionally absent
+      - name: Install File11 only with canonical real File10 dependency
+        if: matrix.wordpress != '6.8.3'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/file26-ci-wp/wp-content/plugins/11-reels-foundation
           tar -C native-file11/11-reels-foundation -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/11-reels-foundation -xf -
           php /tmp/wp-cli.phar plugin activate 11-reels-foundation --path=/tmp/file26-ci-wp --allow-root
-      - name: Verify actual File11 candidate connector and File10 dependent fail-closed state
+      - name: Verify real File10 and File11 owners' native connector in File26
+        if: matrix.wordpress != '6.8.3'
         env:
           FILE26_CI_EPHEMERAL_DB: yes
         shell: bash
