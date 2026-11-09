@@ -32,6 +32,6 @@ The canonical File21 source **is** `sabri-complete-home-news-feed`; it was previ
 
 ## Required live reality fields
 
-Repository review branch: recheck exact PR #22 HEAD at release. Deployed plugin/package/version/checksum: **unverified**. Actual DB version/tables/options/migration: **unverified**. Live verification: **not completed**, WPVibe site connect returned HTTP 530 without identifying the root cause. Use `tools/live-reality-freeze.php` under authenticated WP-CLI on the real host to collect privacy-minimized evidence before source/deployment parity audit.
+Repository review branch: recheck exact PR #22 HEAD at release. Deployed plugin/package/version/checksum: **unverified**. Actual DB version/tables/options/migration: **unverified**. Live verification: **not completed**, WPVibe returned HTTP 530 on a site-connect attempt without identifying the root cause. Use `tools/live-reality-freeze.php` under authenticated WP-CLI on the real host to collect privacy-minimized evidence before source/deployment parity audit.
 
 **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
