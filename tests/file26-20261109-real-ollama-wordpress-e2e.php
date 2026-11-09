@@ -15,6 +15,8 @@ define('SABRI_FILE26_SEMANTIC_OLLAMA_ENABLED',true);
 define('SABRI_FILE26_SEMANTIC_OLLAMA_MODEL','qwen3-embedding:0.6b');
 wp_set_current_user(0);
 $plugin=\Sabri\File26\Plugin::instance();
+$settings=\Sabri\File26\DB::update_settings(array('activated'=>true,'public_search_enabled'=>true,'telemetry_enabled'=>false));
+f26_real_model_assert(is_array($settings)&&!empty($settings['activated']),'Disposable File26 public search explicitly enabled for isolated model acceptance');
 $slug='file26_ci_model_demo';
 $manifest=array(
     'slug'=>$slug,'owner_file'=>'File26 CI Only','contract_version'=>'1.0',
