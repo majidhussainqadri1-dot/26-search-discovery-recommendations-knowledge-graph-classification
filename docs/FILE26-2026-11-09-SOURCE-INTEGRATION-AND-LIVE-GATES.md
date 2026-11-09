@@ -92,3 +92,28 @@ The previous site connection via WPVibe returned HTTP 530; this does not establi
 **All final acceptance evidence must be exact-HEAD:** recompute SHA and validate current PHP 7.4/8.3 CI, full forty sequential QA job, and three real WordPress/MariaDB integration matrix runs on the last PR #22 commit. No older green run can certify a later documentation or code commit.
 
 **Physical Hostinger staging and production acceptance are still missing.** All 11 launched canonical owner journeys, realistic medical/linguistic gold queries, performance/load, restore, security penetration, and Founder deployment approvals remain mandatory. Owner File21 source handshake is now evidenced, but no real deployed owner/version claims are made.
+
+## Cross-owner closure extension — 9 November 2026
+
+### File21 owner Issue #58: corrected in the owner's own DRAFT PR #59
+
+File21 owner branch `fix/file21-file26-monotonic-owner-events-20261109`, exact latest source/QA SHA `fb8663f52054462571f132ac001473bfa1628381`, adds an owner-persisted per-post event-version counter guarded by a per-object MySQL advisory lock. Each relevant publication, review, visibility or locale event advances the owner sequence **before** derivative delivery. Batch reads are side-effect-free. Lock and metadata-write failures cannot mint phantom events. File21 did **not** change File26's canonical anti-resurrection policy.
+
+Source proof: File21 cross-file workflow, native File21 runtime unit tests and source package QA success on exact branch SHA. **Real isolated SQL proof** in File26's `tests/file26-20261109-native-file21-lifecycle.php`: public → private tombstone → public restoration; unchanged WP core modified timestamp; old event replay ignored; language updates; review disapproval/approval; physical deletion with greater version. No Hostinger staging/live deployed fix is claimed. Owner GitHub Issue #58 must remain OPEN pending installed-owner validation and live retest.
+
+### Native File10 and File11 dependency accepted at handshake level
+
+Actual File10 candidate source `2e11747147e5e8300a6236b3325dfe8dfa53468f` installed before actual File11 candidate source `1df22845452419b3e67686d41b4ea178bfd9f484` in isolated WordPress **7.0.1 and 7.1.4**. File11 explicitly rejected activation without real File10; this fail-closed result was reproduced and the fixture corrected to honor the dependency. `tests/file26-20261109-native-file11-readiness.php` confirms File11's original provider filter, 11-owner readiness registry, `list_batch/can_view/health`, canonical entity `reel`, fake-object denial and `proposed`/non-production-ready status. WordPress 6.8.3 is deliberately excluded from this duo because the selected File10 needs WP 7.0+. **Real Reel publication/playback/approval and media semantics remain unverified.**
+
+### Language/security acceptance and actual semantic provider state
+
+`tests/file26-20261109-multilingual-security-integration.php` runs real MySQL searches in seven locale/script fixtures: `ur`, `ar`, `en-US`, `ur-Latn`, `fa`, `bn`, `hi`. It tests Arabic/Urdu Unicode normalization, Roman Urdu typo similarity, bounded expansions, 5 synthetic SQL-injection / HTML search payloads that must never surface private/member records, and the clinical/patient-image bypass rule. It also proves no semantic score filter means **provider_available=false** and a controlled candidate-set reranker cannot add hidden or fabricated results.
+
+This is **real lexical/language/authorization acceptance**, not actual trained cross-language embeddings, an AI model, live relevance/precision gold targets, guaranteed medical translation, or a production external provider. Semantic/external/multimodal providers still need (1) owner- and governance-approved contracts, (2) approved model/service credentials and hosting, (3) privacy/consent/rights and exact input limits, (4) signed freshness/quality benchmarks, and (5) real isolated + staging + live tests. These must **not** be declared delivered from mock provider scores.
+
+### Owner integration totals and blockers
+
+Of **11 mandatory File26 canonical owner connectors**, **2 actual native integration handshakes are now exercised** (File21 and File11), both in governed `proposed` state rather than production-active. File10 is the required real raw-media owner dependency for the File11 test, not counted as a completed File26 File10 connector. Other nine File26 owner connectors remain unproven against native owner packages on this branch. Files 05, 06, 11, 12, 18 have genuine code in unmerged draft PR branches even though their GitHub `main` roots are minimal; do not interpret empty main as nonexistent or deployed code.
+
+**Zero verified Live fixes**, **zero real semantic model providers**, and **no Hostinger staging state**. The WPVibe connection attempt still returned HTTP 530. Do not merge/deploy the current source candidate without exact deployed-state freeze and Founder acceptance.
+
