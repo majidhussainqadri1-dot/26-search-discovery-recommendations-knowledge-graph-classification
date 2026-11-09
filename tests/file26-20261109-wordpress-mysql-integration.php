@@ -199,4 +199,50 @@ file26_ci_require($unsigned_status==='retry', 'Owner deletion with no live tombs
 $still_present = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$key));
 file26_ci_require((int)$still_present===3, 'Unconfirmed deletion never mutates active serving document');
 
+
+// Simulate an interrupted bookkeeping write after MySQL atomic RENAME succeeds.
+// The administrator may reconcile only if both physical sets exactly match
+// the pre-rename checksums; recovery itself performs NO RENAME or DROP.
+$owner_items = array($live_change, $member_doc);
+$recovery_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+file26_ci_assert_ok($recovery_uuid, 'Post-rename recovery fixture created with complete current owner data');
+$plugin->indexer()->process_queue();
+$recovery_job = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$recovery_uuid));
+file26_ci_require($recovery_job==='completed', 'Recovery generation source fully staged');
+$recovery_proof = \Sabri\File26\Shadow_Index::validate($recovery_uuid);
+file26_ci_assert_ok($recovery_proof, 'Recovery generation validates before cutover');
+wp_set_current_user($auditor_id);
+file26_ci_assert_ok(\Sabri\File26\Shadow_Index::second_approve($recovery_uuid,'swap'), 'Independent auditor signs recovery fixture checksum');
+wp_set_current_user((int)$admin->ID);
+$option_name = 'sabri_f26_shadow_' . str_replace('-','',$recovery_uuid);
+$reject_swap_receipt = static function($value,$old) {
+    return is_array($value) && ($value['state']??'')==='swapped' ? $old : $value;
+};
+add_filter('pre_update_option_'.$option_name,$reject_swap_receipt,10,2);
+$simulated_swap_error = \Sabri\File26\Shadow_Index::swap($recovery_uuid);
+remove_filter('pre_update_option_'.$option_name,$reject_swap_receipt,10);
+file26_ci_require(is_wp_error($simulated_swap_error) && $simulated_swap_error->get_error_code()==='file26_shadow_post_swap_record', 'Simulated lost post-rename option write is reported, not mislabelled success');
+file26_ci_require(get_option($option_name)['state']==='swapping', 'Interrupted swap provenance stays in recoverable transition state');
+wp_set_current_user(0);
+$unauthorized_recovery = \Sabri\File26\Shadow_Index::recover_interrupted($recovery_uuid);
+file26_ci_require(is_wp_error($unauthorized_recovery) && $unauthorized_recovery->get_error_code()==='file26_shadow_recovery_forbidden', 'Anonymous user cannot reconcile interrupted transition');
+wp_set_current_user((int)$admin->ID);
+$recovered_swap = \Sabri\File26\Shadow_Index::recover_interrupted($recovery_uuid);
+file26_ci_require(!is_wp_error($recovered_swap) && $recovered_swap['state']==='swapped' && $recovered_swap['rename_applied']===true, 'Physical checksums repair interrupted successful swap without repeating RENAME');
+$repeat_recovery = \Sabri\File26\Shadow_Index::recover_interrupted($recovery_uuid);
+file26_ci_require(is_wp_error($repeat_recovery) && $repeat_recovery->get_error_code()==='file26_shadow_recovery_not_pending', 'Recovered transition cannot be replayed');
+wp_set_current_user($auditor_id);
+file26_ci_assert_ok(\Sabri\File26\Shadow_Index::second_approve($recovery_uuid,'rollback'), 'Distinct auditor signs interrupted rollback fixture');
+wp_set_current_user((int)$admin->ID);
+$reject_rollback_receipt = static function($value,$old) {
+    return is_array($value) && ($value['state']??'')==='rolled_back' ? $old : $value;
+};
+add_filter('pre_update_option_'.$option_name,$reject_rollback_receipt,10,2);
+$simulated_rollback_error = \Sabri\File26\Shadow_Index::rollback($recovery_uuid);
+remove_filter('pre_update_option_'.$option_name,$reject_rollback_receipt,10);
+file26_ci_require(is_wp_error($simulated_rollback_error) && $simulated_rollback_error->get_error_code()==='file26_shadow_rollback_audit', 'Simulated lost post-rollback option write reports uncertainty');
+file26_ci_require(get_option($option_name)['state']==='rolling_back', 'Interrupted rollback retains durable pre-rename checksums');
+$recovered_rollback = \Sabri\File26\Shadow_Index::recover_interrupted($recovery_uuid);
+file26_ci_require(!is_wp_error($recovered_rollback) && $recovered_rollback['state']==='rolled_back' && $recovered_rollback['rename_applied']===true, 'Exact physical digests restore interrupted rollback provenance without destructive retry');
+
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
