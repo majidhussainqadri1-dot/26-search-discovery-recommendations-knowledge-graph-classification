@@ -117,6 +117,13 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-integration.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Test seven language scripts, SQL privacy and semantic provider safety
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-multilingual-security-integration.php --path=/tmp/file26-ci-wp --allow-root
       - name: Test real File21 owner versioned privacy and publication lifecycle
         env:
           FILE26_CI_EPHEMERAL_DB: yes
