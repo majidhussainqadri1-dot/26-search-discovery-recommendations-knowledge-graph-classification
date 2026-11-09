@@ -201,7 +201,17 @@ final class Plugin {
 		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
 			if ( empty( $context[ $field ] ) || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( (string) $context[ $field ] ) ) ) { return false; }
 		}
-		return true;
+		// File04 SNFLA_Checksum::hash() canonicalizes associative keys and
+		// hashes JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES; verify that
+		// exact request digest rather than accepting any arbitrary hex string.
+		$source=array(
+			'canonical_owner'=>'File 21',
+			'source_signature'=>(string)$context['source_signature'],
+			'reconciliation_checksum'=>(string)$context['reconciliation_checksum']
+		);
+		ksort($source,SORT_STRING);
+		$encoded=wp_json_encode($source,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+		return is_string($encoded)&&hash_equals(hash('sha256',$encoded),strtolower((string)$context['request_digest']));
 	}
 
 	public function search_contract(array $request){$result=$this->search->run($request);return $this->central_plan->augment_search_result($result,$request);}public function visual_provider($providers){$providers=is_array($providers)?$providers:array();$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.3','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers;}
