@@ -1,5 +1,5 @@
 <?php
-/** Real File11 (non-main RC21) registration alongside File26, without File10 media. */
+/** Real File10+File11 (non-main RCs) registration alongside File26; publication still proposed. */
 if('yes'!==getenv('FILE26_CI_EPHEMERAL_DB')||false===strpos(home_url('/'),'file26-ci.local')){
     fwrite(STDERR,"REFUSED: File11 source contract only on disposable WordPress.\n");exit(2);
 }
@@ -7,6 +7,7 @@ function file11_x26_assert($condition,$message){
     if(!$condition){fwrite(STDERR,"FAIL: $message\n");exit(1);}echo "PASS: $message\n";
 }
 if(!function_exists('is_plugin_active')){require_once ABSPATH.'wp-admin/includes/plugin.php';}
+file11_x26_assert(is_plugin_active('video-wall-and-live-broadcasting/video-wall-and-live-broadcasting.php'),'Compatible exact-branch File10 raw media owner loaded');
 file11_x26_assert(is_plugin_active('11-reels-foundation/11-reels-foundation.php'),'Unmerged exact-HEAD File11 plugin activated only in disposable site');
 file11_x26_assert(class_exists('RSV_File26_Connector'),'Real native File11 source adapter class present');
 $plugin=\Sabri\File26\Plugin::instance();
@@ -18,9 +19,9 @@ $connector=$plugin->connectors()->get('file11-reels');
 file11_x26_assert(is_array($connector)&&($connector['owner_file']??'')==='File 11','File11 native entity owner preserved');
 file11_x26_assert(($connector['entity_types']??array())===array('reel'),'File11 source exports only canonical reel entity type');
 $health=call_user_func($connector['health']);
-file11_x26_assert(is_array($health)&&in_array($health['state'],array('healthy','degraded'),true),'Native media-conditional File11 health is explicit');
+file11_x26_assert(is_array($health)&&in_array($health['state'],array('healthy','degraded'),true),'Native File10-dependent File11 health is explicit');
 file11_x26_assert(call_user_func($connector['can_view'],array('object_id'=>'999999999'),array('authenticated'=>false))===false,'Native Reel owner refuses nonexistent asset in cross-file search');
 if('degraded'===$health['state']){
     file11_x26_assert(!$plugin->connectors()->is_index_eligible('file11-reels'),'File11 media outage remains unindexed by File26');
 }
-echo "PASS: unmerged real File11 owner initial handshake (NOT production-ready or actual File10 media playback)\n";
+echo "PASS: unmerged real File10/File11 owner connector handshake (NOT production-ready media playback)\n";
