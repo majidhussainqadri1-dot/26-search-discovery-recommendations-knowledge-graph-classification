@@ -106,7 +106,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          php /tmp/wp-cli.phar eval '$GLOBALS["wpdb"]->delete(\\Sabri\\File26\\DB::table("connectors"), array("slug"=>"file21-publication"));' --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar eval '$GLOBALS["wpdb"]->delete(\Sabri\File26\DB::table("connectors"), array("slug"=>"file21-publication"));' --path=/tmp/file26-ci-wp --allow-root
           mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed
           tar -C native-file21 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed -xf -
           php /tmp/wp-cli.phar plugin activate sabri-complete-home-news-feed --path=/tmp/file26-ci-wp --allow-root
