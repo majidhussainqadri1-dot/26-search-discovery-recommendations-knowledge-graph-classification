@@ -85,8 +85,15 @@ final class Shadow_Index {
 		foreach($names as $tables){$wpdb->query("DROP TABLE IF EXISTS {$tables['shadow']}");}
 		delete_option(self::opt($uuid));
 	}
-	public static function stage($uuid,array $doc){
+	public static function stage($uuid,array $doc,$worker_token){
 		global $wpdb;$names=self::names($uuid);if(is_wp_error($names)){return $names;}
+		// Fence orphaned/reclaimed workers and serialize staging with validation and cutover.
+		$generation_lock=self::lock();if(is_wp_error($generation_lock)){return $generation_lock;}
+		try{
+		$job=$wpdb->get_row($wpdb->prepare("SELECT status,lock_token FROM ".DB::table('jobs')." WHERE job_uuid=%s AND job_type='shadow_reindex'",$uuid),ARRAY_A);
+		if(!is_array($job)||'running'!==$job['status']||!is_string($worker_token)||''===$worker_token||!hash_equals((string)$job['lock_token'],$worker_token)){
+			return new \WP_Error('file26_shadow_stale_worker','Only the currently leased generation worker may mutate shadow tables.');
+		}
 		$record=get_option(self::opt($uuid),false);
 		if(!is_array($record)||'prepared'!==$record['state']||$record['connector']!==$doc['connector_slug']){
 			return new \WP_Error('file26_shadow_wrong_owner','No active isolated generation for this owner.');
@@ -120,6 +127,7 @@ final class Shadow_Index {
 			if(false===$wpdb->query('COMMIT')){throw new \RuntimeException('Stage commit');}
 			return true;
 		}catch(\Throwable $e){$wpdb->query('ROLLBACK');return new \WP_Error('file26_shadow_stage_failed','Shadow data was not staged atomically.');}
+		}finally{self::unlock($generation_lock);}
 	}
 	private static function verify_locked($uuid,$names){
 		global $wpdb;$record=get_option(self::opt($uuid),false);
