@@ -105,6 +105,26 @@ final class Shadow_Index {
 		$wpdb->last_error='';$revoked=$wpdb->get_var($wpdb->prepare('SELECT object_version FROM '.DB::table('tombstones').' WHERE canonical_key=%s',$key));
 		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_revocation_unknown','Cannot verify active revocation.');}
 		if(null!==$revoked&&(int)$revoked>=(int)$doc['object_version']){return true;}
+		// An owner snapshot may never downgrade a serving record, or invent a new
+		// deletion/restriction without the canonical revocation ledger.
+		$live_table=$names['documents']['live'];
+		$wpdb->last_error='';
+		$serving=$wpdb->get_row($wpdb->prepare("SELECT object_version,source_event_sequence,checksum,connector_slug FROM $live_table WHERE canonical_key=%s",$key),ARRAY_A);
+		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_live_version_unreadable','Current serving version could not be verified.');}
+		if($serving){
+			if((string)$serving['connector_slug']!==(string)$doc['connector_slug']){return new \WP_Error('file26_shadow_identity_conflict','Owner cannot replace another connector projection.');}
+			$sv=(int)$serving['object_version'];$ss=(int)$serving['source_event_sequence'];
+			$dv=(int)$doc['object_version'];$ds=(int)$doc['source_event_sequence'];
+			if($dv<$sv||($dv===$sv&&$ds<$ss)){return new \WP_Error('file26_shadow_stale_source','Reindex source is older than the currently serving owner record.');}
+			if($dv===$sv&&$ds===$ss&&!hash_equals((string)$serving['checksum'],(string)$doc['checksum'])){
+				return new \WP_Error('file26_shadow_source_conflict','Current source sequence differs from serving content without a version advance.');
+			}
+		}
+		if(in_array($doc['state'],array('deleted','suspended','restricted','private','rejected'),true)||'restricted'===$doc['visibility']){
+			if(null===$revoked||(int)$revoked<(int)$doc['object_version']){
+				return new \WP_Error('file26_shadow_unconfirmed_revocation','Owner must first publish a versioned canonical live tombstone for deletion or restriction.');
+			}
+		}
 		$wpdb->last_error='';$existing=$wpdb->get_row($wpdb->prepare("SELECT object_version,source_event_sequence,checksum FROM $d WHERE canonical_key=%s",$key),ARRAY_A);
 		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_version_unknown','Cannot verify source version.');}
 		if($existing){
@@ -151,6 +171,17 @@ final class Shadow_Index {
 		$t=DB::table('tombstones');
 		$revoked=$wpdb->get_var("SELECT COUNT(*) FROM $d d INNER JOIN $t t ON d.canonical_key=t.canonical_key WHERE t.object_version>=d.object_version");
 		if(null===$revoked||(int)$revoked!==0){return new \WP_Error('file26_shadow_tombstones','Revoked documents must not reappear.');}
+		// Counts alone cannot certify source completeness. Check each canonical
+		// live document and event version, including equal-count replacement cases.
+		$serving_table=$names['documents']['live'];
+		$wpdb->last_error='';
+		$downgraded=$wpdb->get_var("SELECT COUNT(*) FROM $d s INNER JOIN $serving_table l ON l.canonical_key=s.canonical_key WHERE s.object_version<l.object_version OR (s.object_version=l.object_version AND s.source_event_sequence<l.source_event_sequence) OR (s.object_version=l.object_version AND s.source_event_sequence=l.source_event_sequence AND s.checksum<>l.checksum)");
+		if(null===$downgraded||''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_version_comparison_unreadable','Cannot compare all candidate source versions.');}
+		if((int)$downgraded>0){return new \WP_Error('file26_shadow_version_regression','A candidate document would downgrade or conflict with a serving version.');}
+		$wpdb->last_error='';
+		$unrevoked_missing=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $serving_table l LEFT JOIN $d s ON s.canonical_key=l.canonical_key LEFT JOIN $t tomb ON tomb.canonical_key=l.canonical_key AND tomb.object_version>=l.object_version WHERE l.connector_slug=%s AND s.canonical_key IS NULL AND tomb.canonical_key IS NULL",$record['connector']));
+		if(null===$unrevoked_missing||''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_omission_check_unreadable','Cannot verify omitted owner document revocations.');}
+		if((int)$unrevoked_missing>0){return new \WP_Error('file26_shadow_unrevoked_omission','Owner snapshot omitted serving documents without canonical deletion proof.');}
 		$shadow=self::digest($names,'shadow');if(is_wp_error($shadow)){return $shadow;}
 		$wpdb->last_error='';
 		$staged_owner_raw=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $d WHERE connector_slug=%s",$record['connector']));
