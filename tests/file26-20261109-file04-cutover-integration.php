@@ -31,6 +31,10 @@ $ctx=array(
     'reconciliation_checksum'=>str_repeat('2',64),
     'request_digest'=>str_repeat('3',64)
 );
+$digest_data=$ctx; unset($digest_data['request_digest']); ksort($digest_data,SORT_STRING);
+$ctx['request_digest']=hash('sha256',wp_json_encode($digest_data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+$forged=$ctx; $forged['request_digest']=str_repeat('f',64);
+f26f04_assert(empty($plugin->file04_verify_reindex(array('verified'=>false),$forged)['verified']),'Valid-shaped but forged File04 request digest is rejected');
 $before=$plugin->file04_verify_reindex(array('verified'=>false),$ctx);
 f26f04_assert(empty($before['verified']),'Missing File04 receipt is rejected');
 $wrong_owner=$ctx; $wrong_owner['canonical_owner']='File 03';
