@@ -12,8 +12,12 @@ permissions:
   contents: read
 jobs:
   shadow-mysql:
-    name: Real WordPress / MariaDB shadow, swap and rollback
+    name: WordPress ${{ matrix.wordpress }} / MariaDB shadow, swap and rollback
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        wordpress: ['6.8.3', '7.0.1', '7.1.4']
     timeout-minutes: 30
     services:
       mysql:
@@ -43,7 +47,7 @@ jobs:
           curl --fail --location --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
           php /tmp/wp-cli.phar --info
           mkdir -p /tmp/file26-ci-wp
-          php /tmp/wp-cli.phar core download --version=6.8.3 --path=/tmp/file26-ci-wp --allow-root --quiet
+          php /tmp/wp-cli.phar core download --version=${{ matrix.wordpress }} --path=/tmp/file26-ci-wp --allow-root --quiet
           php /tmp/wp-cli.phar config create --path=/tmp/file26-ci-wp --dbname=wordpress --dbuser=wordpress --dbpass=wp-ephemeral --dbhost=127.0.0.1:3306 --allow-root --quiet
           php /tmp/wp-cli.phar core install --path=/tmp/file26-ci-wp --url=http://file26-ci.local --title='File26 Disposable CI' --admin_user=admin --admin_password=ci-ephemeral-long-password --admin_email=file26-ci-admin@example.test --skip-email --allow-root --quiet
           mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery
