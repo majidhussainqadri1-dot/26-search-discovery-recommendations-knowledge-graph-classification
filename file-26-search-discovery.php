@@ -52,6 +52,8 @@ require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-user-data.php';
 require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-user-discovery.php';
 require_once SABRI_FILE26_DIR . 'includes/trait-file26-future-advanced.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-future-intelligence.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-semantic-ollama.php';
+\Sabri\File26\Semantic_Ollama::register();
 
 foreach ( array(
 	'sabri_file26_validate_ranking_approver',
