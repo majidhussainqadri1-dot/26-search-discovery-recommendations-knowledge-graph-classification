@@ -94,3 +94,26 @@ jobs:
           assert report['read_errors'] == []
           print('PASS: read-only WP CLI exact-deployed-artifact and schema freeze')
           PY
+
+      - name: Checkout immutable canonical File21 owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/sabri-complete-home-news-feed
+          ref: 626b380328d4400014504e679032291cd023bbdb
+          path: native-file21
+          persist-credentials: false
+      - name: Install real File21 plugin beside File26, without the synthetic connector
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '$GLOBALS["wpdb"]->delete(\\Sabri\\File26\\DB::table("connectors"), array("slug"=>"file21-publication"));' --path=/tmp/file26-ci-wp --allow-root
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed
+          tar -C native-file21 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed -xf -
+          php /tmp/wp-cli.phar plugin activate sabri-complete-home-news-feed --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify actual exact-HEAD File21-to-File26 native callback registration
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-integration.php --path=/tmp/file26-ci-wp --allow-root
