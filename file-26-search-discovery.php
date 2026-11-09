@@ -110,6 +110,8 @@ function sabri_file26_shadow_validate( $job_uuid ) {
 }
 function sabri_file26_shadow_swap( $job_uuid ) { return \Sabri\File26\Shadow_Index::swap( (string) $job_uuid ); }
 function sabri_file26_shadow_rollback( $job_uuid ) { return \Sabri\File26\Shadow_Index::rollback( (string) $job_uuid ); }
+/** Privileged read/verify-only physical inventory reconciliation after interrupted atomic RENAME. */
+function sabri_file26_shadow_recover_interrupted( $job_uuid ) { return \Sabri\File26\Shadow_Index::recover_interrupted( (string) $job_uuid ); }
 
 function sabri_file26_tombstone_document( $connector, $domain, $object_id, $object_version, $reason = 'deleted' ) { return \Sabri\File26\Plugin::instance()->indexer()->tombstone( (string) $connector, (string) $domain, (string) $object_id, (int) $object_version, (string) $reason ); }
 function sabri_file26_search( array $request ) { $plugin = \Sabri\File26\Plugin::instance(); $result = $plugin->search()->run( $request ); return $plugin->central_plan()->augment_search_result( $result, $request ); }
