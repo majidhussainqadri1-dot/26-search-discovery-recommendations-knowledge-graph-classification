@@ -76,7 +76,7 @@ foreach (array('documents','nodes','edges','classifications','tombstones','jobs'
         continue;
     }
     $wpdb->last_error = '';
-    $columns = $wpdb->get_results("SHOW COLUMNS FROM \`$table\`", ARRAY_A);
+    $columns = $wpdb->get_results("SHOW COLUMNS FROM `$table`", ARRAY_A);
     if (!is_array($columns) || $wpdb->last_error) {
         $tables[$short] = array('status' => 'columns_unreadable');
         continue;
@@ -86,7 +86,7 @@ foreach (array('documents','nodes','edges','classifications','tombstones','jobs'
         $types[(string)$column['Field']] = (string)$column['Type'];
     }
     $wpdb->last_error = '';
-    $count = $wpdb->get_var("SELECT COUNT(*) FROM \`$table\`");
+    $count = $wpdb->get_var("SELECT COUNT(*) FROM `$table`");
     $tables[$short] = array(
         'status' => $wpdb->last_error ? 'count_unreadable' : 'present',
         'column_types' => $types,
