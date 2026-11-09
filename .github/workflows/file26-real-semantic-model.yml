@@ -1,0 +1,56 @@
+name: File 26 Real Disposable Seven-Language Ollama Embedding Benchmark
+on:
+  push:
+    branches: ['audit/file26-v12-shadow-index-20261108']
+    paths:
+      - 'tools/file26-real-semantic-gold-benchmark.py'
+      - 'includes/class-file26-semantic-ollama.php'
+      - '.github/workflows/file26-real-semantic-model.yml'
+permissions:
+  contents: read
+jobs:
+  actual-qwen-embeddings:
+    name: Real Qwen3-Embedding 0.6B (disposable localhost only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_NO_CLOUD: '1'
+      FILE26_BENCHMARK_MODEL: qwen3-embedding:0.6b
+    steps:
+      - name: Checkout exact source branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install real Ollama on disposable GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh -o /tmp/file26-ollama-install.sh
+          bash /tmp/file26-ollama-install.sh
+          ollama --version
+          nohup ollama serve > /tmp/file26-ollama-serve.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:11434/api/version
+      - name: Download actual multilingual model to ephemeral runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          ollama pull qwen3-embedding:0.6b
+          ollama list
+          mkdir -p benchmark-evidence
+          ollama show qwen3-embedding:0.6b > benchmark-evidence/ollama-model-info.txt
+      - name: Evaluate actual multilingual embeddings, never mock model vectors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/file26-real-semantic-gold-benchmark.py
+      - name: Archive source and measured model evidence (no model binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: file26-real-qwen3-0.6b-seven-language-report
+          path: benchmark-evidence/
+          if-no-files-found: warn
+          retention-days: 30
