@@ -21,17 +21,20 @@ namespace {
         public $lock_allowed = true;
         public $job = array('status' => 'running', 'lock_token' => 'valid-lease-token');
         public $releases = 0;
+        public $serving = null;
+        public $tombstone = null;
         public $writes = array();
         public $transactions = array();
         public function prepare($query) { return $query; }
         public function get_var($sql) {
             if (strpos($sql, 'GET_LOCK') !== false) { return $this->lock_allowed ? '1' : '0'; }
             if (strpos($sql, 'RELEASE_LOCK') !== false) { ++$this->releases; return '1'; }
-            if (strpos($sql, 'SELECT object_version FROM') !== false) { return null; }
+            if (strpos($sql, 'SELECT object_version FROM') !== false) { return $this->tombstone; }
             throw new \RuntimeException('Unexpected get_var: ' . $sql);
         }
         public function get_row($sql, $output = null) {
             if (strpos($sql, "job_type='shadow_reindex'") !== false) { return $this->job; }
+            if (strpos($sql, 'SELECT object_version,source_event_sequence,checksum,connector_slug') !== false) { return $this->serving; }
             if (strpos($sql, 'SELECT object_version,source_event_sequence,checksum') !== false) { return null; }
             throw new \RuntimeException('Unexpected get_row: ' . $sql);
         }
@@ -108,10 +111,27 @@ namespace {
     verify($wpdb->transactions===array('START TRANSACTION','COMMIT') && $wpdb->releases===1, 'Successful staging commits then releases lock');
 
     $wpdb = new F26FakeWpdb();
+    $wpdb->serving = array('object_version'=>3,'source_event_sequence'=>3,'checksum'=>str_repeat('c',64),'connector_slug'=>'file05');
+    $result = Shadow_Index::stage($uuid, $doc, 'valid-lease-token');
+    verify(is_wp_error($result) && $result->get_error_code()==='file26_shadow_stale_source', 'Older owner snapshot rejected before any write');
+    verify(count($wpdb->writes)===0 && $wpdb->releases===1, 'Stale owner snapshot cannot change a shadow projection');
+
+    $wpdb = new F26FakeWpdb();
+    $wpdb->serving = array('object_version'=>2,'source_event_sequence'=>2,'checksum'=>str_repeat('c',64),'connector_slug'=>'file05');
+    $result = Shadow_Index::stage($uuid, $doc, 'valid-lease-token');
+    verify(is_wp_error($result) && $result->get_error_code()==='file26_shadow_source_conflict', 'Equal owner version with conflicting checksum rejected');
+
+    $wpdb = new F26FakeWpdb();
     $deleted = $doc;
     $deleted['state'] = 'deleted';
     $result = Shadow_Index::stage($uuid, $deleted, 'valid-lease-token');
-    verify($result===true && count($wpdb->writes)===2, 'Owner deletion only deletes candidate document and candidate node');
-    verify($wpdb->writes[0]['action']==='delete' && $wpdb->writes[1]['action']==='delete' && $wpdb->releases===1, 'Deletion leaves serving index untouched and unlocks');
+    verify(is_wp_error($result) && $result->get_error_code()==='file26_shadow_unconfirmed_revocation', 'Owner deletion without live tombstone cannot be staged');
+    verify(count($wpdb->writes)===0 && $wpdb->releases===1, 'Unconfirmed deletion writes no index data');
+
+    $wpdb = new F26FakeWpdb();
+    $wpdb->tombstone = 2;
+    $result = Shadow_Index::stage($uuid, $deleted, 'valid-lease-token');
+    verify($result===true && count($wpdb->writes)===0, 'Previously revoked event cannot resurrect deleted item');
+    verify($wpdb->releases===1, 'Previously revoked event releases cutover lock');
     echo "PASS: active shadow worker runtime contract\n";
 }
