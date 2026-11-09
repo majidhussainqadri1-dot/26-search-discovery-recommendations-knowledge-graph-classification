@@ -4,6 +4,7 @@ on:
     branches: ['audit/file26-v12-shadow-index-20261108']
     paths:
       - 'tools/file26-real-semantic-gold-benchmark.py'
+      - 'tests/file26-20261109-real-ollama-wordpress-e2e.php'
       - 'includes/class-file26-semantic-ollama.php'
       - '.github/workflows/file26-real-semantic-model.yml'
 permissions:
