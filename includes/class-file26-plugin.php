@@ -123,64 +123,95 @@ final class Plugin {
 	}
 
 	/** Queue a bounded File 21 reindex for File 04 cutover and persist an acceptance receipt. */
-	public function file04_request_reindex( $context ) {
-		$context = is_array( $context ) ? $context : array();
-		if ( ! $this->file04_cutover_context_valid( $context ) || ! $this->connectors->is_index_eligible( 'file21-publication' ) ) {
-			return;
+	/** Exact, versioned File04 request receipt; acceptance means queued, not promoted. */
+	private function file04_reindex_job_state($receipt,array $context){
+		global $wpdb;
+		if(!is_array($receipt)||empty($receipt['job_uuid'])||'file21-publication'!==($receipt['connector']??'')){return false;}
+		foreach(array('source_signature','reconciliation_checksum','request_digest') as $field){
+			if(empty($receipt[$field])||!hash_equals(strtolower((string)$context[$field]),strtolower((string)$receipt[$field]))){return false;}
 		}
-		$job = $this->indexer->enqueue_reindex(
-			'file21-publication',
-			array(
-				'reason'                  => 'file04_cutover',
-				'source_signature'        => strtolower( (string) $context['source_signature'] ),
-				'reconciliation_checksum' => strtolower( (string) $context['reconciliation_checksum'] ),
-				'request_digest'          => strtolower( (string) $context['request_digest'] ),
-			)
-		);
-		if ( is_wp_error( $job ) ) {
-			$this->security->audit( 'file04_cutover_reindex_rejected', array( 'object_type'=>'migration','object_key'=>'file04','reason'=>$job->get_error_code() ) );
-			return;
-		}
-		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
-		$receipts = is_array( $receipts ) ? $receipts : array();
-		$key = strtolower( (string) $context['request_digest'] );
-		$receipts[ $key ] = array(
-			'verified'                 => true,
-			'provider_id'              => 'file26-file04-reindex-v1',
-			'status'                   => 'accepted',
-			'job_uuid'                 => sanitize_text_field( (string) $job ),
-			'connector'                => 'file21-publication',
-			'source_signature'         => strtolower( (string) $context['source_signature'] ),
-			'reconciliation_checksum'  => strtolower( (string) $context['reconciliation_checksum'] ),
-			'request_digest'           => $key,
-			'verified_at_utc'          => gmdate( 'Y-m-d H:i:s' ),
-		);
-		if ( count( $receipts ) > 32 ) { $receipts = array_slice( $receipts, -32, null, true ); }
-		update_option( 'sabri_file26_file04_cutover_receipts_v1', $receipts, false );
+		$job_uuid=sanitize_text_field((string)$receipt['job_uuid']);
+		if(!preg_match('/^[a-f0-9-]{36}$/D',$job_uuid)){return false;}
+		$wpdb->last_error='';
+		$job=$wpdb->get_row($wpdb->prepare("SELECT job_type,status,scope_json FROM ".DB::table('jobs')." WHERE job_uuid=%s",$job_uuid),ARRAY_A);
+		if(!is_array($job)||''!==(string)$wpdb->last_error||'shadow_reindex'!==$job['job_type']||!in_array($job['status'],array('pending','running','retry','completed'),true)){return false;}
+		$scope=json_decode((string)$job['scope_json'],true);
+		if(!is_array($scope)||count($scope)!==1||'file21-publication'!==($scope['connector']??null)){return false;}
+		return $job['status'];
 	}
 
-	/** Return only a fresh, exact-request acceptance receipt to File 04. */
-	public function file04_verify_reindex( $existing, $context ) {
-		if ( is_array( $existing ) && ! empty( $existing['verified'] ) ) { return $existing; }
-		$context = is_array( $context ) ? $context : array();
-		if ( ! $this->file04_cutover_context_valid( $context ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
-		$key = strtolower( (string) $context['request_digest'] );
-		$receipts = get_option( 'sabri_file26_file04_cutover_receipts_v1', array() );
-		$row = is_array( $receipts ) && isset( $receipts[ $key ] ) && is_array( $receipts[ $key ] ) ? $receipts[ $key ] : array();
-		if ( empty( $row ) ) { return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' ); }
-		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
-			if ( empty( $row[ $field ] ) || ! hash_equals( strtolower( (string) $context[ $field ] ), strtolower( (string) $row[ $field ] ) ) ) {
-				return array( 'verified'=>false, 'provider_id'=>'file26-file04-reindex-v1' );
-			}
+	public function file04_request_reindex( $context ) {
+		$context=is_array($context)?$context:array();
+		if(!$this->file04_cutover_context_valid($context)||!$this->connectors->is_index_eligible('file21-publication')){return;}
+		$key=strtolower((string)$context['request_digest']);
+		$receipts=get_option('sabri_file26_file04_cutover_receipts_v1',array());
+		$receipts=is_array($receipts)?$receipts:array();
+		if(isset($receipts[$key])){
+			if(false!==$this->file04_reindex_job_state($receipts[$key],$context)){return;} // idempotent request.
+			$this->security->audit('file04_cutover_existing_receipt_invalid',array('object_type'=>'migration','object_key'=>'file04','reason'=>'existing_request_not_reusable'));
+			return; // Never overwrite an unresolved or failed request with an unrelated generation.
 		}
+		// File04 request proof belongs to receipt provenance, not to Indexer scope.
+		// A complete owner snapshot is mandatory; arbitrary metadata was rejected as a partial scope.
+		$job=$this->indexer->enqueue_reindex('file21-publication',array());
+		if(is_wp_error($job)){
+			$this->security->audit('file04_cutover_reindex_rejected',array('object_type'=>'migration','object_key'=>'file04','reason'=>$job->get_error_code()));
+			return;
+		}
+		$receipt=array(
+			'verified'=>true, // Verified ACCEPTANCE of the queue request, not finished indexing.
+			'provider_id'=>'file26-file04-reindex-v1',
+			'status'=>'accepted',
+			'phase'=>'queued_not_promoted',
+			'job_uuid'=>sanitize_text_field((string)$job),
+			'connector'=>'file21-publication',
+			'source_signature'=>strtolower((string)$context['source_signature']),
+			'reconciliation_checksum'=>strtolower((string)$context['reconciliation_checksum']),
+			'request_digest'=>$key,
+			'verified_at_utc'=>gmdate('Y-m-d H:i:s')
+		);
+		$receipts[$key]=$receipt;
+		if(count($receipts)>32){$receipts=array_slice($receipts,-32,null,true);}
+		$saved=update_option('sabri_file26_file04_cutover_receipts_v1',$receipts,false);
+		if(!$saved&&get_option('sabri_file26_file04_cutover_receipts_v1',array())!==$receipts){
+			$this->security->audit('file04_cutover_receipt_not_persisted',array('object_type'=>'migration','object_key'=>'file04','reason'=>'receipt_write_failed'));
+		}
+	}
+
+	/** File04 permits 'accepted' as an async contract; never mislabel it completed. */
+	public function file04_verify_reindex( $existing, $context ) {
+		if(is_array($existing)&&!empty($existing['verified'])){return $existing;}
+		$denied=array('verified'=>false,'provider_id'=>'file26-file04-reindex-v1');
+		$context=is_array($context)?$context:array();
+		if(!$this->file04_cutover_context_valid($context)){return $denied;}
+		$key=strtolower((string)$context['request_digest']);
+		$receipts=get_option('sabri_file26_file04_cutover_receipts_v1',array());
+		$row=is_array($receipts)&&isset($receipts[$key])&&is_array($receipts[$key])?$receipts[$key]:array();
+		$state=$this->file04_reindex_job_state($row,$context);
+		if(false===$state){return $denied;}
+		$row['verified']=true;
+		$row['status']='accepted';
+		$row['phase']='completed'===$state?'candidate_staged_not_promoted':'queued_not_promoted';
+		$row['job_status']=$state;
 		return $row;
 	}
 
-	private function file04_cutover_context_valid( array $context ) {
+		private function file04_cutover_context_valid( array $context ) {
+		if('File 21'!==(string)($context['canonical_owner']??'')){return false;}
 		foreach ( array( 'source_signature', 'reconciliation_checksum', 'request_digest' ) as $field ) {
 			if ( empty( $context[ $field ] ) || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( (string) $context[ $field ] ) ) ) { return false; }
 		}
-		return true;
+		// File04 SNFLA_Checksum::hash() canonicalizes associative keys and
+		// hashes JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES; verify that
+		// exact request digest rather than accepting any arbitrary hex string.
+		$source=array(
+			'canonical_owner'=>'File 21',
+			'source_signature'=>(string)$context['source_signature'],
+			'reconciliation_checksum'=>(string)$context['reconciliation_checksum']
+		);
+		ksort($source,SORT_STRING);
+		$encoded=wp_json_encode($source,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+		return is_string($encoded)&&hash_equals(hash('sha256',$encoded),strtolower((string)$context['request_digest']));
 	}
 
 	public function search_contract(array $request){$result=$this->search->run($request);return $this->central_plan->augment_search_result($result,$request);}public function visual_provider($providers){$providers=is_array($providers)?$providers:array();$providers['file26']=array('contract_version'=>SABRI_FILE26_CONTRACT_VERSION,'search'=>array($this,'search_contract'),'discover'=>array($this->recommendations,'get'),'doctor_ranking'=>array($this->doctor_ranking,'directory'),'ranking_constitution'=>array($this->central_plan,'ranking_constitution'),'result_schema'=>'sabri.file26.result.v1.3','primary_accent_fallback'=>'#087A4E','visual_owner'=>'File 25');return $providers;}

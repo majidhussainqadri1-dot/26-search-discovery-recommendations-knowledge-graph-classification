@@ -1,0 +1,371 @@
+name: File 26 Disposable WordPress MariaDB Integration
+on:
+  pull_request:
+    paths:
+      - 'includes/**'
+      - 'file-26-search-discovery.php'
+      - 'tests/file26-20261109-wordpress-mysql-integration.php'
+      - '.github/workflows/file26-mysql-integration.yml'
+  push:
+    branches: ['audit/file26-v12-shadow-index-20261108']
+permissions:
+  contents: read
+jobs:
+  shadow-mysql:
+    name: WordPress ${{ matrix.wordpress }} / MariaDB shadow, swap and rollback
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        wordpress: ['6.8.3', '7.0.1', '7.1.4']
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wp-ephemeral
+          MARIADB_ROOT_PASSWORD: root-ephemeral
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
+        with:
+          php-version: '8.3'
+          extensions: mysqli, mbstring, curl, json
+      - name: Install WordPress CLI and disposable WordPress
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          mkdir -p /tmp/file26-ci-wp
+          php /tmp/wp-cli.phar core download --version=${{ matrix.wordpress }} --path=/tmp/file26-ci-wp --allow-root --quiet
+          php /tmp/wp-cli.phar config create --path=/tmp/file26-ci-wp --dbname=wordpress --dbuser=wordpress --dbpass=wp-ephemeral --dbhost=127.0.0.1:3306 --allow-root --quiet
+          php /tmp/wp-cli.phar core install --path=/tmp/file26-ci-wp --url=http://file26-ci.local --title='File26 Disposable CI' --admin_user=admin --admin_password=ci-ephemeral-long-password --admin_email=file26-ci-admin@example.test --skip-email --allow-root --quiet
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery
+          tar -C "$GITHUB_WORKSPACE" --exclude=.git --exclude=release -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery -xf -
+          php /tmp/wp-cli.phar plugin activate sabri-file26-search-discovery --path=/tmp/file26-ci-wp --allow-root
+      - name: Execute real SQL FR-005 cutover and rollback acceptance
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-wordpress-mysql-integration.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Run canonical File04 to File26 asynchronous queue receipt contract
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-file04-cutover-integration.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify read-only runtime/deployment freeze on disposable WordPress
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tools/live-reality-freeze.php --path=/tmp/file26-ci-wp --allow-root > /tmp/file26-ci-freeze.json
+          python3 - <<'PY'
+          import json
+          path = '/tmp/file26-ci-freeze.json'
+          with open(path, encoding='utf-8') as f:
+              report = json.load(f)
+          assert report['audit_contract'] == 'sabri.file26.live-reality-freeze.v1'
+          assert report['file26']['plugin_installed'] is True
+          assert report['file26']['plugin_active'] is True
+          assert report['file26']['declared_plugin_version'] == '1.3.0'
+          assert report['file26']['all_plugin_file_count'] > 100
+          assert report['file26']['tree_inventory_complete'] is True
+          assert len(report['file26']['entry_file_sha256']) == 64
+          assert len(report['file26']['all_plugin_files_sha256']) == 64
+          assert report['file26']['tables']['documents']['status'] == 'present'
+          assert report['file26']['tables']['nodes']['status'] == 'present'
+          assert len(report['file26']['owner_runtime_readiness']) == 11
+          assert report['file26']['doctor_appeals_schema_option'] is not None
+          assert report['live_verified_end_to_end'] is False
+          assert report['read_errors'] == []
+          print('PASS: read-only WP CLI exact-deployed-artifact and schema freeze')
+          PY
+
+      - name: Checkout immutable canonical File21 owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/sabri-complete-home-news-feed
+          ref: fb8663f52054462571f132ac001473bfa1628381
+          path: native-file21
+          persist-credentials: false
+      - name: Install real File21 plugin beside File26, without the synthetic connector
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval '$GLOBALS["wpdb"]->delete(\Sabri\File26\DB::table("connectors"), array("slug"=>"file21-publication"));' --path=/tmp/file26-ci-wp --allow-root
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed
+          tar -C native-file21 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-complete-home-news-feed -xf -
+          php /tmp/wp-cli.phar plugin activate sabri-complete-home-news-feed --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify actual exact-HEAD File21-to-File26 native callback registration
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-integration.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Prove exact source/DB migration parity checks refuse all partial evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/file26-20261109-parity-guard.py
+      - name: Test local Ollama embedding HTTP adapter and failsafe without external network
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-ollama-transport-guard.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Test seven language scripts, SQL privacy and semantic provider safety
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-multilingual-security-integration.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Test real File21 owner versioned privacy and publication lifecycle
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file21-lifecycle.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact unmerged compatible File10 owner source
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/10-video-wall-and-educational-broadcasting-foundation
+          ref: 08fb8ff525b346be88038589aff5d1f979017c5b
+          path: native-file10
+          persist-credentials: false
+      - name: Install real File10 media owner on supported disposable WordPress
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/video-wall-and-live-broadcasting
+          tar -C native-file10/video-wall-and-live-broadcasting -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/video-wall-and-live-broadcasting -xf -
+          php /tmp/wp-cli.phar plugin activate video-wall-and-live-broadcasting --path=/tmp/file26-ci-wp --allow-root
+      - name: Test true File10 media public-owner File26 connector and privacy/kill switch
+        if: matrix.wordpress != '6.8.3'
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file10-public-owner.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Checkout exact unmerged File11 source candidate
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/11-reels-and-short-video-discovery-foundation
+          ref: 1df22845452419b3e67686d41b4ea178bfd9f484
+          path: native-file11
+          persist-credentials: false
+      - name: Install File11 only with canonical real File10 dependency
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/11-reels-foundation
+          tar -C native-file11/11-reels-foundation -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/11-reels-foundation -xf -
+          php /tmp/wp-cli.phar plugin activate 11-reels-foundation --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify real File10 and File11 owners' native connector in File26
+        if: matrix.wordpress != '6.8.3'
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file11-readiness.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact File05 owner learning candidate source (unmerged)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/05-learn-sabri-classical-homeopathy
+          ref: a01d999abdbc9cb3651160e343555c1bec6961cf
+          path: native-file05
+          persist-credentials: false
+      - name: Materialize File05 real plugin files, but DO NOT bypass native dependency activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/05-learn-sabri-classical-homeopathy
+          tar -C native-file05/05-learn-sabri-classical-homeopathy -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/05-learn-sabri-classical-homeopathy -xf -
+      - name: Audit native File05 owner callbacks and fail-closed public search boundary
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file05-learning.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout File07 exact verified doctor owner source
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/07-doctors-directory-and-discovery
+          ref: 77bd1f8b2efff02251158432830b01b573d25ee2
+          path: native-file07
+          persist-credentials: false
+      - name: Install File07 native files without claiming missing identity/verification
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/doctors-directory
+          tar -C native-file07/doctors-directory -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/doctors-directory -xf -
+      - name: Verify real File07 owner doctor eligibility contract fails closed
+        if: matrix.wordpress != '6.8.3'
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file07-eligibility.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact File06 reviewed encyclopedia source candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/06-homeopathy-encyclopedia-foundation
+          ref: 21786c9d804fe442dd613995073522beef13ca38
+          path: native-file06
+          persist-credentials: false
+      - name: Materialize File06 owner source without forcing absent identity/migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/homeopathy-encyclopedia
+          tar -C native-file06/homeopathy-encyclopedia -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/homeopathy-encyclopedia -xf -
+      - name: Verify native File06 safety/review ACL and exact-version owner handshake
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file06-encyclopedia.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout File12 native rights-aware PDF candidate
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/12-pdf-library-and-digital-reading-foundation
+          ref: 611226bfac5cf43579f22959e53d4f8a93167545
+          path: native-file12
+          persist-credentials: false
+      - name: Materialize File12 native library source without pretending rights or migration
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/pdf-library-foundation-12
+          tar -C native-file12/pdf-library-foundation-12 -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/pdf-library-foundation-12 -xf -
+      - name: Verify real File12 owner catalog refuses unapproved rights and user data
+        if: matrix.wordpress != '6.8.3'
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file12-rights.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout repaired existing File03 public-profile owner contract
+        if: matrix.wordpress != '6.8.3'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/03-sabri-profiles-and-doctors
+          ref: 9076b4ced1974f71480d6c9f418e3c7f3fb60c12
+          path: native-file03
+          persist-credentials: false
+      - name: Materialize File03 native source without overriding File00/09 claims
+        if: matrix.wordpress != '6.8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-profiles-doctors
+          tar -C native-file03 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-profiles-doctors -xf -
+      - name: Verify repaired File03 native owner refuses missing-schema empty swap
+        if: matrix.wordpress != '6.8.3'
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file03-source-contract.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout original File15 aggregate trend source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/15-radar-symptom-and-remedy-analysis-foundation
+          ref: d48555af41d35f99f08958c0ce6b31d91d9eaf52
+          path: native-file15
+          persist-credentials: false
+      - name: Materialize File15 without bypassing publisher/editor and private-study controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/15-radar-symptom-and-remedy-analysis-foundation
+          tar -C native-file15/15-radar-symptom-and-remedy-analysis-foundation -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/15-radar-symptom-and-remedy-analysis-foundation -xf -
+      - name: Verify actual File15 public-trend and private-study-safe owner contract
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file15-trends.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact unmerged File18 marketplace owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/18-sabri-marketplace
+          ref: 94455ac6929716c58d5e5682b308bb096b3c37cf
+          path: native-file18
+          persist-credentials: false
+      - name: Materialize native File18 without bypassing seller/recall/commerce dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/18-marketplace
+          tar -C native-file18/18-marketplace -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/18-marketplace -xf -
+      - name: Verify real File18 owner public listing eligibility and fail-closed catalog
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file18-marketplace.php --path=/tmp/file26-ci-wp --allow-root
+
+      - name: Checkout exact native File08 public clinic owner source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/08-worldwide-clinic-and-appointments-foundation
+          ref: cc09e7fe85a06b9fd54c96fb71a03bc26c987a60
+          path: native-file08
+          persist-credentials: false
+      - name: Materialize File08 without any clinic identity or staging migration writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/worldwide-clinic
+          tar -C native-file08 --exclude=.git -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/worldwide-clinic -xf -
+      - name: Verify real File08 clinic owner identity and clinical privacy boundary
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file08-public-clinic.php --path=/tmp/file26-ci-wp --allow-root

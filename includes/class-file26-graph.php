@@ -24,6 +24,8 @@ final class Graph {
 
 	public function create_edge( array $input ) {
 		global $wpdb;
+		$generation_lock=Shadow_Index::lock();if(is_wp_error($generation_lock)){return $generation_lock;}
+		try{
 		if ( ! $this->security->can_curate() ) {
 			return new \WP_Error( 'file26_forbidden', 'Graph curator capability is required.' );
 		}
@@ -79,10 +81,13 @@ final class Graph {
 		$this->security->audit( 'knowledge_edge_created', array( 'object_type' => 'knowledge_edge', 'object_key' => $uuid, 'metadata' => array( 'edge_type' => $type, 'source_key' => $source, 'target_key' => $target, 'owner_file' => $owner_file ) ) );
 		do_action( 'sabri_file26_event', 'KnowledgeEdgeCreated', array( 'edge_uuid' => $uuid, 'edge_type' => $type ) );
 		return $uuid;
+		}finally{Shadow_Index::unlock($generation_lock);}
 	}
 
 	public function approve_edge( $edge_uuid, $expected_version = 1 ) {
 		global $wpdb;
+		$generation_lock=Shadow_Index::lock();if(is_wp_error($generation_lock)){return $generation_lock;}
+		try{
 		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'graph_edge_approve' ) ) {
 			return new \WP_Error( 'file26_step_up_required', 'Fresh graph approval authorization is required.', array( 'status' => 403 ) );
 		}
@@ -114,10 +119,13 @@ final class Graph {
 		$this->security->audit( 'knowledge_edge_approved', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'metadata' => array( 'version' => (int) $edge['version'] + 1 ) ) );
 		do_action( 'sabri_file26_event', 'KnowledgeEdgeApproved', array( 'edge_uuid' => $edge_uuid, 'version' => (int) $edge['version'] + 1 ) );
 		return true;
+		}finally{Shadow_Index::unlock($generation_lock);}
 	}
 
 	public function remove_edge( $edge_uuid, $expected_version, $reason = '' ) {
 		global $wpdb;
+		$generation_lock=Shadow_Index::lock();if(is_wp_error($generation_lock)){return $generation_lock;}
+		try{
 		if ( ! $this->security->can_curate() || ! $this->security->require_step_up( 'graph_edge_remove' ) ) {
 			return new \WP_Error( 'file26_step_up_required', 'Fresh graph removal authorization is required.', array( 'status' => 403 ) );
 		}
@@ -132,6 +140,7 @@ final class Graph {
 		$this->security->audit( 'knowledge_edge_removed', array( 'object_type' => 'knowledge_edge', 'object_key' => $edge_uuid, 'reason' => sanitize_text_field( $reason ) ) );
 		do_action( 'sabri_file26_event', 'KnowledgeEdgeRemoved', array( 'edge_uuid' => $edge_uuid ) );
 		return true;
+		}finally{Shadow_Index::unlock($generation_lock);}
 	}
 
 	public function query( $start_key, $depth = 1, $degree = 10, array $allowed_types = array() ) {

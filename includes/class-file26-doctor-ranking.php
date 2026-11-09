@@ -13,9 +13,10 @@ final class Doctor_Ranking {
 		if ( $scheduled ) {
 			if ( ! function_exists( 'wp_doing_cron' ) || ! wp_doing_cron() ) { return new \WP_Error( 'file26_cron_context_required', 'Scheduled ranking recompute requires the WordPress cron context.', array( 'status' => 403 ) ); }
 		} elseif ( ! $this->security->can_approve_ranking() ) { return new \WP_Error( 'file26_forbidden', 'Ranking approval capability is required.', array( 'status' => 403 ) ); }
+		$generation_lock = Shadow_Index::lock(); if ( is_wp_error( $generation_lock ) ) { return $generation_lock; }
 		$lock_name = 'file26:doctor-ranking';
 		$locked = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock_name ) );
-		if ( '1' !== (string) $locked ) { return new \WP_Error( 'file26_ranking_busy', 'Doctor ranking recompute is already running.', array( 'status' => 409 ) ); }
+		if ( '1' !== (string) $locked ) { Shadow_Index::unlock( $generation_lock ); return new \WP_Error( 'file26_ranking_busy', 'Doctor ranking recompute is already running.', array( 'status' => 409 ) ); }
 		try {
 			$policy = $this->policy();
 			if ( ! empty( $policy['policy_read_failed'] ) ) { return new \WP_Error( 'file26_doctor_policy_read_failed', 'Doctor-ranking policy could not be read safely.', array( 'status' => 503 ) ); }
@@ -55,7 +56,7 @@ final class Doctor_Ranking {
 			$this->security->audit( 'doctor_ranking_recomputed', array( 'object_type' => 'ranking_policy', 'object_key' => $policy['version'], 'reason' => sanitize_text_field( $reason ), 'metadata' => array( 'eligible_doctors' => count( $scored ), 'safe_fallback' => ! empty( $policy['safe_fallback'] ) ) ) );
 			do_action( 'sabri_file26_event', 'DoctorRankingRecomputed', array( 'policy_version' => $policy['version'], 'eligible_doctors' => count( $scored ) ) );
 			return array( 'policy_version' => $policy['version'], 'eligible_doctors' => count( $scored ), 'safe_fallback' => ! empty( $policy['safe_fallback'] ) );
-		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); }
+		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); Shadow_Index::unlock( $generation_lock ); }
 	}
 
 	public function directory( array $request = array() ) {

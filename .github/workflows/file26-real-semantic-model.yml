@@ -1,0 +1,93 @@
+name: File 26 Real Disposable Seven-Language Ollama Embedding Benchmark
+on:
+  push:
+    branches: ['audit/file26-v12-shadow-index-20261108']
+    paths:
+      - 'tools/file26-real-semantic-gold-benchmark.py'
+      - 'tests/file26-20261109-real-ollama-wordpress-e2e.php'
+      - 'includes/class-file26-semantic-ollama.php'
+      - '.github/workflows/file26-real-semantic-model.yml'
+permissions:
+  contents: read
+jobs:
+  actual-qwen-embeddings:
+    name: Real Qwen3-Embedding 0.6B (disposable localhost only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      mysql:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: wp-ephemeral
+          MARIADB_ROOT_PASSWORD: root-ephemeral
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_NO_CLOUD: '1'
+      FILE26_BENCHMARK_MODEL: qwen3-embedding:0.6b
+    steps:
+      - name: Checkout exact source branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install real Ollama on disposable GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh -o /tmp/file26-ollama-install.sh
+          bash /tmp/file26-ollama-install.sh
+          ollama --version
+          nohup ollama serve > /tmp/file26-ollama-serve.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:11434/api/version
+      - name: Download actual multilingual model to ephemeral runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          ollama pull qwen3-embedding:0.6b
+          ollama list
+          mkdir -p benchmark-evidence
+          ollama show qwen3-embedding:0.6b > benchmark-evidence/ollama-model-info.txt
+      - name: Evaluate actual multilingual embeddings, never mock model vectors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/file26-real-semantic-gold-benchmark.py
+      - name: Install disposable WordPress 7.0.1 and File26 beside the real local model
+        shell: bash
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
+          mkdir -p /tmp/file26-model-wp
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/file26-model-wp --allow-root --quiet
+          php /tmp/wp-cli.phar config create --path=/tmp/file26-model-wp --dbname=wordpress --dbuser=wordpress --dbpass=wp-ephemeral --dbhost=127.0.0.1:3306 --allow-root --quiet
+          php /tmp/wp-cli.phar core install --path=/tmp/file26-model-wp --url=http://file26-ci.local --title='File26 Real Model Ephemeral CI' --admin_user=admin --admin_password=ci-ephemeral-long-password --admin_email=file26-ai-ci@example.test --skip-email --allow-root --quiet
+          mkdir -p /tmp/file26-model-wp/wp-content/plugins/sabri-file26-search-discovery
+          tar -C "$GITHUB_WORKSPACE" --exclude=.git --exclude=release -cf - . | tar -C /tmp/file26-model-wp/wp-content/plugins/sabri-file26-search-discovery -xf -
+          php /tmp/wp-cli.phar plugin activate sabri-file26-search-discovery --path=/tmp/file26-model-wp --allow-root
+      - name: Run actual model through the File26 guest REST semantic reranker
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-model-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-real-ollama-wordpress-e2e.php --path=/tmp/file26-model-wp --allow-root
+      - name: Archive source and measured model evidence (no model binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: file26-real-qwen3-0.6b-seven-language-report
+          path: benchmark-evidence/
+          if-no-files-found: warn
+          retention-days: 30
