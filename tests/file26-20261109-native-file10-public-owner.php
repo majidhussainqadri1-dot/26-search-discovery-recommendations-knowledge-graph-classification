@@ -28,10 +28,13 @@ $now=gmdate('Y-m-d H:i:s');
 $channels=VWLB_Helpers::table('channels');
 $videos=VWLB_Helpers::table('videos');
 $lives=VWLB_Helpers::table('live_events');
-$channel_id='f26_channel_demo_20261109';
-$pub_video_id='f26_video_demo_20261109';
-$private_video_id='f26_private_demo_20261109';
-$live_id='f26_live_demo_20261109';
+$channel_id='chn_demo20261109';
+$pub_video_id='vid_demo20261109';
+$private_video_id='vid_private20261109';
+$live_id='live_demo20261109';
+foreach (array($channel_id, $pub_video_id, $private_video_id, $live_id) as $owner_public_id) {
+    f26_file10_assert(VWLB_Helpers::is_public_id($owner_public_id), 'Fixture satisfies modern File10 canonical public-ID grammar: '.$owner_public_id);
+}
 $inserted=$wpdb->insert($channels,array(
     'public_id'=>$channel_id,'title'=>'File10 Public Channel',
     'slug'=>'f26-public-channel-20261109','description'=>'Public educational channel',
