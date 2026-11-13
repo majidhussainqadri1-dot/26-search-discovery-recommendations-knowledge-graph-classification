@@ -99,6 +99,12 @@ f26_file10_assert($done,'Canonical owner source completes its bounded paginated 
 f26_file10_assert(isset($collected['video:'.$pub_video_id],$collected['live_video:'.$live_id],$collected['channel:'.$channel_id]),'Real owner projects video, live and channel');
 f26_file10_assert(count($collected)===3,'No unpublished/private owner records in candidate source');
 $public=$collected['video:'.$pub_video_id];
+$direct=VWLB_File26_Connector::fetch_object('video',$pub_video_id);
+f26_file10_assert(is_array($direct)&&($direct['object_version']??null)===3,
+    'Canonical direct File10 fetch returns current public version, not raw row');
+f26_file10_assert(VWLB_File26_Connector::fetch_object('video','vid_nonexistent20261113')===null,
+    'Missing canonical video remains legitimate null');
+
 $test_video_event=array(
     'public_id'=>'evt_f10f26video20261113','event_name'=>'VideoPublished.v1',
     'object_id'=>$video_pk,'object_type'=>'video'
@@ -151,5 +157,48 @@ f26_file10_assert(call_user_func($native['can_view'],$collected['live_video:'.$l
 update_option('vwlb_safe_mode',1);
 f26_file10_assert(call_user_func($native['can_view'],$collected['channel:'.$channel_id],array('authenticated'=>false))===false,'Safe mode fails closed even for previously public channel');
 f26_file10_assert(call_user_func($native['health'])['state']==='degraded','Safe mode marks owner health degraded');
+$unavailable=VWLB_File26_Connector::fetch_object('video',$pub_video_id);
+f26_file10_assert(is_wp_error($unavailable)&&$unavailable->get_error_code()==='file10_search_owner_unavailable',
+    'Safe Mode direct fetch is owner-unavailable, not false deletion');
 delete_option('vwlb_safe_mode');
+
+// Fault injections run only within the disposable CI WordPress database.
+function f26_file10_temporarily_hide_owner_table($table,$read) {
+    global $wpdb;
+    $alternate=$table.'_f26_ci_hidden';
+    if (!preg_match('/^[a-zA-Z0-9_]+$/D',$table) || !preg_match('/^[a-zA-Z0-9_]+$/D',$alternate)) {
+        throw new RuntimeException('Unsafe disposable table name for test');
+    }
+    $quote=chr(96);
+    $moved=$wpdb->query("RENAME TABLE ".$quote.$table.$quote." TO ".$quote.$alternate.$quote);
+    if (false===$moved) { throw new RuntimeException('Could not create isolated source-read outage'); }
+    try {
+        return $read();
+    } finally {
+        $restored=$wpdb->query("RENAME TABLE ".$quote.$alternate.$quote." TO ".$quote.$table.$quote);
+        if(false===$restored) { throw new RuntimeException('Disposable source table restore FAILED'); }
+    }
+}
+
+$db_error=f26_file10_temporarily_hide_owner_table($videos,
+    static function() use ($pub_video_id) {
+        return VWLB_File26_Connector::fetch_object('video',$pub_video_id);
+    });
+f26_file10_assert(is_wp_error($db_error)&&$db_error->get_error_code()==='file10_search_owner_read_failed',
+    'Real MariaDB video-table read outage returns operational error, never null');
+$restored_video=$wpdb->get_var($wpdb->prepare(
+    "SELECT public_id FROM ".$videos." WHERE id=%d",$video_pk));
+f26_file10_assert($restored_video===$pub_video_id,'Fault-injected canonical video table was restored');
+
+// A consent-table outage must not be classified as verified withdrawal.
+$public_again=$wpdb->update($videos,array('visibility'=>'public','version'=>5),array('id'=>$video_pk));
+f26_file10_assert(1===$public_again,'Disposable video re-publicized only for consent failure injection');
+$consent_table=VWLB_Helpers::table('consent_links');
+$consent_error=f26_file10_temporarily_hide_owner_table($consent_table,
+    static function() use ($pub_video_id) {
+        return VWLB_File26_Connector::fetch_object('video',$pub_video_id);
+    });
+f26_file10_assert(is_wp_error($consent_error)&&$consent_error->get_error_code()==='file10_search_owner_policy_failed',
+    'Real consent-table outage yields typed policy error, never false deletion');
+
 echo "PASS: actual File10 public owner projection and immediate privacy/kill-switch revocation in real MariaDB; status remains proposed\n";
