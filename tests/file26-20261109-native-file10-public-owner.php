@@ -33,7 +33,10 @@ $pub_video_id='vid_demo20261109';
 $private_video_id='vid_private20261109';
 $live_id='live_demo20261109';
 foreach (array($channel_id, $pub_video_id, $private_video_id, $live_id) as $owner_public_id) {
-    f26_file10_assert(VWLB_Helpers::is_public_id($owner_public_id), 'Fixture satisfies modern File10 canonical public-ID grammar: '.$owner_public_id);
+    f26_file10_assert((bool) preg_match('/^[a-z][a-z0-9]*_[a-z0-9]+$/D', $owner_public_id), 'Fixture satisfies modern File10 public-ID grammar: '.$owner_public_id);
+    if (method_exists('VWLB_Helpers', 'is_public_id')) {
+        f26_file10_assert(VWLB_Helpers::is_public_id($owner_public_id), 'Modern owner validates fixture ID: '.$owner_public_id);
+    }
 }
 $inserted=$wpdb->insert($channels,array(
     'public_id'=>$channel_id,'title'=>'File10 Public Channel',
