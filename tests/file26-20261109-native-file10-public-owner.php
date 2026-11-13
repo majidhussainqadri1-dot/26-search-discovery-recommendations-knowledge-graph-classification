@@ -201,4 +201,22 @@ $consent_error=f26_file10_temporarily_hide_owner_table($consent_table,
 f26_file10_assert(is_wp_error($consent_error)&&$consent_error->get_error_code()==='file10_search_owner_policy_failed',
     'Real consent-table outage yields typed policy error, never false deletion');
 
+
+// Reset the request-scoped R109 flag after the deliberate earlier outage;
+// this ensures the next failure really originates in a fresh native SQL query.
+$rest_check = new WP_REST_Request('GET','/'.VWLB_Contracts::CANONICAL_API_NAMESPACE.'/videos');
+VWLB_R109_Rights_Consent_Replay_Guard::rest_before(null,array(),$rest_check);
+f26_file10_assert(!VWLB_R109_Rights_Consent_Replay_Guard::policy_read_failed(),
+    'R109 policy fail flag reset in a new File10 request context');
+$batch_consent_error = f26_file10_temporarily_hide_owner_table($consent_table,
+    static function() {
+        return VWLB_File26_Connector::list_batch('',50);
+    });
+f26_file10_assert(is_wp_error($batch_consent_error) &&
+    $batch_consent_error->get_error_code()==='file10_search_snapshot_policy_unavailable',
+    'Real File10 owner snapshot aborts on consent SQL outage, never succeeds with missing public media');
+f26_file10_assert($wpdb->get_var($wpdb->prepare(
+    'SHOW TABLES LIKE %s',$wpdb->esc_like($consent_table)))===$consent_table,
+    'Disposable consent table restored before batch-outage assertion completes');
+
 echo "PASS: actual File10 public owner projection and immediate privacy/kill-switch revocation in real MariaDB; status remains proposed\n";
