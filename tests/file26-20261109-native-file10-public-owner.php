@@ -12,8 +12,15 @@ function f26_file10_assert($check, $label) {
 }
 global $wpdb;
 $plugin=\Sabri\File26\Plugin::instance();
-f26_file10_assert(class_exists('VWLB_File26_Connector'),'Real File10 adapter class loaded');
+// The modern File10 source intentionally ships its unapproved connector dormant.
+// This explicit load/register is allowed ONLY after this file's disposable CI guard.
+$owner_class_file=WP_PLUGIN_DIR.'/video-wall-and-live-broadcasting/includes/class-vwlb-file26-connector.php';
+f26_file10_assert(is_readable($owner_class_file),'Immutable modern File10 class is present on disposable WordPress');
+if(!class_exists('VWLB_File26_Connector',false))require_once $owner_class_file;
+f26_file10_assert(class_exists('VWLB_File26_Connector',false),'Real modern File10 adapter class loaded for disposable test only');
 $registry=$plugin->connectors();
+$registered=$registry->register(VWLB_File26_Connector::manifest());
+f26_file10_assert(true===$registered,'CI-local proposed File10 registration accepted, with no production activation');
 $native=$registry->get('file10-public-media');
 f26_file10_assert(is_array($native)&&$native['owner_file']==='File 10','Canonical owner registration found in File26');
 f26_file10_assert($native['entity_types']===array('video','live_video','channel'),'All three File10 search entity types supplied');
