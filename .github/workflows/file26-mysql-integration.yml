@@ -5,6 +5,7 @@ on:
       - 'includes/**'
       - 'file-26-search-discovery.php'
       - 'tests/file26-20261109-wordpress-mysql-integration.php'
+      - 'tests/file26-20261109-native-file10-public-owner.php'
       - '.github/workflows/file26-mysql-integration.yml'
   push:
     branches: ['audit/file26-v12-shadow-index-20261108']
@@ -149,7 +150,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/10-video-wall-and-educational-broadcasting-foundation
-          ref: 08fb8ff525b346be88038589aff5d1f979017c5b
+          ref: e668f39a6dc2549e49f98274f6416fe76b75220e
           path: native-file10
           persist-credentials: false
       - name: Install real File10 media owner on supported disposable WordPress

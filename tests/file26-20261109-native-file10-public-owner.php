@@ -12,8 +12,15 @@ function f26_file10_assert($check, $label) {
 }
 global $wpdb;
 $plugin=\Sabri\File26\Plugin::instance();
-f26_file10_assert(class_exists('VWLB_File26_Connector'),'Real File10 adapter class loaded');
+// The modern File10 source intentionally ships its unapproved connector dormant.
+// This explicit load/register is allowed ONLY after this file's disposable CI guard.
+$owner_class_file=WP_PLUGIN_DIR.'/video-wall-and-live-broadcasting/includes/class-vwlb-file26-connector.php';
+f26_file10_assert(is_readable($owner_class_file),'Immutable modern File10 class is present on disposable WordPress');
+if(!class_exists('VWLB_File26_Connector',false))require_once $owner_class_file;
+f26_file10_assert(class_exists('VWLB_File26_Connector',false),'Real modern File10 adapter class loaded for disposable test only');
 $registry=$plugin->connectors();
+$registered=$registry->register(VWLB_File26_Connector::manifest());
+f26_file10_assert(true===$registered,'CI-local proposed File10 registration accepted, with no production activation');
 $native=$registry->get('file10-public-media');
 f26_file10_assert(is_array($native)&&$native['owner_file']==='File 10','Canonical owner registration found in File26');
 f26_file10_assert($native['entity_types']===array('video','live_video','channel'),'All three File10 search entity types supplied');
@@ -28,10 +35,16 @@ $now=gmdate('Y-m-d H:i:s');
 $channels=VWLB_Helpers::table('channels');
 $videos=VWLB_Helpers::table('videos');
 $lives=VWLB_Helpers::table('live_events');
-$channel_id='f26_channel_demo_20261109';
-$pub_video_id='f26_video_demo_20261109';
-$private_video_id='f26_private_demo_20261109';
-$live_id='f26_live_demo_20261109';
+$channel_id='chn_demo20261109';
+$pub_video_id='vid_demo20261109';
+$private_video_id='vid_private20261109';
+$live_id='live_demo20261109';
+foreach (array($channel_id, $pub_video_id, $private_video_id, $live_id) as $owner_public_id) {
+    f26_file10_assert((bool) preg_match('/^[a-z][a-z0-9]*_[a-z0-9]+$/D', $owner_public_id), 'Fixture satisfies modern File10 public-ID grammar: '.$owner_public_id);
+    if (method_exists('VWLB_Helpers', 'is_public_id')) {
+        f26_file10_assert(VWLB_Helpers::is_public_id($owner_public_id), 'Modern owner validates fixture ID: '.$owner_public_id);
+    }
+}
 $inserted=$wpdb->insert($channels,array(
     'public_id'=>$channel_id,'title'=>'File10 Public Channel',
     'slug'=>'f26-public-channel-20261109','description'=>'Public educational channel',
