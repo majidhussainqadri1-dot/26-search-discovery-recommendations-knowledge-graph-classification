@@ -150,7 +150,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/10-video-wall-and-educational-broadcasting-foundation
-          ref: e668f39a6dc2549e49f98274f6416fe76b75220e
+          ref: 696aa862a67701a68cf076cf734dfb09ed40452b
           path: native-file10
           persist-credentials: false
       - name: Install real File10 media owner on supported disposable WordPress
