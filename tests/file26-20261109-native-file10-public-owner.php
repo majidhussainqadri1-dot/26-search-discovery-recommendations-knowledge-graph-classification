@@ -99,12 +99,54 @@ f26_file10_assert($done,'Canonical owner source completes its bounded paginated 
 f26_file10_assert(isset($collected['video:'.$pub_video_id],$collected['live_video:'.$live_id],$collected['channel:'.$channel_id]),'Real owner projects video, live and channel');
 f26_file10_assert(count($collected)===3,'No unpublished/private owner records in candidate source');
 $public=$collected['video:'.$pub_video_id];
+$test_video_event=array(
+    'public_id'=>'evt_f10f26video20261113','event_name'=>'VideoPublished.v1',
+    'object_id'=>$video_pk,'object_type'=>'video'
+);
+$source_proposal=VWLB_File26_Connector::propose_outbox_reconciliation(
+    $test_video_event,array('public_id'=>$pub_video_id)
+);
+f26_file10_assert(is_array($source_proposal)&&$source_proposal['action']==='upsert',
+    'Real File10 current publication yields source-only upsert proposal');
+f26_file10_assert($source_proposal['object_version']===3&&
+    $source_proposal['document']['object_id']===$pub_video_id,
+    'File26 proposal source identity/version matches actual canonical MariaDB row');
+f26_file10_assert($source_proposal['status']==='proposed'&&
+    $source_proposal['delivery_state']==='not_dispatched',
+    'No consumer delivery/ack is falsely claimed');
+f26_file10_assert(strpos(wp_json_encode($source_proposal),'"object_id":'.$video_pk)===false,
+    'No internal numeric SQL source ID escapes into File26 proposal');
+
 f26_file10_assert(call_user_func($native['can_view'],$public,array('authenticated'=>false))===true,'Native click-time public video authorization');
 f26_file10_assert(call_user_func($native['fetch_object'],'video',$pub_video_id)['object_version']===3,'Direct native fetch retains versioned canonical video identity');
 $wpdb->update($videos,array('visibility'=>'private','version'=>4),array('id'=>$video_pk));
+
+$private_proposal=VWLB_File26_Connector::propose_outbox_reconciliation(
+    $test_video_event,array('public_id'=>$pub_video_id)
+);
+f26_file10_assert(is_array($private_proposal)&&
+    $private_proposal['action']==='tombstone'&&
+    $private_proposal['object_version']===4&&
+    !isset($private_proposal['document']),
+    'Native File10 privacy version emits content-free tombstone proposal');
+
 f26_file10_assert(call_user_func($native['can_view'],$public,array('authenticated'=>false))===false,'Privacy change immediately invalidates stale File26 click reference');
 f26_file10_assert(call_user_func($native['fetch_object'],'video',$pub_video_id)===null,'Private video fetch denies content after owner privacy change');
 $wpdb->update($lives,array('kill_switch'=>1,'version'=>4),array('id'=>$live_pk));
+
+$test_live_event=array('public_id'=>'evt_f10f26live20261113',
+    'event_name'=>'LiveBroadcastEnded.v1','object_id'=>$live_pk,'object_type'=>'live');
+$live_proposal=VWLB_File26_Connector::propose_outbox_reconciliation(
+    $test_live_event,array('public_id'=>$live_id)
+);
+f26_file10_assert(is_array($live_proposal)&&$live_proposal['action']==='tombstone'&&
+    $live_proposal['object_version']===4,'Real kill-switch causes versioned Live tombstone proposal');
+$no_source=VWLB_File26_Connector::propose_outbox_reconciliation(
+    $test_video_event,array('public_id'=>'vid_absent20261113')
+);
+f26_file10_assert(is_wp_error($no_source),
+    'Hard-missing native owner version does not invent a deletion tombstone');
+
 f26_file10_assert(call_user_func($native['can_view'],$collected['live_video:'.$live_id],array('authenticated'=>false))===false,'Native broadcast emergency kill switch revokes search authorization');
 update_option('vwlb_safe_mode',1);
 f26_file10_assert(call_user_func($native['can_view'],$collected['channel:'.$channel_id],array('authenticated'=>false))===false,'Safe mode fails closed even for previously public channel');
