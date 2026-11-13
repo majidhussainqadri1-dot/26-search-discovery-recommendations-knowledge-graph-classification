@@ -5,6 +5,7 @@ on:
       - 'includes/**'
       - 'file-26-search-discovery.php'
       - 'tests/file26-20261109-wordpress-mysql-integration.php'
+      - 'tests/file26-20261109-native-file10-public-owner.php'
       - '.github/workflows/file26-mysql-integration.yml'
   push:
     branches: ['audit/file26-v12-shadow-index-20261108']
