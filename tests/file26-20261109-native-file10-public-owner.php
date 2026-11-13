@@ -201,4 +201,27 @@ $consent_error=f26_file10_temporarily_hide_owner_table($consent_table,
 f26_file10_assert(is_wp_error($consent_error)&&$consent_error->get_error_code()==='file10_search_owner_policy_failed',
     'Real consent-table outage yields typed policy error, never false deletion');
 
+$batch_error=f26_file10_temporarily_hide_owner_table($consent_table,
+    static function() {
+        return VWLB_File26_Connector::list_batch('',50,array('connector'=>'file10-public-media'));
+    });
+f26_file10_assert(is_wp_error($batch_error)&&
+    $batch_error->get_error_code()==='file10_search_snapshot_policy_unavailable',
+    'Real missing consent SQL denies entire native File10 snapshot, never skips a public row');
+
+// WordPress REST starts a fresh owner-policy request and clears the
+// previous request-scoped R109 read-failure flag; canonical SQL is restored.
+VWLB_R109_Rights_Consent_Replay_Guard::rest_before(
+    null,array(),new WP_REST_Request('GET','/video-wall-live-broadcasting/v1/videos')
+);
+$batch_after_repair=VWLB_File26_Connector::list_batch('',50,array('connector'=>'file10-public-media'));
+f26_file10_assert(is_array($batch_after_repair)&&isset($batch_after_repair['items']),
+    'After disposable consent table restoration the owner snapshot succeeds');
+$restored_public=false;
+foreach($batch_after_repair['items'] as $candidate) {
+    if(($candidate['object_id']??null)===$pub_video_id) $restored_public=true;
+}
+f26_file10_assert($restored_public,
+    'Recovered authoritative owner snapshot still includes current public video');
+
 echo "PASS: actual File10 public owner projection and immediate privacy/kill-switch revocation in real MariaDB; status remains proposed\n";
