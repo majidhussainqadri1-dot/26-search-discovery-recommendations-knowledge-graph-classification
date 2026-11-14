@@ -10,7 +10,21 @@
   }
 
   function sensitive(query) {
-    return /(?:\bcnic\b|\bpassport\b|\bphone\s*number\b|\bmobile\s*number\b|\bsuicid|\bself[ -]?harm|شناختی\s*کارڈ|پاسپورٹ|فون\s*نمبر|خودکشی|مریض)/iu.test(query);
+    const raw = String(query || '');
+    // Check BEFORE any network sync. Server rejection alone would still
+    // transmit the private query and cannot satisfy local-first consent.
+    if (/[@＠﹫]/u.test(raw)) return true;
+    const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+    const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+    const text = raw.replace(/[۰-۹٠-٩]/gu, (digit) => {
+      const persianIndex = persianDigits.indexOf(digit);
+      if (persianIndex !== -1) return String(persianIndex);
+      const arabicIndex = arabicDigits.indexOf(digit);
+      return arabicIndex === -1 ? digit : String(arabicIndex);
+    });
+    if (/(?:\+?92[\s().-]*|0)?3(?:[\s().-]*[0-9]){9}/u.test(text)) return true;
+    if (/(?:^|[^0-9])[0-9]{5}[\s-]?[0-9]{7}[\s-]?[0-9](?:$|[^0-9])/u.test(text)) return true;
+    return /(?:\bcnic\b|\bpassport\b|\bphone\s*number\b|\bmobile\s*number\b|\bpatient\b|\bmedical\s*record\b|\bprescription\b|\bpassword\b|\botp\b|\bsuicid|\bself[ -]?harm|شناختی\s*کارڈ|پاسپورٹ|فون\s*نمبر|خودکشی|مریض|نسخہ|شناختی)/iu.test(text);
   }
 
   function read() {
