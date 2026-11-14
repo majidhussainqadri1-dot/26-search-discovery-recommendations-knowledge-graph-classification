@@ -78,8 +78,19 @@ final class Indexer {
 
 	private function strict_integer( $value, $minimum = 0 ) {
 		if ( is_int( $value ) ) { $number = $value; }
-		elseif ( is_string( $value ) && preg_match( '/^[0-9]+$/', trim( $value ) ) ) { $number = (int) trim( $value ); }
-		else { return null; }
+		elseif ( is_string( $value ) && preg_match( '/^[0-9]+$/', trim( $value ) ) ) {
+			$digits = ltrim( trim( $value ), '0' );
+			$digits = '' === $digits ? '0' : $digits;
+			$maximum = (string) PHP_INT_MAX;
+			if ( strlen( $digits ) > strlen( $maximum ) ||
+				( strlen( $digits ) === strlen( $maximum ) && strcmp( $digits, $maximum ) > 0 )
+			) {
+				// Never coerce two distinct out-of-range source versions to the
+				// same PHP_INT_MAX, which would break anti-resurrection ordering.
+				return null;
+			}
+			$number = (int) $digits;
+		} else { return null; }
 		return $number >= (int) $minimum ? $number : null;
 	}
 

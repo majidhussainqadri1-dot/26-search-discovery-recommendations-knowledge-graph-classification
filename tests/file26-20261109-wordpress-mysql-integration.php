@@ -345,4 +345,26 @@ $unowned_results = sabri_file26_search(array('q'=>'undocumentedaclvisibilitymark
 file26_ci_require(!is_wp_error($unowned_results) && empty($unowned_results['results']),
     'Public search rejects owner projection with missing request-time can_view, regardless of visibility label');
 
+// FR-002: a valid MySQL unsigned BIGINT above PHP_INT_MAX must NEVER be
+// silently clamped before anti-resurrection/version comparison.
+$version_overflow = ((string)PHP_INT_MAX)==='9223372036854775807'
+    ? '9223372036854775808' : ((string)PHP_INT_MAX).'0';
+$huge_doc = $doc;
+$huge_doc['object_id'] = 'overflow-version-isolation';
+$huge_doc['canonical_url'] = home_url('/file26-ci/overflow-version-isolation');
+$huge_doc['object_version'] = $version_overflow;
+$huge_doc['source_event_sequence'] = 1;
+$overflow_denied = $plugin->indexer()->upsert($huge_doc);
+file26_ci_require(is_wp_error($overflow_denied) &&
+    $overflow_denied->get_error_code()==='file26_invalid_object_version',
+    'Unsigned source version over PHP_INT_MAX rejected before real DB upsert');
+$huge_key = \Sabri\File26\Indexer::canonical_key('file26_ci_fixture','test','overflow-version-isolation');
+$huge_saved = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$huge_key));
+file26_ci_require(null===$huge_saved, 'Rejected huge version cannot create a serving document');
+$huge_doc['object_version'] = 1;
+$huge_doc['source_event_sequence'] = $version_overflow;
+$sequence_denied = $plugin->indexer()->upsert($huge_doc);
+file26_ci_require(is_wp_error($sequence_denied) &&
+    $sequence_denied->get_error_code()==='file26_invalid_source_event_sequence',
+    'Unsigned source event sequence over PHP_INT_MAX rejected before DB upsert');
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
