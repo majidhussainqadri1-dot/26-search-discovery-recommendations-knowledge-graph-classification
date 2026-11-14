@@ -61,7 +61,7 @@ final class Security {
 		$audience['suspended'] = false === $suspended ? false : true;
 		$audience['is_minor'] = null === $minor ? true : $minor;
 		$audience['guardian_verified'] = true === $guardian;
-		$audience['entitlements'] = $this->normalize_string_claim_list( isset( $claims['entitlements'] ) ? $claims['entitlements'] : array(), 100, 191 );
+		$audience['entitlements'] = $this->normalize_owner_entitlements( isset( $claims['entitlements'] ) ? $claims['entitlements'] : array() );
 		$audience['consents'] = $this->normalize_string_claim_list( isset( $claims['consents'] ) ? $claims['consents'] : array(), 100, 191 );
 
 		$claimed_user_id = isset( $claims['user_id'] ) && ( is_int( $claims['user_id'] ) || ( is_string( $claims['user_id'] ) && ctype_digit( $claims['user_id'] ) ) ) ? (int) $claims['user_id'] : 0;
@@ -93,6 +93,20 @@ final class Security {
 		if(function_exists('sanitize_text_field')){$text=\sanitize_text_field($text);}else{$text=strip_tags($text);$text=preg_replace('/[\x00-\x1F\x7F]/u','',$text);$text=preg_replace('/\s+/u',' ',trim($text));}
 		$max_length=max(1,(int)$max_length);
 		return function_exists('mb_substr')?mb_substr($text,0,$max_length,'UTF-8'):substr($text,0,$max_length);
+	}
+
+	/** File00 v1.2.3 publishes a policy object, not a flat entitlements list. */
+	private function normalize_owner_entitlements($claim){
+		if(!is_array($claim)){return array();}
+		if(isset($claim['base_services'])&&is_array($claim['base_services'])){
+			$allowed=array();
+			foreach($claim['base_services'] as $service=>$enabled){
+				if(!is_string($service)||''===$service||true!==$this->normalize_claim_bool($enabled)){continue;}
+				$allowed[]=$service; // Never accept paid_unlocks_enabled/donation as access.
+			}
+			return $this->normalize_string_claim_list($allowed,100,191);
+		}
+		return $this->normalize_string_claim_list($claim,100,191);
 	}
 
 	private function normalize_string_claim_list($value,$max_items,$max_length){
