@@ -29,6 +29,12 @@ async function main() {
     window: win,
     fetch: async (url, options) => {
       requests.push({url: String(url), body: JSON.parse(options.body)});
+      if (JSON.parse(options.body).q === 'custom policy hold') {
+        return {ok: true, json: async () => ({saved: false, sensitive_query_not_synced: true})};
+      }
+      if (JSON.parse(options.body).q === 'unknown policy response') {
+        return {ok: true, json: async () => ({})};
+      }
       return {ok: true, json: async () => ({saved: true})};
     },
     Date, Promise, JSON, String, console
@@ -61,6 +67,24 @@ async function main() {
 
   assert.equal(history.clear(), true, 'User can clear local history');
   assert.equal(history.list().length, 0, 'History erasure removes local entries');
+
+  // The server may apply a newer or more restrictive sensitivity policy.
+  // HTTP 200 is not proof that the record was actually stored.
+  assert.equal(history.record('custom policy hold'), true);
+  const beforeReject = requests.length;
+  const serverRefused = await history.syncOptIn();
+  assert.equal(requests.length, beforeReject + 1, 'Server sensitivity rejection is observed');
+  assert.equal(serverRefused.synced, 0, 'Server-refused search MUST NOT be called synced');
+  assert.equal(serverRefused.server_rejected, 1, 'Server rejection must be reported separately');
+  assert.equal(history.clear(), true);
+
+  assert.equal(history.record('unknown policy response'), true);
+  await assert.rejects(
+    () => history.syncOptIn(),
+    /not acknowledged/i,
+    'Malformed HTTP-200 success body must not be counted as saved'
+  );
+  assert.equal(history.clear(), true);
 
   console.log('PASS: Local-first FUT-17 history blocks sensitive sync before network; privacy regression (7 queries)');
 }
