@@ -162,11 +162,23 @@ final class Normalizer {
 	}
 
 	public function prefix_is_safe( $prefix ) {
-		$prefix = $this->normalize( $prefix );
+		// Check raw email delimiters BEFORE normalize() removes punctuation.
+		// Normalizing first makes the old /@/ sensitive-prefix guard unreachable.
+		$raw = is_scalar( $prefix ) ? (string) $prefix : '';
+		if ( preg_match( '/[@\x{FF20}]/u', $raw ) ) {
+			return false;
+		}
+		$prefix = $this->normalize( $raw );
 		if ( function_exists( 'mb_strlen' ) ? mb_strlen( $prefix, 'UTF-8' ) < 2 : strlen( $prefix ) < 2 ) {
 			return false;
 		}
-		return ! preg_match( '/(?:\d{7,}|@|password|otp|cnic|شناختی|فون)/iu', $prefix );
+		// Formatted phone numbers may separate digits with spaces, plus or hyphens.
+		// Autocomplete should not suggest such possible personal identifiers.
+		$digits = preg_replace( '/[^0-9]/', '', $prefix );
+		if ( is_string( $digits ) && strlen( $digits ) >= 7 ) {
+			return false;
+		}
+		return ! preg_match( '/(?:password|otp|cnic|شناختی|فون)/iu', $prefix );
 	}
 
 	private function romanize( $text ) {
