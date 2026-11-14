@@ -82,8 +82,9 @@ A minimal current main does NOT mean no unmerged source exists. None of these ma
 | D26-SENS-002 | Source sensitive classifier normalization gap | fullwidth email, formatted phone and Unicode-digit CNIC/mobile incomplete | PR #30 source candidate + PHP tests |
 | D26-HIST-003 | Source client history-sync private-query disclosure risk | local-first JS filter didn't identify sensitive numeric/email queries before fetch | PR #30 source candidate + Node browser-simulated test |
 | D26-HIST-004 | Source server receipt truth | HTTP-200 response could mean saved=false, but JS previously counted every request as synced | PR #30 source candidate + server-denial Node negative regression |
+| D26-SUGGEST-005 | Source suggestion output PII leakage risk | Public title echoed into suggestion without label screening, even on harmless prefix | PR #30 guard + real disposable MariaDB decoy regression |
 
-There are **7 separately identified source/artifact issues** (the prior 3 plus 4 newly verified privacy and sync-truth source roots) and 3 categories of evidence/integration blockers. The four new targeted fixes are **source candidates in PR #30**, not merged/deployed or verified Live fixes. This is **not** an exhaustive count of all runtime software defects. In this execution, new production code fixes: 0; verified Live fixes: 0.
+There are **8 separately identified source/artifact issues** (the prior 3 plus 5 newly verified privacy and sync-truth source roots) and 3 categories of evidence/integration blockers. The five new targeted fixes are **source candidates in PR #30**, not merged/deployed or verified Live fixes. This is **not** an exhaustive count of all runtime software defects. In this execution, new production code fixes: 0; verified Live fixes: 0.
 
 ## Required phase gates and next safe decisions
 
