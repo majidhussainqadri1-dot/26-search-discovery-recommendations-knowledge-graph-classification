@@ -83,8 +83,13 @@ A minimal current main does NOT mean no unmerged source exists. None of these ma
 | D26-HIST-003 | Source client history-sync private-query disclosure risk | local-first JS filter didn't identify sensitive numeric/email queries before fetch | PR #30 source candidate + Node browser-simulated test |
 | D26-HIST-004 | Source server receipt truth | HTTP-200 response could mean saved=false, but JS previously counted every request as synced | PR #30 source candidate + server-denial Node negative regression |
 | D26-SUGGEST-005 | Source suggestion output PII leakage risk | Public title echoed into suggestion without label screening, even on harmless prefix | PR #30 guard + real disposable MariaDB decoy regression |
+| D26-AUTH-006 | P0 File00 canonical membership mismatch | File00 current 1.2.3 unsupported; approved/eligible and age_context not enforced | PR #33 source candidate; native File00 staging OPEN |
+| D26-FREE-007 | P1 File00 entitlement structure mismatch | Real owner base_services boolean map not a flat list | PR #33 source candidate; real owner entitlement acceptance OPEN |
+| D26-BATCH-DONE-008 | P0 FR004/005 false source completeness | String done='false' considered true by !empty | PR #34 typed boolean source candidate; owner completeness OPEN |
+| D26-BATCH-LIMIT-009 | P1 FR005 owner batch bound | Owner can return more than requested 100 records before validation | PR #34 bounded page source candidate |
+| D26-BATCH-CURSOR-010 | P1 FR004 checkpoint integrity | Invalid/overlong owner cursor silently sanitized and truncated | PR #34 exact bounded cursor source candidate |
 
-There are **8 separately identified source/artifact issues** (the prior 3 plus 5 newly verified privacy and sync-truth source roots) and 3 categories of evidence/integration blockers. The five new targeted fixes are **source candidates in PR #30**, not merged/deployed or verified Live fixes. This is **not** an exhaustive count of all runtime software defects. In this execution, new production code fixes: 0; verified Live fixes: 0.
+There are **13 separately identified source/artifact issues**: 3 baseline source/artifact issues, 5 privacy/receipt issues in PR #30, 2 native File00 identity/entitlement issues in PR #33, and 3 shadow owner-batch completeness issues in PR #34. **10 scoped source fixes are candidates on unmerged Draft branches; 0 are merged to main, 0 are deployed, and 0 are verified Live.** Three major access/integration/acceptance blocker categories remain; this is NOT an exhaustive runtime-defect inventory.
 
 ## Required phase gates and next safe decisions
 
@@ -93,8 +98,8 @@ There are **8 separately identified source/artifact issues** (the prior 3 plus 5
 | G00 P00 | Live+Staging file/package DB/options/migration freeze and parity | BLOCKED |
 | G01 P01 | 74/74 stable IDs, code owner, S01–S12 acceptance, accurate status | SOURCE REGISTER CREATED |
 | G02 P02 | PR ancestry, unchanged main behavior, exact integration branch, rollback design | IN REVIEW |
-| G03 P03 | FR005 safe full/partial owner rebuild, atomic swap/rollback, race test | DRAFT / NOT ACCEPTED |
-| G04 P04 | 11 genuine canonical owner callbacks with current authorization | OPEN, tracked by File26 Issue #32 |
+| G03 P03 | FR005 safe full/partial owner rebuild, atomic swap/rollback, race test | PR #22 shadow and PR #34 typed owner batch; REAL OWNER/STAGING NOT ACCEPTED |
+| G04 P04 | 11 genuine canonical owner callbacks with current authorization | OPEN; File00 1.2.3 source authorization in PR #33 only, tracked by Issue #32 |
 | G05 P05 | Outbox/consent/revoke/cache/CDN/tombstone and ACK | OPEN |
 | G06 P06 | Approved Urdu/Arabic/Roman Urdu/en-US gold corpus and actual recall | OPEN |
 | G07 P07 | Current doctor eligibility and nonpaid explainable recommendations | OPEN |
