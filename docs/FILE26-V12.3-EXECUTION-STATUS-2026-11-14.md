@@ -88,8 +88,10 @@ A minimal current main does NOT mean no unmerged source exists. None of these ma
 | D26-BATCH-DONE-008 | P0 FR004/005 false source completeness | String done='false' considered true by !empty | PR #34 typed boolean source candidate; owner completeness OPEN |
 | D26-BATCH-LIMIT-009 | P1 FR005 owner batch bound | Owner can return more than requested 100 records before validation | PR #34 bounded page source candidate |
 | D26-BATCH-CURSOR-010 | P1 FR004 checkpoint integrity | Invalid/overlong owner cursor silently sanitized and truncated | PR #34 exact bounded cursor source candidate |
+| D26-ACL-MISSING-011 | P0 FR003 missing canonical owner | Public document could be served without owner can_view callback | PR #35 source fail-closed ACL + disposable SQL test |
+| D26-ACL-UNTYPED-012 | P1 owner ACL decision type | Owner string 'true' treated as approved through boolean coercion | PR #35 requires native boolean true |
 
-There are **13 separately identified source/artifact issues**: 3 baseline source/artifact issues, 5 privacy/receipt issues in PR #30, 2 native File00 identity/entitlement issues in PR #33, and 3 shadow owner-batch completeness issues in PR #34. **10 scoped source fixes are candidates on unmerged Draft branches; 0 are merged to main, 0 are deployed, and 0 are verified Live.** Three major access/integration/acceptance blocker categories remain; this is NOT an exhaustive runtime-defect inventory.
+There are **15 separately identified source/artifact issues**: 3 baseline source/artifact issues, 5 privacy/receipt issues in PR #30, 2 native File00 identity/entitlement issues in PR #33, 3 owner-batch completeness issues in PR #34, and 2 canonical owner-ACL issues in PR #35. **12 scoped source fixes exist only on stacked unmerged Draft branches; 0 are merged to main, 0 are deployed, and 0 are verified Live.** Three major access/integration/acceptance blocker categories remain; this is NOT an exhaustive runtime-defect inventory.
 
 ## Required phase gates and next safe decisions
 
