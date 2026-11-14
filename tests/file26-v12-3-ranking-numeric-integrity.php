@@ -7,6 +7,13 @@
  */
 namespace {
     define('ABSPATH', __DIR__.'/');
+    if (!class_exists('WP_Error')) {
+        class WP_Error {
+            private $code;
+            public function __construct($code, $message = '') { $this->code=$code; }
+            public function get_error_code() { return $this->code; }
+        }
+    }
 }
 namespace Sabri\File26 {
     require_once dirname(__DIR__).'/includes/class-file26-indexer.php';
