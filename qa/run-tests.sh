@@ -52,6 +52,8 @@ run_php_test "$ROOT/tests/file26-20261108-shadow-index-regression.php"
 run_php_test "$ROOT/tests/file26-20261109-shadow-worker-runtime.php"
 run_php_test "$ROOT/tests/file26-20261109-owner-gate-runtime.php"
 run_php_test "$ROOT/tests/file26-20261108-v12-source-traceability.php"
+python3 "$ROOT/tools/file26-v12-3-gate.py" --check
+python3 "$ROOT/tools/file26-v12-3-gate.py" --self-test
 
 printf '[9/15] Dangerous execution primitive scan\n'
 if grep -RInE --include='*.php' '(eval\s*\(|shell_exec\s*\(|passthru\s*\(|proc_open\s*\(|popen\s*\()' "$ROOT"; then echo 'FAIL: dangerous execution primitive'; exit 1; fi
@@ -118,6 +120,8 @@ run_php_test "$PACKAGE/tests/file26-20261108-shadow-index-regression.php"
 run_php_test "$PACKAGE/tests/file26-20261109-shadow-worker-runtime.php"
 run_php_test "$PACKAGE/tests/file26-20261109-owner-gate-runtime.php"
 run_php_test "$PACKAGE/tests/file26-20261108-v12-source-traceability.php"
+python3 "$PACKAGE/tools/file26-v12-3-gate.py" --check
+python3 "$PACKAGE/tools/file26-v12-3-gate.py" --self-test
 (cd "$PACKAGE" && sha256sum -c MANIFEST.sha256 >/dev/null)
 (cd "$ROOT" && sha256sum -c MANIFEST.sha256 >/dev/null)
 mkdir -p "$ROOT/release"
