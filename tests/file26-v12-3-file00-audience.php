@@ -21,7 +21,7 @@ $base = array(
     'suspended'=>false,
     'guardian_verified'=>true,
     'age_context'=>array('known'=>true,'minor'=>false,'guardian_required'=>false),
-    'entitlements'=>array('policy_version'=>'free','base_services'=>array('browse'=>true)),
+    'entitlements'=>array('policy_version'=>'free','base_services'=>array('education'=>true,'clinic'=>true,'marketplace'=>true,'premium'=>false)),
 );
 
 // A forged WP filter cannot override a canonical File00 owner denial.
@@ -34,6 +34,8 @@ $allowed = $security->audience();
 f26_identity_require($allowed['valid'] === true, 'Current File00 1.2.3 approved & eligible member is accepted');
 f26_identity_require($allowed['user_id'] === 10 && $allowed['contract_version'] === '1.2.3', 'Authenticated subject and owner contract are canonical');
 f26_identity_require($security->can_view_visibility('members',$allowed), 'Only canonically eligible members see member content');
+f26_identity_require($security->can_view_visibility('entitled',$allowed,array('required_entitlement'=>'education')), 'File00 native single-free-tier base_services education entitlement is respected');
+f26_identity_require(!$security->can_view_visibility('entitled',$allowed,array('required_entitlement'=>'premium')), 'File00 disabled/paid/premium entitlement must never be inferred');
 
 $GLOBALS['f26_native_claims'] = array_merge($base,array('approved'=>false,'eligible'=>false));
 $denied = $security->audience();
