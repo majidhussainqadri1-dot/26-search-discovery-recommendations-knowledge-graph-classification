@@ -71,8 +71,17 @@ final class Indexer {
 		$connector=sanitize_key($document['connector_slug']); $domain=sanitize_key($document['domain']); $object_id=substr(sanitize_text_field((string)$document['object_id']),0,191); $title=sanitize_text_field($document['title']); $excerpt=isset($document['excerpt'])?wp_strip_all_tags($document['excerpt'],true):''; $body=isset($document['search_text'])?wp_strip_all_tags($document['search_text'],true):$excerpt;
 		if ( '' === $connector || '' === $domain || '' === $object_id ) { return new \WP_Error( 'file26_invalid_canonical_identity', 'Connector, domain and object identity must remain non-empty after normalization.' ); }
 		$payload=isset($document['payload'])&&is_array($document['payload'])?$this->sanitize_payload($document['payload']):array(); if ( is_wp_error( $payload ) ) { return $payload; }
+		$scores = array();
+		foreach ( array( 'quality_score','authority_score','popularity_score' ) as $score_key ) {
+			$value = array_key_exists( $score_key, $document ) ? $document[$score_key] : 0;
+			$number = $this->strict_finite_number( $value );
+			if ( null === $number ) {
+				return new \WP_Error( 'file26_invalid_source_score', 'Source ranking signal must be finite and numeric.' );
+			}
+			$scores[$score_key] = 'popularity_score' === $score_key ? max( 0, $number ) : min( 1, max( 0, $number ) );
+		}
 		$now=DB::now();
-		$data=array('canonical_key'=>self::canonical_key($connector,$domain,$object_id),'connector_slug'=>$connector,'domain_name'=>$domain,'object_id'=>$object_id,'object_version'=>$version,'entity_type'=>sanitize_key($document['entity_type']),'locale'=>substr(sanitize_text_field($document['locale']),0,20),'state'=>$state,'visibility'=>$visibility,'title'=>$title,'excerpt'=>$excerpt,'normalized_title'=>$this->normalizer->normalize($title),'normalized_body'=>$this->normalizer->normalize($body),'canonical_url'=>$url,'author_key'=>isset($document['author_key'])?substr(sanitize_text_field($document['author_key']),0,191):'','topic_ids'=>wp_json_encode(array_slice(array_values(array_unique(array_map('sanitize_text_field',isset($document['topic_ids'])?(array)$document['topic_ids']:array()))),0,100)),'country'=>isset($document['country'])?substr(sanitize_text_field($document['country']),0,191):'','location'=>isset($document['location'])?substr(sanitize_text_field($document['location']),0,191):'','availability'=>isset($document['availability'])?sanitize_key($document['availability']):'','quality_score'=>isset($document['quality_score'])?min(1,max(0,(float)$document['quality_score'])):0,'authority_score'=>isset($document['authority_score'])?min(1,max(0,(float)$document['authority_score'])):0,'popularity_score'=>isset($document['popularity_score'])?max(0,(float)$document['popularity_score']):0,'freshness_at'=>$freshness,'safety_class'=>isset($document['safety_class'])?sanitize_key($document['safety_class']):'general','payload'=>wp_json_encode($payload),'source_event_id'=>isset($document['source_event_id'])?substr(sanitize_text_field($document['source_event_id']),0,191):'','source_event_sequence'=>$sequence,'indexed_at'=>$now,'updated_at'=>$now);
+		$data=array('canonical_key'=>self::canonical_key($connector,$domain,$object_id),'connector_slug'=>$connector,'domain_name'=>$domain,'object_id'=>$object_id,'object_version'=>$version,'entity_type'=>sanitize_key($document['entity_type']),'locale'=>substr(sanitize_text_field($document['locale']),0,20),'state'=>$state,'visibility'=>$visibility,'title'=>$title,'excerpt'=>$excerpt,'normalized_title'=>$this->normalizer->normalize($title),'normalized_body'=>$this->normalizer->normalize($body),'canonical_url'=>$url,'author_key'=>isset($document['author_key'])?substr(sanitize_text_field($document['author_key']),0,191):'','topic_ids'=>wp_json_encode(array_slice(array_values(array_unique(array_map('sanitize_text_field',isset($document['topic_ids'])?(array)$document['topic_ids']:array()))),0,100)),'country'=>isset($document['country'])?substr(sanitize_text_field($document['country']),0,191):'','location'=>isset($document['location'])?substr(sanitize_text_field($document['location']),0,191):'','availability'=>isset($document['availability'])?sanitize_key($document['availability']):'','quality_score'=>$scores['quality_score'],'authority_score'=>$scores['authority_score'],'popularity_score'=>$scores['popularity_score'],'freshness_at'=>$freshness,'safety_class'=>isset($document['safety_class'])?sanitize_key($document['safety_class']):'general','payload'=>wp_json_encode($payload),'source_event_id'=>isset($document['source_event_id'])?substr(sanitize_text_field($document['source_event_id']),0,191):'','source_event_sequence'=>$sequence,'indexed_at'=>$now,'updated_at'=>$now);
 		$checksum_data = $data; unset( $checksum_data['indexed_at'], $checksum_data['updated_at'] ); if ( ! $freshness_provided ) { unset( $checksum_data['freshness_at'] ); } $data['checksum']=hash('sha256',wp_json_encode($checksum_data)); return $data;
 	}
 
@@ -102,10 +111,43 @@ final class Indexer {
 		return null;
 	}
 
+	/** Source ranking signals must not silently become INF, NAN or cast-saturated numbers. */
+	private function strict_finite_number( $value ) {
+		if ( ! is_int( $value ) && ! is_float( $value ) && ! ( is_string( $value ) && is_numeric( trim( $value ) ) ) ) {
+			return null;
+		}
+		$number = (float) $value;
+		return is_finite( $number ) ? $number : null;
+	}
+
 	private function sanitize_payload( array $payload ) {
-		$allowed=array('image_url','duration','verified_author','verified_doctor','global_doctor_rank','correction_label','retraction_label','required_entitlement','download_allowed','download_url','download_label','download_reason','source_count','language','content_type_label','ai_generated','ai_provider_label','institutional_account_class','qualification_score','experience_score','patient_verified_review_score','ethical_conduct_score','knowledge_contribution_score','responsiveness_score','profile_completeness_score','complaint_appeal_outcome_score','manipulation_resistant_engagement_score','doctor_rank_score','doctor_rank_policy_version'); $clean=array();
-		foreach($allowed as $key){if(!array_key_exists($key,$payload)){continue;} if(in_array($key,array('image_url','download_url'),true)){$clean[$key]=$this->security->safe_resource_url($payload[$key],$key);}elseif(in_array($key,array('verified_author','verified_doctor','download_allowed','ai_generated'),true)){$boolean=$this->strict_bool($payload[$key]);if(null===$boolean){return new \WP_Error('file26_invalid_payload_boolean','Trust-bearing payload boolean is malformed.');}$clean[$key]=$boolean;}elseif('global_doctor_rank'===$key||'source_count'===$key){$clean[$key]=max(0,(int)$payload[$key]);}elseif('doctor_rank_score'===$key){$clean[$key]=min(100,max(0,(float)$payload[$key]));}elseif(preg_match('/_score$/',$key)){$value=(float)$payload[$key];$clean[$key]=is_finite($value)?min(1,max(0,$value)):0;}else{$clean[$key]=substr(sanitize_text_field($payload[$key]),0,512);}}
-		if(empty($clean['download_allowed'])){unset($clean['download_url']);} return $clean;
+		$allowed = array( 'image_url','duration','verified_author','verified_doctor','global_doctor_rank','correction_label','retraction_label','required_entitlement','download_allowed','download_url','download_label','download_reason','source_count','language','content_type_label','ai_generated','ai_provider_label','institutional_account_class','qualification_score','experience_score','patient_verified_review_score','ethical_conduct_score','knowledge_contribution_score','responsiveness_score','profile_completeness_score','complaint_appeal_outcome_score','manipulation_resistant_engagement_score','doctor_rank_score','doctor_rank_policy_version' );
+		$clean = array();
+		foreach ( $allowed as $key ) {
+			if ( ! array_key_exists( $key, $payload ) ) { continue; }
+			$value = $payload[$key];
+			if ( in_array( $key, array( 'image_url', 'download_url' ), true ) ) {
+				if ( ! is_string( $value ) ) { return new \WP_Error( 'file26_invalid_payload_text', 'Malformed source resource URL.' ); }
+				$clean[$key] = $this->security->safe_resource_url( $value, $key );
+			} elseif ( in_array( $key, array( 'verified_author','verified_doctor','download_allowed','ai_generated' ), true ) ) {
+				$boolean = $this->strict_bool( $value );
+				if ( null === $boolean ) { return new \WP_Error( 'file26_invalid_payload_boolean', 'Trust-bearing payload boolean is malformed.' ); }
+				$clean[$key] = $boolean;
+			} elseif ( in_array( $key, array( 'global_doctor_rank','source_count' ), true ) ) {
+				$integer = $this->strict_integer( $value, 0 );
+				if ( null === $integer ) { return new \WP_Error( 'file26_invalid_payload_integer', 'Source rank/count must be an exact nonnegative bounded integer.' ); }
+				$clean[$key] = $integer;
+			} elseif ( 'doctor_rank_score' === $key || preg_match( '/_score$/', $key ) ) {
+				$number = $this->strict_finite_number( $value );
+				if ( null === $number ) { return new \WP_Error( 'file26_invalid_payload_score', 'Source ranking score must be finite and numeric.' ); }
+				$clean[$key] = 'doctor_rank_score' === $key ? min( 100, max( 0, $number ) ) : min( 1, max( 0, $number ) );
+			} else {
+				if ( ! is_scalar( $value ) ) { return new \WP_Error( 'file26_invalid_payload_text', 'Malformed source payload text.' ); }
+				$clean[$key] = substr( sanitize_text_field( $value ), 0, 512 );
+			}
+		}
+		if ( empty( $clean['download_allowed'] ) ) { unset( $clean['download_url'] ); }
+		return $clean;
 	}
 
 	public function restrict($connector,$domain,$object_id,$object_version,$reason='restricted'){return $this->tombstone($connector,$domain,$object_id,$object_version,$reason);}
