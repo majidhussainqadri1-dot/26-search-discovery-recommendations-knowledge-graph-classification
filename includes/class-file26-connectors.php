@@ -90,12 +90,21 @@ final class Connectors {
 	}
 
 	public function can_view( $slug, array $document, array $audience ) {
-		$manifest = $this->get( $slug ); if ( ! $manifest || 'active' !== $manifest['status'] ) { return false; }
-		if ( isset( $manifest['can_view'] ) && is_callable( $manifest['can_view'] ) ) {
-			try { $decision = call_user_func( $manifest['can_view'], $document, $audience ); return true === $this->strict_bool( $decision ); }
-			catch ( \Throwable $e ) { $this->security->audit( 'connector_visibility_error', array( 'object_type' => 'connector', 'object_key' => $slug, 'reason' => 'callback_exception', 'metadata' => array( 'error_class' => get_class( $e ) ) ) ); return false; }
+		$manifest = $this->get( $slug );
+		if ( ! $manifest || 'active' !== $manifest['status'] ) { return false; }
+		// FR-003: public projection is never a substitute for the canonical
+		// owner's CURRENT request-time visibility/rights decision. No callback,
+		// a malformed return or an owner outage must remain inaccessible.
+		if ( ! isset( $manifest['can_view'] ) || ! is_callable( $manifest['can_view'] ) ) {
+			return false;
 		}
-		return $this->security->can_view_visibility( isset( $document['visibility'] ) ? $document['visibility'] : 'restricted', $audience, isset( $document['payload'] ) && is_array( $document['payload'] ) ? $document['payload'] : array() );
+		try {
+			$decision = call_user_func( $manifest['can_view'], $document, $audience );
+			return true === $decision; // A typed PHP boolean, not a truthy string.
+		} catch ( \Throwable $e ) {
+			$this->security->audit( 'connector_visibility_error', array( 'object_type' => 'connector', 'object_key' => $slug, 'reason' => 'callback_exception', 'metadata' => array( 'error_class' => get_class( $e ) ) ) );
+			return false;
+		}
 	}
 
 	public function health_snapshot() {
