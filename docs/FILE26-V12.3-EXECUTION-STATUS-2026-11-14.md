@@ -24,7 +24,7 @@ Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provis
 | Live plugin errors/logs and runtime configuration | No authenticated read available | UNVERIFIED |
 | Hostinger Staging code/schema | No authenticated read available | UNVERIFIED |
 
-P00 is BLOCKED, not skipped. Obtain owner-authorized access and collect File26's read-only live-reality-freeze separately on Live and Staging. Compare deployed file-tree checksum with approved exact package using the read-only deployment-parity tool. Never use GitHub as evidence of installed bytes.
+P00 is BLOCKED, not skipped (tracked by File26 Issue #31). Obtain owner-authorized access and collect File26's read-only live-reality-freeze separately on Live and Staging. Compare deployed file-tree checksum with approved exact package using the read-only deployment-parity tool. Never use GitHub as evidence of installed bytes.
 
 ## Current GitHub truth
 
@@ -42,7 +42,7 @@ P00 is BLOCKED, not skipped. Obtain owner-authorized access and collect File26's
 
 36 FR + 24 FUT + 2 CEN + 12 CV records have been linked to existing code paths, S01–S12 test families, outstanding concrete owner/provider evidence, and distinct false owner/staging/live verification flags. Cross-cutting V12.3 links include M01–M12, QA-15..24, UX-02/06/12/13, AJ-28/29 and CEN-REL-001.
 
-The source-only machine checker rejects malformed IDs, duplicates, missing implementation paths, premature completion claims, and missing evidence refs. Its release-gate mode refuses production acceptance by design. Passing the checker means the register is structurally present, **not** that any of 74 capabilities works in a deployed environment.
+The source-only machine checker rejects malformed IDs, duplicates, missing implementation paths, premature completion claims, and missing evidence refs. Independent corrective review: docs/FILE26-V12.3-PRIVACY-CORRECTIVE-REVIEW-2026-11-14.md. Its release-gate mode refuses production acceptance by design. Passing the checker means the register is structurally present, **not** that any of 74 capabilities works in a deployed environment.
 
 ## P02–P03 — Correct source ancestry and Shadow Index
 
@@ -57,7 +57,7 @@ PR #22 and File26 PRs #24..#29 may not be mass-merged: bases differ and cross-ow
 | File03 | bf317e5521ec79f9f16d21353f402571fcd4f84c | 162 / 64 | Draft #42, SHA 1e46e6130c73855f2b6841bea9599a317f9921bf |
 | File05 | e2667d69d43d655e3d86b0a358dec5f28b61dd96 | 1 / 0 | Draft #7, SHA a01d999abdbc9cb3651160e343555c1bec6961cf; non-main base |
 | File06 | c6f44e923f2a6f2ed82d967d18422624169b2770 | 1 / 0 | Draft #15, SHA 21786c9d804fe442dd613995073522beef13ca38; non-main base |
-| File07 | 8f9b567c08e9456daf31ebadf17b13bb307571f8 | 83 / 23 | PR #12 CLOSED and unmerged; newer main requires re-audit |
+| File07 | 8f9b567c08e9456daf31ebadf17b13bb307571f8 | 83 / 23 | PR #12 closed/unmerged; replacement Draft #15 head afdd751486835ff50cb7efc54b55813350402a08, proposed-only |
 | File08 | d086840f7e2ac0ed328006385f064e0e2fb58cb1 | 259 / 150 | Draft #44, SHA cc09e7fe85a06b9fd54c96fb71a03bc26c987a60 |
 | File10 | 4b8a3dda140186c01b05d998e729cb1aeeed2cf3 | 32 / 11 | Draft #19, SHA 08fb8ff525b346be88038589aff5d1f979017c5b; non-main base |
 | File11 | c2df8e72bad76dc1a7fb83cbe039541f7aa1fd8b | 1 / 0 | Native File11 candidate exists outside main; requires File10 |
@@ -78,8 +78,11 @@ A minimal current main does NOT mean no unmerged source exists. None of these ma
 | B26-ACCESS | External access evidence blocker | WPVibe no site, Jetpack disconnected | no live exact deployed verification |
 | B26-OWNERS | External dependency blocker | mandatory native owner lifecycle across 11 repos incomplete | candidate PRs cannot replace owner release acceptance |
 | B26-STAGE | Environmental acceptance blocker | no actual Hostinger staging restoration or live retest | NOT PERFORMED |
+| D26-PFX-001 | Source privacy bypass in autocomplete normalizer | punctuation removed before at-sign guard; spaced mobile not caught | PR #30 source candidate + pure PHP / MariaDB tests |
+| D26-SENS-002 | Source sensitive classifier normalization gap | fullwidth email, formatted phone and Unicode-digit CNIC/mobile incomplete | PR #30 source candidate + PHP tests |
+| D26-HIST-003 | Source client history-sync private-query disclosure risk | local-first JS filter didn't identify sensitive numeric/email queries before fetch | PR #30 source candidate + Node browser-simulated test |
 
-There are 3 separately identified source/artifact issues and 3 categories of evidence/integration blockers. This is **not** an exhaustive count of all runtime software defects. In this execution, new production code fixes: 0; verified Live fixes: 0.
+There are **6 separately identified source/artifact issues** (the prior 3 plus 3 newly verified privacy-guard source roots) and 3 categories of evidence/integration blockers. The three new privacy fixes are **source candidates in PR #30**, not merged/deployed or verified Live fixes. This is **not** an exhaustive count of all runtime software defects. In this execution, new production code fixes: 0; verified Live fixes: 0.
 
 ## Required phase gates and next safe decisions
 
@@ -89,7 +92,7 @@ There are 3 separately identified source/artifact issues and 3 categories of evi
 | G01 P01 | 74/74 stable IDs, code owner, S01–S12 acceptance, accurate status | SOURCE REGISTER CREATED |
 | G02 P02 | PR ancestry, unchanged main behavior, exact integration branch, rollback design | IN REVIEW |
 | G03 P03 | FR005 safe full/partial owner rebuild, atomic swap/rollback, race test | DRAFT / NOT ACCEPTED |
-| G04 P04 | 11 genuine canonical owner callbacks with current authorization | OPEN |
+| G04 P04 | 11 genuine canonical owner callbacks with current authorization | OPEN, tracked by File26 Issue #32 |
 | G05 P05 | Outbox/consent/revoke/cache/CDN/tombstone and ACK | OPEN |
 | G06 P06 | Approved Urdu/Arabic/Roman Urdu/en-US gold corpus and actual recall | OPEN |
 | G07 P07 | Current doctor eligibility and nonpaid explainable recommendations | OPEN |
