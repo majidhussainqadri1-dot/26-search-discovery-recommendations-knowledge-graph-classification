@@ -23,6 +23,9 @@ namespace {
     $payload = new \ReflectionMethod($obj, 'sanitize_payload');
     $numeric = new \ReflectionMethod($obj, 'strict_finite_number');
     $strict = new \ReflectionMethod($obj, 'strict_integer');
+    $payload->setAccessible(true);
+    $numeric->setAccessible(true);
+    $strict->setAccessible(true);
     $ok = function($condition, $message) {
         if (!$condition) { fwrite(STDERR, "FAIL: $message\n"); exit(1); }
         echo "PASS: $message\n";
