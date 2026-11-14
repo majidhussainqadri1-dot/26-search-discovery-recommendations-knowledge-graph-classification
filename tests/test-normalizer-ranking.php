@@ -74,6 +74,11 @@ check_case( $policy_ranking->score( $base, '"جگر کی سوزش"' ) > 40, 'Act
 $GLOBALS['wpdb']->row = null;
 
 $security = new Security();
+check_case( true === $security->contains_sensitive_query( 'learner＠example.com' ), 'Full-width email separator is classified as sensitive before any external provider or telemetry.' );
+check_case( true === $security->contains_sensitive_query( '+92 300 123 4567' ), 'Spaced Pakistani phone number is classified sensitive.' );
+check_case( true === $security->contains_sensitive_query( '۰۳۱۲ ۱۲۳۴۵۶۷' ), 'Urdu digit and spacing phone number is classified sensitive.' );
+check_case( true === $security->contains_sensitive_query( '12345 1234567 1' ), 'Spaced CNIC number is classified sensitive.' );
+check_case( false === $security->contains_sensitive_query( 'Organon edition and author' ), 'Ordinary educational search is not falsely classified sensitive.' );
 $GLOBALS['f26_test_logged_in'] = false;
 check_case( true === $security->audience()['valid'], 'Anonymous public audience is valid for public-only retrieval.' );
 $GLOBALS['f26_test_logged_in'] = true;
