@@ -87,17 +87,26 @@
       const all = read().slice(-50);
       const items = all.filter((item) => !sensitive(cleanQuery(item.query)));
       const accepted = [];
+      let serverRejected = 0;
       for (const item of items) {
         const q = cleanQuery(item.query);
         if (!q) continue;
-        await api('future/search-history', {
+        const response = await api('future/search-history', {
           method: 'POST',
           headers: {'Accept':'application/json','Content-Type':'application/json','X-WP-Nonce':cfg.nonce},
           body: JSON.stringify({sync_opt_in: true, q: q})
         });
-        accepted.push(q);
+        // WordPress returns 200 even when its owner policy rejects saving a
+        // sensitive query. Only an explicit saved=true is a durable receipt.
+        if (response && response.saved === true) {
+          accepted.push(q);
+        } else if (response && response.sensitive_query_not_synced === true) {
+          serverRejected++;
+        } else {
+          throw new Error('Search-history sync was not acknowledged by the server.');
+        }
       }
-      return {synced: accepted.length, sensitive_skipped: all.length - items.length};
+      return {synced: accepted.length, sensitive_skipped: all.length - items.length, server_rejected: serverRejected};
     }
   };
 
