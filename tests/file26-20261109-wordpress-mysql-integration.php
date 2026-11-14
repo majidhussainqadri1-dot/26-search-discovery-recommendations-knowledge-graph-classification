@@ -367,4 +367,27 @@ $sequence_denied = $plugin->indexer()->upsert($huge_doc);
 file26_ci_require(is_wp_error($sequence_denied) &&
     $sequence_denied->get_error_code()==='file26_invalid_source_event_sequence',
     'Unsigned source event sequence over PHP_INT_MAX rejected before DB upsert');
+
+// FR-002/FR-013: malformed source rank/count or non-finite scores must fail
+// BEFORE any write into actual disposable WordPress/MariaDB serving tables.
+foreach (array(
+    array('label'=>'malformed-quality', 'mutation'=>array('quality_score'=>'INF'), 'error'=>'file26_invalid_source_score'),
+    array('label'=>'malformed-authority', 'mutation'=>array('authority_score'=>'NaN'), 'error'=>'file26_invalid_source_score'),
+    array('label'=>'malformed-popularity', 'mutation'=>array('popularity_score'=>array('very popular')), 'error'=>'file26_invalid_source_score'),
+    array('label'=>'saturated-doctor-rank', 'mutation'=>array('payload'=>array('global_doctor_rank'=>'18446744073709551615')), 'error'=>'file26_invalid_payload_integer'),
+    array('label'=>'nonfinite-qualification', 'mutation'=>array('payload'=>array('qualification_score'=>'INF')), 'error'=>'file26_invalid_payload_score')
+) as $case) {
+    $invalid = array_merge($doc,$case['mutation']);
+    $invalid['object_id'] = 'numeric-' . $case['label'];
+    $invalid['canonical_url'] = home_url('/file26-ci/numeric-'.$case['label']);
+    $invalid['source_event_sequence'] = 1;
+    $invalid['object_version'] = 1;
+    $rejected = sabri_file26_upsert_document($invalid);
+    file26_ci_require(is_wp_error($rejected) && $rejected->get_error_code()===$case['error'],
+        'Invalid numerical source payload rejected before database write: '.$case['label']);
+    $invalid_key = \Sabri\File26\Indexer::canonical_key('file26_ci_fixture','test',$invalid['object_id']);
+    $existing_row = $wpdb->get_var($wpdb->prepare("SELECT canonical_key FROM $documents WHERE canonical_key=%s",$invalid_key));
+    file26_ci_require(null===$existing_row,'Invalid numerical source payload never entered actual serving documents: '.$case['label']);
+}
+
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";

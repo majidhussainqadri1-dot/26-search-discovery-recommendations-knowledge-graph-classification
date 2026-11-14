@@ -124,3 +124,26 @@ There are **16 separately identified source/artifact issues**: 3 baseline issues
 - Live Verification Status: NOT VERIFIED.
 
 **Next external dependency:** restore authorized WordPress/Hostinger site connector access without sharing secrets, then run P00. Source QA must proceed only on isolated branches, never as a substitute for live evidence.
+
+## Supplemental 2026-11-14 Source/Owner Completion Session — after PR #36
+
+**Evidence boundary: source and disposable WordPress/MariaDB only; no Live fault diagnosed or deployed.**
+
+### Four separately scoped source corrections
+
+| Candidate | Root cause | Correction | Evidence |
+|---|---|---|---|
+| File26 PR #39 — rank/count overflow | Indexer source payload cast global_doctor_rank and source_count directly to signed PHP int; huge unsigned owner strings saturate | Bounded strict_integer, typed error before write | PHP regression and disposable MySQL no-insert |
+| File26 PR #39 — nonfinite ranking input | Quality/authority/popularity and doctor score accepted malformed or INF/NaN by float coercion | Finite numeric parsing before source checksum/SQL | PHP 7.4/8.3 and five disposable DB fixtures |
+| File21 PR #78 — mutable source offset | A removed earlier published post shifts a SQL OFFSET batch and can skip a later item | Post-ID keyset with versioned f21-id-v1 cursor and old-offset rejection | File21 source test and genuine File26 WP 6.8.3/7.0.1/7.1.4 MySQL source pagination |
+| File21 PR #78 — source ID overflow | Unsigned post ID outside PHP_INT_MAX can lose uniqueness during integer conversion | Validate raw decimal ID before cast, fail closed on overflow/fractional ID | Exact File21 PHP regression |
+
+**Separate repository realities:** File21 PR #78 stacks on unmerged File21 PR #59. File26 PR #39 stacks on unmerged File26 PRs #36→#35→#34→#33→#30→#22. None is main, Hostinger Staging or Live.
+
+**Issue #37 remains P0 and UNRESOLVED.** Expired and purged tombstones have no durable high-watermark; delayed old event could reenter when serving record is also absent. Do not address this by retaining raw identifiers indefinitely. Privacy-aware version-floor and source-owner freshness design plus twelve negative acceptance cases are documented in docs/FILE26-V12.3-P05-DURABLE-REVOCATION-DESIGN-2026-11-14.md. File12 Issue #23 remains open separately.
+
+**Counts for this supplemental session:** Four source correction scopes submitted in two Draft PRs; main merged fixes 0; verified Live fixes 0. This is not an exhaustive system defect count. Previous source candidate tallies belong to their earlier evidence window; no claim of 17 distinct production incidents is made.
+
+**Release decision:** G03/G04/G05/G12/G13/G14/G15 remain NOT ACCEPTED pending native owner snapshot, durable revocation ACK, exact final-head source QA, human independent reviews, Staging backup/restore, Founder authorization, Live retest and parity.
+
+**Five mandatory production fields:** Repository main SHA 1b064c6ea9f81195611ed001d5457e8ced65460a; Deployed Version UNVERIFIED; DB Version UNVERIFIED; Migration State UNVERIFIED; Live Verification NOT VERIFIED; Live repairs 0.
