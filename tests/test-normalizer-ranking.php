@@ -84,7 +84,7 @@ check_case( true === $security->audience()['valid'], 'Anonymous public audience 
 $GLOBALS['f26_test_logged_in'] = true;
 check_case( false === $security->audience()['valid'], 'Authenticated audience without File 00 contract fails closed.' );
 $GLOBALS['f26_test_filter_values']['sabri_file26_membership_assertions'] = array(
-	'contract_version' => '1.1.2', 'user_id' => 10, 'authenticated' => true, 'suspended' => false,
+	'contract_version' => '1.1.2', 'user_id' => 10, 'authenticated' => true, 'suspended' => false, 'approved' => true, 'eligible' => true, 'age_context' => array('known'=>true,'minor'=>false),
 	'is_minor' => false, 'guardian_verified' => false, 'entitlements' => array(), 'consents' => array(), 'roles' => array( 'member' ),
 );
 check_case( true === $security->audience()['valid'], 'Supported File 00 membership assertion enables eligible private retrieval.' );

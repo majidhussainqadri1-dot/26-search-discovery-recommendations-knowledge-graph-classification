@@ -3,7 +3,7 @@ namespace Sabri\File26;
 defined( 'ABSPATH' ) || exit;
 
 final class Security {
-	private $supported_membership_contracts = array( '1.0', '1.1', '1.1.2' );
+	private $supported_membership_contracts = array( '1.0', '1.1', '1.1.2', '1.2.3' );
 
 	public function trace_id() {
 		try { return bin2hex( random_bytes( 16 ) ); }
@@ -11,24 +11,70 @@ final class Security {
 	}
 
 	public function audience() {
-		$authenticated = is_user_logged_in(); $current_user_id = get_current_user_id();
-		$default = array( 'contract_version'=>null,'user_id'=>$current_user_id,'authenticated'=>$authenticated,'suspended'=>false,'is_minor'=>false,'guardian_verified'=>false,'entitlements'=>array(),'consents'=>array(),'roles'=>$authenticated?wp_get_current_user()->roles:array(),'valid'=>!$authenticated );
+		$authenticated = is_user_logged_in();
+		$current_user_id = (int) get_current_user_id();
+		$default = array(
+			'contract_version' => null, 'user_id' => $current_user_id,
+			'authenticated' => $authenticated, 'suspended' => true,
+			'is_minor' => true, 'guardian_verified' => false,
+			'entitlements' => array(), 'consents' => array(),
+			'roles' => $authenticated ? wp_get_current_user()->roles : array(),
+			'valid' => ! $authenticated,
+		);
+		if ( ! $authenticated ) {
+			$default['suspended'] = false;
+			return $default; // Anonymous requests are authorized for PUBLIC visibility only.
+		}
+
+		// File00 is the canonical identity/approval/age owner. If its native API
+		// exists, an unrelated WordPress filter cannot supersede a denial.
 		$claims = apply_filters( 'sabri_file26_membership_assertions', $default, $current_user_id );
-		if ( ! is_array( $claims ) ) { $claims=$default; $claims['valid']=false; }
-		$audience=array_merge($default,$claims);
+		if ( function_exists( 'smc_membership_assertions' ) ) {
+			try {
+				$claims = smc_membership_assertions( $current_user_id );
+			} catch ( \Throwable $exception ) {
+				$claims = null; // Owner outages always fail closed.
+			}
+		}
+		if ( ! is_array( $claims ) ) { $claims = array(); }
+		$audience = array_merge( $default, $claims );
+
+		// These exact request-subject bindings are mandatory even if a filtered
+		// assertion tries to claim another user or a different login state.
 		$audience['user_id']=$current_user_id;
 		$audience['authenticated']=$authenticated;
-		$audience['roles']=$authenticated?wp_get_current_user()->roles:array();
-		$audience['contract_version']=isset($audience['contract_version'])?$this->sanitize_claim_text($audience['contract_version'],32):null;
-		$suspended=$this->normalize_claim_bool(isset($audience['suspended'])?$audience['suspended']:false);
-		$is_minor=$this->normalize_claim_bool(isset($audience['is_minor'])?$audience['is_minor']:false);
-		$guardian=$this->normalize_claim_bool(isset($audience['guardian_verified'])?$audience['guardian_verified']:false);
-		$audience['suspended']=null===$suspended?true:$suspended;
-		$audience['is_minor']=null===$is_minor?true:$is_minor;
-		$audience['guardian_verified']=null===$guardian?false:$guardian;
-		$audience['entitlements']=$this->normalize_string_claim_list(isset($audience['entitlements'])?$audience['entitlements']:array(),100,191);
-		$audience['consents']=$this->normalize_string_claim_list(isset($audience['consents'])?$audience['consents']:array(),100,191);
-		if($authenticated){$version=(string)$audience['contract_version'];$audience['valid']=$version&&in_array($version,$this->supported_membership_contracts,true)&&!$audience['suspended'];}else{$audience['valid']=true;}
+		$audience['roles'] = wp_get_current_user()->roles;
+		$audience['contract_version'] = isset( $claims['contract_version'] ) ? $this->sanitize_claim_text( $claims['contract_version'], 32 ) : '';
+		$suspended = $this->normalize_claim_bool( isset( $claims['suspended'] ) ? $claims['suspended'] : null );
+		$guardian = $this->normalize_claim_bool( isset( $claims['guardian_verified'] ) ? $claims['guardian_verified'] : null );
+
+		// File00 v1.2.3 supplies a nested age_context rather than a top-level
+		// is_minor. Unknown age must not be silently treated as an adult.
+		$minor = null;
+		if ( isset( $claims['age_context'] ) && is_array( $claims['age_context'] ) ) {
+			$age = $claims['age_context'];
+			$age_known = $this->normalize_claim_bool( isset( $age['known'] ) ? $age['known'] : null );
+			$minor = true === $age_known ? $this->normalize_claim_bool( isset( $age['minor'] ) ? $age['minor'] : null ) : true;
+		} elseif ( array_key_exists( 'is_minor', $claims ) ) {
+			$minor = $this->normalize_claim_bool( $claims['is_minor'] );
+		}
+		$audience['suspended'] = false === $suspended ? false : true;
+		$audience['is_minor'] = null === $minor ? true : $minor;
+		$audience['guardian_verified'] = true === $guardian;
+		$audience['entitlements'] = $this->normalize_owner_entitlements( isset( $claims['entitlements'] ) ? $claims['entitlements'] : array() );
+		$audience['consents'] = $this->normalize_string_claim_list( isset( $claims['consents'] ) ? $claims['consents'] : array(), 100, 191 );
+
+		$claimed_user_id = isset( $claims['user_id'] ) && ( is_int( $claims['user_id'] ) || ( is_string( $claims['user_id'] ) && ctype_digit( $claims['user_id'] ) ) ) ? (int) $claims['user_id'] : 0;
+		$approved = $this->normalize_claim_bool( isset( $claims['approved'] ) ? $claims['approved'] : null );
+		$eligible = $this->normalize_claim_bool( isset( $claims['eligible'] ) ? $claims['eligible'] : null );
+		$version = $audience['contract_version'];
+		$audience['valid'] =
+			$current_user_id > 0
+			&& $claimed_user_id === $current_user_id
+			&& in_array( $version, $this->supported_membership_contracts, true )
+			&& true === $approved && true === $eligible
+			&& ! $audience['suspended']
+			&& ( ! $audience['is_minor'] || $audience['guardian_verified'] );
 		return $audience;
 	}
 
@@ -47,6 +93,20 @@ final class Security {
 		if(function_exists('sanitize_text_field')){$text=\sanitize_text_field($text);}else{$text=strip_tags($text);$text=preg_replace('/[\x00-\x1F\x7F]/u','',$text);$text=preg_replace('/\s+/u',' ',trim($text));}
 		$max_length=max(1,(int)$max_length);
 		return function_exists('mb_substr')?mb_substr($text,0,$max_length,'UTF-8'):substr($text,0,$max_length);
+	}
+
+	/** File00 v1.2.3 publishes a policy object, not a flat entitlements list. */
+	private function normalize_owner_entitlements($claim){
+		if(!is_array($claim)){return array();}
+		if(isset($claim['base_services'])&&is_array($claim['base_services'])){
+			$allowed=array();
+			foreach($claim['base_services'] as $service=>$enabled){
+				if(!is_string($service)||''===$service||true!==$this->normalize_claim_bool($enabled)){continue;}
+				$allowed[]=$service; // Never accept paid_unlocks_enabled/donation as access.
+			}
+			return $this->normalize_string_claim_list($allowed,100,191);
+		}
+		return $this->normalize_string_claim_list($claim,100,191);
 	}
 
 	private function normalize_string_claim_list($value,$max_items,$max_length){
