@@ -42,7 +42,8 @@ $first_ids=array_map('intval',array_column($page1['items'],'object_id'));
 file26_keyset_assert($first_ids===array_slice($ids,0,2),'First SQL page contains exact first two owner post IDs');
 file26_keyset_assert($page1['next_cursor']==='f21-id-v1:'.$ids[1],'Source returned versioned keyset cursor, not offset');
 // Revoke first owner publication between pages, shrinking the eligible source.
-update_post_meta($ids[0],$review::META_VISIBILITY,'private');
+wp_update_post(array('ID'=>$ids[0], 'post_status'=>'draft'));
+file26_keyset_assert('draft'===get_post_status($ids[0]),'First owner post leaves published query set between pages');
 $page2=$owner::file26_list_batch($page1['next_cursor'],2);
 file26_keyset_assert(is_array($page2),'Second native owner page is readable after revocation');
 $second_ids=array_map('intval',array_column($page2['items'],'object_id'));
