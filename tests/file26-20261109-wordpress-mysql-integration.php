@@ -323,4 +323,26 @@ foreach (array(
 }
 $owner_batch_mode = 'normal';
 
+// Canonical public owner ACL cannot be inferred merely from a public row.
+// The full disposable database includes a real indexed, active connector
+// deliberately lacking can_view; the result must be suppressed.
+$acl_missing = $manifest;
+$acl_missing['slug'] = 'file26_ci_missing_acl';
+$acl_missing['owner_file'] = 'File 26 CI missing ACL';
+unset($acl_missing['can_view']);
+file26_ci_assert_ok(sabri_file26_register_connector($acl_missing), 'Owner missing can_view may register only in proposed lane');
+$wpdb->update(\Sabri\File26\DB::table('connectors'), array('status'=>'active'), array('slug'=>'file26_ci_missing_acl'));
+file26_ci_assert_ok(sabri_file26_register_connector($acl_missing), 'Disposable legacy active owner absence is observable without production activation');
+$unowned = $doc;
+$unowned['connector_slug'] = 'file26_ci_missing_acl';
+$unowned['object_id'] = 'missing-owner-acl-public';
+$unowned['title'] = 'undocumentedaclvisibilitymarker';
+$unowned['canonical_url'] = home_url('/file26-ci/missing-owner-acl-public');
+wp_set_current_user((int)$admin->ID);
+file26_ci_assert_ok(sabri_file26_upsert_document($unowned), 'Synthetic public document indexed for active owner without canonical ACL');
+wp_set_current_user(0);
+$unowned_results = sabri_file26_search(array('q'=>'undocumentedaclvisibilitymarker','locale'=>'ur'));
+file26_ci_require(!is_wp_error($unowned_results) && empty($unowned_results['results']),
+    'Public search rejects owner projection with missing request-time can_view, regardless of visibility label');
+
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
