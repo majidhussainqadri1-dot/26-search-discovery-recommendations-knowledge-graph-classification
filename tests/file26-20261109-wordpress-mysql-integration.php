@@ -255,16 +255,32 @@ $pii_email_doc['excerpt'] = 'Public-safe synthetic title to reproduce fullwidth-
 $pii_phone_doc = $doc;
 $pii_phone_doc['object_id'] = 'pii-phone-decoy';
 $pii_phone_doc['canonical_url'] = home_url('/file26-ci/pii-phone-decoy');
-$pii_phone_doc['title'] = '92 300 123 4567 educational reference';
+$pii_phone_doc['title'] = '92 public educational reference';
 $pii_phone_doc['excerpt'] = 'Public-safe synthetic title to reproduce spaced-digit normalization.';
 wp_set_current_user((int)$admin->ID);
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_email_doc), 'Synthetic email-shaped autocomplete decoy is indexed as public');
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_phone_doc), 'Synthetic phone-shaped autocomplete decoy is indexed as public');
+$pii_at_title = $doc;
+$pii_at_title['object_id'] = 'pii-output-at-decoy';
+$pii_at_title['canonical_url'] = home_url('/file26-ci/pii-output-at-decoy');
+$pii_at_title['title'] = 'learner@example.com tutorial';
+file26_ci_assert_ok(sabri_file26_upsert_document($pii_at_title), 'Public email-shaped title indexed as synthetic unsafe output decoy');
+$pii_phone_title = $doc;
+$pii_phone_title['object_id'] = 'pii-output-phone-decoy';
+$pii_phone_title['canonical_url'] = home_url('/file26-ci/pii-output-phone-decoy');
+$pii_phone_title['title'] = '92 300 123 4567 educational reference';
+file26_ci_assert_ok(sabri_file26_upsert_document($pii_phone_title), 'Public phone-shaped title indexed as synthetic unsafe output decoy');
 wp_set_current_user(0);
 $visible_email_control = $plugin->search()->suggest('learner', 'ur', 8);
 file26_ci_require(is_array($visible_email_control) && count($visible_email_control) > 0, 'Safe email-decoy control prefix yields at least one eligible public suggestion');
+foreach ($visible_email_control as $suggestion) {
+    file26_ci_require(false === strpos($suggestion['label'],'@'), 'Eligible autocomplete must not echo email-shaped public document titles');
+}
 $visible_phone_control = $plugin->search()->suggest('92', 'ur', 8);
 file26_ci_require(is_array($visible_phone_control) && count($visible_phone_control) > 0, 'Safe phone-decoy control prefix yields at least one eligible public suggestion');
+foreach ($visible_phone_control as $suggestion) {
+    file26_ci_require(false === strpos($suggestion['label'],'300 123 4567'), 'Eligible autocomplete must not echo phone-shaped public document titles');
+}
 file26_ci_require(array() === $plugin->search()->suggest('learner＠example.com', 'ur', 8), 'Fullwidth-at email-shaped prefix is blocked before SQL suggestion retrieval');
 file26_ci_require(array() === $plugin->search()->suggest('+92 300 123 4567', 'ur', 8), 'Formatted phone-like prefix is blocked before SQL suggestion retrieval');
 
