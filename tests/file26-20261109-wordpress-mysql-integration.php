@@ -44,12 +44,22 @@ $owner_doc['source_event_sequence'] = 2;
 $owner_doc['title'] = 'Shadow Updated Article';
 $owner_doc['excerpt'] = 'New source content';
 $owner_items = array($owner_doc);
+$owner_batch_mode = 'normal';
 $manifest = array(
     'slug'=>'file26_ci_fixture','owner_file'=>'File 26 CI only','contract_version'=>'1.0',
     'entity_types'=>array('article'),'privacy_classes'=>array('public'),
     'visibility_fields'=>array('public'),'deletion_semantics'=>'versioned_tombstone',
     'status'=>'active',
-    'list_batch'=>static function($cursor, $limit, $scope) use (&$owner_items) {
+    'list_batch'=>static function($cursor, $limit, $scope) use (&$owner_items, &$owner_batch_mode) {
+        if ('bad_done' === $owner_batch_mode) {
+            return array('items'=>$owner_items, 'done'=>'false', 'next_cursor'=>'claimed-complete');
+        }
+        if ('too_many' === $owner_batch_mode) {
+            return array('items'=>array_fill(0, $limit+1, $owner_items[0]), 'done'=>true);
+        }
+        if ('bad_cursor' === $owner_batch_mode) {
+            return array('items'=>array(), 'done'=>false, 'next_cursor'=>str_repeat('c',192));
+        }
         if ($cursor !== '') { return array('items'=>array(), 'done'=>true); }
         return array('items'=>$owner_items, 'done'=>true);
     },
@@ -288,5 +298,29 @@ foreach ($visible_phone_control as $suggestion) {
 }
 file26_ci_require(array() === $plugin->search()->suggest('learner＠example.com', 'ur', 8), 'Fullwidth-at email-shaped prefix is blocked before SQL suggestion retrieval');
 file26_ci_require(array() === $plugin->search()->suggest('+92 300 123 4567', 'ur', 8), 'Formatted phone-like prefix is blocked before SQL suggestion retrieval');
+
+// Invalid native-owner batch attestation must never complete or promote even
+// one shadow generation. Production and staging are forbidden by the CI guard.
+$before_bad_batch = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$key));
+foreach (array(
+    'bad_done'=>'file26_owner_batch_done_not_boolean',
+    'too_many'=>'file26_owner_batch_limit',
+    'bad_cursor'=>'file26_owner_batch_cursor'
+) as $fault_mode=>$expected_error) {
+    $owner_batch_mode = $fault_mode;
+    $fault_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
+    file26_ci_assert_ok($fault_uuid, 'Disposable malformed owner batch job enqueued: '.$fault_mode);
+    $plugin->indexer()->process_queue();
+    $fault = $wpdb->get_row($wpdb->prepare("SELECT status,error_code FROM $jobs WHERE job_uuid=%s",$fault_uuid),ARRAY_A);
+    file26_ci_require(is_array($fault) && $fault['status']==='retry' && $fault['error_code']===$expected_error,
+        'Malformed '.$fault_mode.' has a precise retry receipt, never completed');
+    $proof = \Sabri\File26\Shadow_Index::validate($fault_uuid);
+    file26_ci_require(is_wp_error($proof) && $proof->get_error_code()==='file26_shadow_incomplete',
+        'Malformed '.$fault_mode.' cannot pass shadow generation cutover validation');
+    $after_fault = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$key));
+    file26_ci_require((string)$after_fault===(string)$before_bad_batch,
+        'Malformed '.$fault_mode.' has not changed active serving version');
+}
+$owner_batch_mode = 'normal';
 
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
