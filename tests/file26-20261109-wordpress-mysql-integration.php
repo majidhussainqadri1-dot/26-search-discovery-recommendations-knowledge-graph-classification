@@ -245,4 +245,27 @@ file26_ci_require(get_option($option_name)['state']==='rolling_back', 'Interrupt
 $recovered_rollback = \Sabri\File26\Shadow_Index::recover_interrupted($recovery_uuid);
 file26_ci_require(!is_wp_error($recovered_rollback) && $recovered_rollback['state']==='rolled_back' && $recovered_rollback['rename_applied']===true, 'Exact physical digests restore interrupted rollback provenance without destructive retry');
 
+// Autocomplete PII-regression uses *publicly eligible* decoy titles so an unsafe
+// check would really disclose the suggestion. This test is disposable-only.
+$pii_email_doc = $doc;
+$pii_email_doc['object_id'] = 'pii-email-decoy';
+$pii_email_doc['canonical_url'] = home_url('/file26-ci/pii-email-decoy');
+$pii_email_doc['title'] = 'learner example com educational reference';
+$pii_email_doc['excerpt'] = 'Public-safe synthetic title to reproduce fullwidth-at normalization.';
+$pii_phone_doc = $doc;
+$pii_phone_doc['object_id'] = 'pii-phone-decoy';
+$pii_phone_doc['canonical_url'] = home_url('/file26-ci/pii-phone-decoy');
+$pii_phone_doc['title'] = '92 300 123 4567 educational reference';
+$pii_phone_doc['excerpt'] = 'Public-safe synthetic title to reproduce spaced-digit normalization.';
+wp_set_current_user((int)$admin->ID);
+file26_ci_assert_ok(sabri_file26_upsert_document($pii_email_doc), 'Synthetic email-shaped autocomplete decoy is indexed as public');
+file26_ci_assert_ok(sabri_file26_upsert_document($pii_phone_doc), 'Synthetic phone-shaped autocomplete decoy is indexed as public');
+wp_set_current_user(0);
+$visible_email_control = $plugin->search()->suggest('learner', 'ur', 8);
+file26_ci_require(is_array($visible_email_control) && count($visible_email_control) > 0, 'Safe email-decoy control prefix yields at least one eligible public suggestion');
+$visible_phone_control = $plugin->search()->suggest('92', 'ur', 8);
+file26_ci_require(is_array($visible_phone_control) && count($visible_phone_control) > 0, 'Safe phone-decoy control prefix yields at least one eligible public suggestion');
+file26_ci_require(array() === $plugin->search()->suggest('learner＠example.com', 'ur', 8), 'Fullwidth-at email-shaped prefix is blocked before SQL suggestion retrieval');
+file26_ci_require(array() === $plugin->search()->suggest('+92 300 123 4567', 'ur', 8), 'Formatted phone-like prefix is blocked before SQL suggestion retrieval');
+
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
