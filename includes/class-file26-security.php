@@ -63,7 +63,28 @@ final class Security {
 	public function require_step_up($purpose){if(!$this->current_membership_valid()){return false;}$decision=$this->normalize_claim_bool(apply_filters('sabri_file26_step_up_authorized',false,get_current_user_id(),(string)$purpose));return true===$decision;}
 
 	public function sanitize_query($query){$query=is_scalar($query)?(string)$query:'';$query=wp_strip_all_tags($query,true);$query=preg_replace('/[\x00-\x1F\x7F]/u',' ',$query);$query=preg_replace('/\s+/u',' ',trim($query));$max=max(20,min(500,(int)DB::setting('max_query_length',200)));return function_exists('mb_substr')?mb_substr($query,0,$max,'UTF-8'):substr($query,0,$max);}
-	public function contains_sensitive_query($query){$query=(string)$query;$patterns=array('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu','/(?:\+?92|0)?3\d{9}/u','/\b\d{5}-?\d{7}-?\d\b/u','/\b(?:patient|medical\s*record|prescription|cnic|passport|otp|password)\b/iu','/(?:مریض|نسخہ|شناختی|پاسپورٹ|فون\s*نمبر|خفیہ)/u');foreach($patterns as $pattern){if(preg_match($pattern,$query)){return true;}}return false;}
+	public function contains_sensitive_query($query){
+		$query=is_scalar($query)?(string)$query:'';
+		// Privacy classification is performed on original text, not the search
+		// normalizer's punctuation-stripped form. At-signs may identify accounts
+		// even when a full email-address regex does not match.
+		if(preg_match('/[@\x{FF20}\x{FE6B}]/u',$query)){return true;}
+		// Support Urdu/Arabic digits in sensitive identifiers without changing
+		// the displayed query, stored source text or semantic search meaning.
+		$query=strtr($query,array(
+			'۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9',
+			'٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9'
+		));
+		$patterns=array(
+			'/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu',
+			'/(?:\+?92[\s().-]*|0)?3(?:[\s().-]*[0-9]){9}/u',
+			'/(?<!\d)\d{5}[\s-]?\d{7}[\s-]?\d(?!\d)/u',
+			'/\b(?:patient|medical\s*record|prescription|cnic|passport|otp|password)\b/iu',
+			'/(?:مریض|نسخہ|شناختی|پاسپورٹ|فون\s*نمبر|خفیہ)/u'
+		);
+		foreach($patterns as $pattern){if(preg_match($pattern,$query)){return true;}}
+		return false;
+	}
 
 	public function safe_url($url){$url=esc_url_raw((string)$url,array('http','https'));if(!$url){return '';}$home=wp_parse_url(home_url('/'));$target=wp_parse_url($url);if(empty($target['host'])){return esc_url_raw(home_url('/'.ltrim($url,'/')),array('http','https'));}$home_scheme=isset($home['scheme'])?strtolower($home['scheme']):'';$target_scheme=isset($target['scheme'])?strtolower($target['scheme']):'';$home_port=isset($home['port'])?(int)$home['port']:('https'===$home_scheme?443:80);$target_port=isset($target['port'])?(int)$target['port']:('https'===$target_scheme?443:80);if(empty($home['host'])||strtolower($target['host'])!==strtolower($home['host'])||$target_scheme!==$home_scheme||$target_port!==$home_port||isset($target['user'])||isset($target['pass'])){return '';}return $url;}
 	public function safe_resource_url($url,$purpose='resource'){$url=trim((string)$url);if(''===$url){return '';}$same_origin=$this->safe_url($url);if($same_origin){return $same_origin;}$url=esc_url_raw($url,array('http','https'));$parts=$url?wp_parse_url($url):false;if(!$parts||empty($parts['scheme'])||empty($parts['host'])||isset($parts['user'])||isset($parts['pass'])){return '';}$host=strtolower($parts['host']);if('localhost'===$host||substr($host,-6)==='.local'||(filter_var($host,FILTER_VALIDATE_IP)&&!filter_var($host,FILTER_VALIDATE_IP,FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE))){return '';}$allowed=$this->normalize_authorization(apply_filters('sabri_file26_allowed_external_resource_url',false,$url,sanitize_key($purpose),$host));return $allowed?$url:'';}

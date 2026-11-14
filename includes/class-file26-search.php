@@ -240,6 +240,11 @@ final class Search {
 			if ( ! $this->connectors->can_view( $row['connector_slug'], $row, $audience ) ) {
 				continue;
 			}
+			// FR-010: input eligibility does not establish OUTPUT eligibility.
+			// Even public owner titles must not become PII-shaped suggestions.
+			if ( ! $this->normalizer->prefix_is_safe( $row['title'] ) || $this->security->contains_sensitive_query( $row['title'] ) ) {
+				continue;
+			}
 			$output[] = array( 'key' => $row['canonical_key'], 'label' => $row['title'], 'entity_type' => $row['entity_type'], 'url' => $row['canonical_url'] );
 			if ( count( $output ) >= $limit ) {
 				break;
