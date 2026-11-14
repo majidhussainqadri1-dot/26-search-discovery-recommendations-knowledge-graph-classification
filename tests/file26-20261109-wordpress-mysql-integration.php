@@ -90,6 +90,11 @@ file26_ci_require(!empty($validated['verified']) && (int)$validated['owner_count
 add_filter('sabri_file26_membership_assertions',static function($claims) {
     $claims['contract_version'] = '1.0';
     $claims['suspended'] = false;
+    $claims['user_id'] = get_current_user_id();
+    $claims['approved'] = true; // disposable test identity ONLY
+    $claims['eligible'] = true;
+    $claims['guardian_verified'] = true;
+    $claims['age_context'] = array('known'=>true,'minor'=>false);
     return $claims;
 },10,1);
 add_filter('sabri_file26_step_up_authorized','__return_true',10,2);
