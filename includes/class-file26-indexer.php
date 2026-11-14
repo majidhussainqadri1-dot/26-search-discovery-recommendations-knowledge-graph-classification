@@ -113,8 +113,39 @@ final class Indexer {
 		global $wpdb;$table=DB::table('jobs');$timeout=max(300,min(DAY_IN_SECONDS,(int)DB::setting('job_lock_timeout_seconds',1800)));$stale_before=gmdate('Y-m-d H:i:s',time()-$timeout);$now=DB::now();
 		if(false===$wpdb->query($wpdb->prepare("UPDATE $table SET status=IF(attempts>=8,'dead_letter','retry'),error_code='worker_timeout',lock_token=NULL,available_at=%s,finished_at=IF(attempts>=8,%s,NULL),updated_at=%s WHERE status='running' AND started_at<%s",$now,$now,$now,$stale_before))){$this->security->audit('search_job_recovery_failed',array('object_type'=>'job','reason'=>'stale_worker_update_failed'));return;}
 		$job=$wpdb->get_row("SELECT * FROM $table WHERE status IN ('pending','retry') AND available_at <= UTC_TIMESTAMP() ORDER BY id ASC LIMIT 1",ARRAY_A);if(!$job){return;}$token=hash('sha256',$job['job_uuid'].'|'.microtime(true));$locked=$wpdb->query($wpdb->prepare("UPDATE $table SET status='running',lock_token=%s,started_at=%s,attempts=attempts+1,updated_at=%s WHERE id=%d AND status IN ('pending','retry')",$token,DB::now(),DB::now(),$job['id']));if(1!==(int)$locked){return;}$scope=json_decode($job['scope_json'],true);$connector=is_array($scope)&&isset($scope['connector'])?$this->connectors->get($scope['connector']):null;if(!$connector||empty($connector['list_batch'])||!is_callable($connector['list_batch'])){$this->fail_job($job['id'],$token,'connector_unavailable',(int)$job['attempts']+1);return;}
-		try{$batch=call_user_func($connector['list_batch'],$job['cursor_value'],100,$scope);if(!is_array($batch)||!isset($batch['items'])||!is_array($batch['items'])){throw new \RuntimeException('Invalid connector batch.');}$counts=json_decode($job['counts_json'],true);$counts=is_array($counts)?$counts:array('processed'=>0,'failed'=>0);$batch_failed=0;foreach($batch['items'] as $document){$result='shadow_reindex'===$job['job_type']?$this->stage_for_job($job['job_uuid'],$document,$token):$this->upsert($document);if(is_wp_error($result)){$batch_failed++;}else{$counts['processed']++;}}if($batch_failed>0){throw new \RuntimeException('One or more search documents failed owner contract or indexing; retry entire idempotent batch.');}$done=!empty($batch['done']);$next_cursor=isset($batch['next_cursor'])?substr(sanitize_text_field((string)$batch['next_cursor']),0,191):'';if(!$done&&(''===$next_cursor||$next_cursor===(string)$job['cursor_value'])){throw new \RuntimeException('Connector batch cursor did not advance; retry from prior checkpoint.');}$saved=$wpdb->update($table,array('status'=>$done?'completed':'pending','cursor_value'=>$next_cursor,'counts_json'=>wp_json_encode($counts),'lock_token'=>null,'available_at'=>DB::now(),'finished_at'=>$done?DB::now():null,'updated_at'=>DB::now()),array('id'=>$job['id'],'lock_token'=>$token),array('%s','%s','%s','%s','%s','%s','%s'),array('%d','%s'));if(1!==(int)$saved){$this->security->audit('search_job_lock_lost',array('object_type'=>'job','object_key'=>$job['job_uuid'],'reason'=>'completion_cas_failed'));}}
+		try{$batch=call_user_func($connector['list_batch'],$job['cursor_value'],100,$scope);$validated=$this->validate_owner_batch($batch,(string)$job['cursor_value'],100);if(is_wp_error($validated)){$this->fail_job($job['id'],$token,$validated->get_error_code(),(int)$job['attempts']+1);return;}$batch=$validated;$counts=json_decode($job['counts_json'],true);$counts=is_array($counts)?$counts:array('processed'=>0,'failed'=>0);$batch_failed=0;foreach($batch['items'] as $document){$result='shadow_reindex'===$job['job_type']?$this->stage_for_job($job['job_uuid'],$document,$token):$this->upsert($document);if(is_wp_error($result)){$batch_failed++;}else{$counts['processed']++;}}if($batch_failed>0){throw new \RuntimeException('One or more search documents failed owner contract or indexing; retry entire idempotent batch.');}$done=$batch['done'];$next_cursor=$batch['next_cursor'];$saved=$wpdb->update($table,array('status'=>$done?'completed':'pending','cursor_value'=>$next_cursor,'counts_json'=>wp_json_encode($counts),'lock_token'=>null,'available_at'=>DB::now(),'finished_at'=>$done?DB::now():null,'updated_at'=>DB::now()),array('id'=>$job['id'],'lock_token'=>$token),array('%s','%s','%s','%s','%s','%s','%s'),array('%d','%s'));if(1!==(int)$saved){$this->security->audit('search_job_lock_lost',array('object_type'=>'job','object_key'=>$job['job_uuid'],'reason'=>'completion_cas_failed'));}}
 		catch(\Throwable $e){$this->fail_job($job['id'],$token,'job_exception',(int)$job['attempts']+1);}
+	}
+
+	/** FR-004/005: do not let a malformed owner batch falsely complete the shadow. */
+	private function validate_owner_batch($batch,$previous_cursor,$requested_limit){
+		if(!is_array($batch)||!isset($batch['items'])||!is_array($batch['items'])){
+			return new \WP_Error('file26_owner_batch_invalid','Owner batch must return an items array.');
+		}
+		if(!array_key_exists('done',$batch)||!is_bool($batch['done'])){
+			return new \WP_Error('file26_owner_batch_done_not_boolean','Owner must explicitly attest completion with a boolean.');
+		}
+		$requested_limit=max(1,min(500,(int)$requested_limit));
+		if(count($batch['items'])>$requested_limit){
+			return new \WP_Error('file26_owner_batch_limit','Owner batch exceeded the requested source cursor limit.');
+		}
+		foreach($batch['items'] as $item){
+			if(!is_array($item)){
+				return new \WP_Error('file26_owner_batch_item_invalid','Owner batch contains a non-document item.');
+			}
+		}
+		$raw_cursor=isset($batch['next_cursor'])?$batch['next_cursor']:'';
+		if(!is_scalar($raw_cursor)){
+			return new \WP_Error('file26_owner_batch_cursor','Owner cursor must be a bounded scalar string.');
+		}
+		$next_cursor=(string)$raw_cursor;
+		if(strlen($next_cursor)>191||$next_cursor!==sanitize_text_field($next_cursor)){
+			return new \WP_Error('file26_owner_batch_cursor','Owner cursor was too long or changed by sanitization.');
+		}
+		if(!$batch['done']&&(''===$next_cursor||$next_cursor===(string)$previous_cursor)){
+			return new \WP_Error('file26_owner_batch_cursor','Nonfinal owner batch must advance an exact cursor.');
+		}
+		return array('items'=>$batch['items'],'done'=>$batch['done'],'next_cursor'=>$next_cursor);
 	}
 
 	private function stage_for_job($uuid,array $document,$worker_token){
