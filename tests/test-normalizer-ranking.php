@@ -23,6 +23,11 @@ check_case( 'کیا' === $n->normalize( 'كِيَا' ), 'Arabic/Urdu forms and d
 check_case( '123' === $n->normalize( '۱۲۳' ), 'Urdu numerals normalize.' );
 check_case( array( 'جگر', 'سوزش' ) === $n->tokens( 'جگر کی سوزش' ), 'Short stop-like token is excluded without losing domain tokens.' );
 check_case( false === $n->prefix_is_safe( '03001234567' ), 'Phone-like autocomplete prefix is rejected.' );
+check_case( false === $n->prefix_is_safe( 'learner@example.com' ), 'Email autocomplete prefix is rejected before punctuation is normalized away.' );
+check_case( false === $n->prefix_is_safe( 'learner＠example.com' ), 'Full-width email separator is rejected before normalization.' );
+check_case( false === $n->prefix_is_safe( '+92 300 123 4567' ), 'Formatted Pakistani phone prefix is rejected across spaces.' );
+check_case( false === $n->prefix_is_safe( '0300-1234567' ), 'Hyphenated phone prefix is rejected.' );
+check_case( true === $n->prefix_is_safe( 'homeopathy' ), 'Non-sensitive English autocomplete stays available.' );
 check_case( true === $n->prefix_is_safe( 'جگر' ), 'Ordinary Urdu autocomplete prefix is accepted.' );
 check_case( in_array( 'جگر کی سوزش', $n->phrases( '"جگر کی سوزش"' ), true ), 'Quoted exact phrase is parsed and normalized.' );
 check_case( count( $n->expansions( 'jigar' ) ) >= 2, 'Roman Urdu receives a bounded Urdu-script transliteration candidate.' );
