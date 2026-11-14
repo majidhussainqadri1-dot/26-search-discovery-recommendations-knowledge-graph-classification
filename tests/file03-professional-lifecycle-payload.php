@@ -32,7 +32,7 @@ foreach(['active','retired','legacy'] as $lifecycle){
     $result = $method->invoke($indexer,array(
         'verified_doctor'=>false,
         'professional_lifecycle'=>$lifecycle,
-    ));
+    ),'file03-profiles','profiles');
     check(is_array($result),'sanitizer failed for permitted '.$lifecycle);
     check(isset($result['professional_lifecycle'])
         && $result['professional_lifecycle']===$lifecycle,
@@ -42,12 +42,15 @@ foreach(['active','retired','legacy'] as $lifecycle){
         'verified-doctor boolean was not preserved');
 }
 foreach(['unknown','active,legacy','',array('active')] as $invalid){
-    $result=$method->invoke($indexer,array('professional_lifecycle'=>$invalid));
+    $result=$method->invoke($indexer,array('professional_lifecycle'=>$invalid),'file03-profiles','profiles');
     check(is_wp_error($result) &&
         $result->get_error_code()==='file26_invalid_professional_lifecycle',
         'invalid lifecycle was accepted instead of rejected');
 }
-$without=$method->invoke($indexer,array('verified_doctor'=>true));
+$without=$method->invoke($indexer,array('verified_doctor'=>true),'other-connector','other-domain');
 check(is_array($without) && !array_key_exists('professional_lifecycle',$without),
     'unrelated connectors require a File03-only lifecycle field');
+$unowned=$method->invoke($indexer,array('professional_lifecycle'=>'active'),'other-connector','other-domain');
+check(is_wp_error($unowned)&&$unowned->get_error_code()==='file26_invalid_professional_lifecycle_owner',
+    'unrelated connector spoofed File03 professional lifecycle');
 echo "PASS File26 strict File03 active/retired/legacy lifecycle payload preservation\n";
