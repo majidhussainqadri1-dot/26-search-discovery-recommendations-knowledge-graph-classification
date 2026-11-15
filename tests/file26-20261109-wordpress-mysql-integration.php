@@ -415,3 +415,7 @@ foreach (array(
 }
 
 echo "PASS: disposable WordPress + MariaDB FR-005 end-to-end acceptance\n";
+
+// FR003/006: verify current native owner ACL over Graph cached nodes and edges.
+// This file is executed only by the disposable WordPress/MariaDB matrix.
+require __DIR__ . '/file26-20261115-graph-current-owner-acl-mysql.php';
