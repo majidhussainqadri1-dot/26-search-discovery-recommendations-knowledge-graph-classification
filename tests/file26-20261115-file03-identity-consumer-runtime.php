@@ -63,7 +63,8 @@ namespace {
 	$registry->native = array(
 		'entity_types' => array( 'founder', 'doctor', 'member_profile' ),
 		'fetch_object' => static function ( $type, $id ) use ( &$current, $uuid ) {
-			return $id === $uuid && $type === $current['entity_type'] ? $current : null;
+			return is_array( $current ) && isset( $current['entity_type'] ) &&
+				$id === $uuid && $type === $current['entity_type'] ? $current : null;
 		},
 	);
 	$consumer = new \Sabri\File26\File03_Identity_Consumer( $registry, $indexer, $security );
