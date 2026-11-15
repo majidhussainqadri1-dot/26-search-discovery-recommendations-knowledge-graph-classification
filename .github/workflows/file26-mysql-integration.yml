@@ -5,6 +5,7 @@ on:
       - 'includes/**'
       - 'file-26-search-discovery.php'
       - 'tests/file26-20261109-wordpress-mysql-integration.php'
+      - 'tests/file26-20261115-doctor-owner-wordpress-mysql.php'
       - '.github/workflows/file26-mysql-integration.yml'
   push:
     branches: ['audit/file26-v12-shadow-index-20261108']
@@ -53,6 +54,14 @@ jobs:
           mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery
           tar -C "$GITHUB_WORKSPACE" --exclude=.git --exclude=release -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery -xf -
           php /tmp/wp-cli.phar plugin activate sabri-file26-search-discovery --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify File07 current-owner authorization in real disposable MariaDB
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261115-doctor-owner-wordpress-mysql.php --path=/tmp/file26-ci-wp --allow-root
+
       - name: Execute real SQL FR-005 cutover and rollback acceptance
         env:
           FILE26_CI_EPHEMERAL_DB: yes
