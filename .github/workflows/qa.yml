@@ -13,18 +13,7 @@ jobs:
       matrix:
         php: ['7.4', '8.3']
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Assert forty-round source equals exact Pull Request head
-        env:
-          FILE26_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual="$(git rev-parse HEAD)"
-          test "$actual" = "$FILE26_EXPECTED_SOURCE_SHA" || { echo "FAIL: forty-round QA uses non-exact PR source."; exit 1; }
-          echo "PASS: 40 review rounds pinned to candidate $actual" / node24
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 / node24
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - name: Assert checkout equals exact candidate source head
@@ -62,6 +51,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert forty-round source equals exact Pull Request head
+        env:
+          FILE26_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$FILE26_EXPECTED_SOURCE_SHA" || { echo "FAIL: forty-round QA uses non-exact PR source."; exit 1; }
+          echo "PASS: 40 review rounds pinned to candidate $actual"
       - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761
         with:
           php-version: '8.3'
