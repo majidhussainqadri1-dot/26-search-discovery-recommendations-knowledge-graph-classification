@@ -111,6 +111,12 @@ final class Shadow_Index {
 		$wpdb->last_error='';
 		$serving=$wpdb->get_row($wpdb->prepare("SELECT object_version,source_event_sequence,checksum,connector_slug FROM $live_table WHERE canonical_key=%s",$key),ARRAY_A);
 		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_live_version_unreadable','Current serving version could not be verified.');}
+		if ( ! $serving && ! in_array( $doc['state'], array( 'deleted', 'suspended', 'restricted', 'rejected', 'private' ), true )
+			&& 'restricted' !== $doc['visibility'] ) {
+			$native = Plugin::instance()->connectors();
+			$fresh = Owner_Freshness::attest_cold_document( $native, $doc );
+			if ( is_wp_error( $fresh ) ) { return $fresh; }
+		}
 		if($serving){
 			if((string)$serving['connector_slug']!==(string)$doc['connector_slug']){return new \WP_Error('file26_shadow_identity_conflict','Owner cannot replace another connector projection.');}
 			$sv=(int)$serving['object_version'];$ss=(int)$serving['source_event_sequence'];
