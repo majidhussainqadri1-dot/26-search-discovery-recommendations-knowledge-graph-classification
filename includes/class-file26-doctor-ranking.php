@@ -5,7 +5,21 @@ defined( 'ABSPATH' ) || exit;
 /** Explainable global verified-doctor ranking projection. */
 final class Doctor_Ranking {
 	private $security;
-	public function __construct( Security $security ) { $this->security = $security; }
+	private $connectors;
+	public function __construct( Security $security, Connectors $connectors = null ) {
+		$this->security = $security;
+		$this->connectors = $connectors;
+	}
+
+	/**
+	 * File24 assurance accepts a semantic policy version, never an arbitrary
+	 * human-readable identifier.  Keep policy identity in the separate context.
+	 * This guard deliberately does not migrate or relabel historical approvals.
+	 */
+	public static function is_assurance_policy_version( $version ) {
+		return is_string( $version ) && '' !== $version && strlen( $version ) <= 40
+			&& 1 === preg_match( '/^[0-9]+(?:\\.[0-9]+){0,3}(?:-[a-z0-9.-]+)?$/i', $version );
+	}
 
 	public function recompute( $reason = 'scheduled_monthly' ) {
 		global $wpdb;
@@ -81,14 +95,27 @@ final class Doctor_Ranking {
 
 	public function policy() {
 		global $wpdb;
-		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' ), 'safe_fallback' => false, 'policy_read_failed' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
+		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', '1.0.0' ), 'safe_fallback' => false, 'policy_read_failed' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
 		$wpdb->last_error='';
 		$row = $wpdb->get_row( "SELECT version,features_json FROM " . DB::table( 'ranking_policies' ) . " WHERE context_name='doctor_global' AND audience='public' AND status='active' ORDER BY effective_at DESC,id DESC LIMIT 1", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		if ( null === $row && '' !== (string) $wpdb->last_error ) { $defaults['safe_fallback']=true; $defaults['policy_read_failed']=true; $defaults['version']='policy-unavailable'; return $defaults; }
-		if ( ! $row ) { return $defaults; }
+		if ( ! $row ) {
+			if ( ! self::is_assurance_policy_version( $defaults['version'] ) ) {
+				$defaults['safe_fallback'] = true;
+				$defaults['policy_read_failed'] = true;
+				$defaults['version'] = 'policy-unavailable';
+			}
+			return $defaults;
+		}
+		if ( ! self::is_assurance_policy_version( isset( $row['version'] ) ? $row['version'] : null ) ) {
+			$defaults['safe_fallback'] = true;
+			$defaults['policy_read_failed'] = true;
+			$defaults['version'] = 'policy-unavailable';
+			return $defaults;
+		}
 		$features = json_decode( $row['features_json'], true ); $features = is_array( $features ) ? $features : array(); $weights = isset( $features['weights'] ) && is_array( $features['weights'] ) ? $features['weights'] : $features; $candidate = $defaults['weights'];
 		foreach ( $candidate as $field => $fallback ) { if ( isset( $weights[ $field ] ) && is_numeric( $weights[ $field ] ) ) { $candidate[ $field ] = min( 1.0, max( 0.0, (float) $weights[ $field ] ) ); } }
-		$total = array_sum( $candidate ); if ( $total <= 0 ) { $defaults['safe_fallback'] = true; $defaults['version'] = 'safe-fallback-' . sanitize_key( $row['version'] ); return $defaults; }
+		$total = array_sum( $candidate ); if ( $total <= 0 ) { $defaults['safe_fallback'] = true; $defaults['policy_read_failed'] = true; $defaults['version'] = 'policy-unavailable'; return $defaults; }
 		foreach ( $candidate as &$weight ) { $weight = $weight / $total; } unset( $weight ); $defaults['weights'] = $candidate; $defaults['version'] = sanitize_text_field( $row['version'] ); return $defaults;
 	}
 
@@ -96,8 +123,44 @@ final class Doctor_Ranking {
 		global $wpdb;
 		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
 		$wpdb->last_error='';
-		$rows = $wpdb->get_results( "SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( null === $rows ) { return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) ); }
+		$rows = $wpdb->get_results( "SELECT d.canonical_key,d.connector_slug,d.domain_name,d.object_id,d.object_version,d.entity_type,d.state,d.visibility,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $rows || '' !== (string) $wpdb->last_error ) {
+			return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) );
+		}
+		$audience = $this->security->audience();
+		if ( ! is_array( $audience ) ) {
+			return new \WP_Error( 'file26_doctor_owner_audience_unknown', 'Current membership context is unavailable.', array( 'status' => 503 ) );
+		}
+		// Unlike ordinary search, the direct doctor-ranking SQL path previously
+		// trusted indexed visibility alone. An owner may have retired or revoked
+		// a doctor since that projection was stored. No ranking is served until
+		// every candidate is rechecked against its CURRENT native File 07 owner.
+		// Legacy library callers may still construct the ranking helper without
+		// connectors for pure score/policy calculations, but cannot serve rankings.
+		if ( null === $this->connectors && ! empty( $rows ) ) {
+			return new \WP_Error( 'file26_doctor_owner_unavailable', 'Native File07 owner verification has not been configured.', array( 'status' => 503 ) );
+		}
+		foreach ( $rows as $row ) {
+			$slug = isset( $row['connector_slug'] ) ? (string) $row['connector_slug'] : '';
+			$manifest = $this->connectors->get( $slug );
+			if ( ! is_array( $manifest ) || ! isset( $manifest['can_view'] ) || ! is_callable( $manifest['can_view'] )
+				|| ! isset( $manifest['owner_file'], $manifest['status'] ) || 'File 07' !== $manifest['owner_file'] || 'active' !== $manifest['status'] ) {
+				return new \WP_Error( 'file26_doctor_owner_unavailable', 'Current doctor-source authorization is not available.', array( 'status' => 503 ) );
+			}
+			$projection = $row;
+			$projection['payload'] = json_decode( isset( $row['payload'] ) ? (string) $row['payload'] : '', true );
+			if ( ! is_array( $projection['payload'] ) ) {
+				return new \WP_Error( 'file26_doctor_owner_projection_invalid', 'Doctor projection cannot be revalidated safely.', array( 'status' => 503 ) );
+			}
+			try {
+				$allowed = $this->connectors->can_view( $slug, $projection, $audience );
+			} catch ( \Throwable $e ) {
+				return new \WP_Error( 'file26_doctor_owner_read_failed', 'Doctor-source authorization could not be completed.', array( 'status' => 503 ) );
+			}
+			if ( true !== $allowed ) {
+				return new \WP_Error( 'file26_doctor_owner_not_current', 'Current doctor authorization rejected an indexed ranking candidate.', array( 'status' => 503 ) );
+			}
+		}
 		return $rows;
 	}
 	private function matches_context( array $row, array $payload, $context, $value ) { if ( 'global' === $context ) { return true; } $topics = json_decode( isset( $row['topic_ids'] ) ? $row['topic_ids'] : '', true ); $topics = is_array( $topics ) ? array_map( 'sanitize_key', $topics ) : array(); if ( 'educator' === $context ) { return in_array( 'educator', $topics, true ) || in_array( 'teacher', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.6 ); } if ( 'researcher' === $context ) { return in_array( 'researcher', $topics, true ) || in_array( 'research', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.75 ); } $needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $value ), 'UTF-8' ) : strtolower( trim( $value ) ); if ( 'country' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['country'] ), 'UTF-8' ) : strtolower( trim( (string) $row['country'] ) ); return $candidate === $needle; } if ( 'city' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['location'] ), 'UTF-8' ) : strtolower( trim( (string) $row['location'] ) ); return $candidate === $needle; } if ( 'language' === $context ) { $language = isset( $payload['language'] ) ? (string) $payload['language'] : (string) $row['locale']; $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $language ), 'UTF-8' ) : strtolower( trim( $language ) ); return $candidate === $needle || 0 === strpos( $candidate, $needle . '-' ); } if ( 'specialization' === $context ) { return in_array( sanitize_key( $value ), $topics, true ); } return false; }
