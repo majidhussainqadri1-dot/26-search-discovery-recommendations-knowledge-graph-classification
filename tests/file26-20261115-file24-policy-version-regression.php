@@ -18,7 +18,11 @@ namespace {
 	$wpdb = new class {
 		public $active = null;
 		public $last_error = '';
-		public function get_row( $sql, $type ) { return $this->active; }
+		public $failRead = false;
+		public function get_row( $sql, $type ) {
+			if ( $this->failRead ) { $this->last_error = 'mock owner table unavailable'; return null; }
+			return $this->active;
+		}
 	};
 	$GLOBALS['wpdb'] = $wpdb;
 	require dirname( __DIR__ ) . '/includes/class-file26-doctor-ranking.php';
@@ -55,7 +59,7 @@ namespace {
 	check( ! empty( $zeroWeights['policy_read_failed'] ), 'zero-weight doctor policy must not claim valid assurance' );
 
 	$wpdb->active = null;
-	$wpdb->last_error = 'owner table unavailable';
+	$wpdb->failRead = true;
 	$dbFailure = $ranking->policy();
 	check( ! empty( $dbFailure['policy_read_failed'] ), 'DB error must fail closed' );
 
