@@ -189,8 +189,11 @@ file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()===
 $stale_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
 file26_ci_assert_ok($stale_uuid, 'Stale owner snapshot negative-test generation created');
 $plugin->indexer()->process_queue();
-$stale_job_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$stale_uuid));
-file26_ci_require($stale_job_status==='retry', 'Stale owner reindex is retried, never falsely completed');
+$stale_job_status = $wpdb->get_row($wpdb->prepare("SELECT status,error_code FROM $jobs WHERE job_uuid=%s",$stale_uuid),ARRAY_A);
+file26_ci_require(is_array($stale_job_status) && $stale_job_status['status']==='retry',
+    'Stale owner reindex is retried, never falsely completed');
+file26_ci_require($stale_job_status['error_code']==='file26_cold_owner_version_conflict',
+    'Owner-stale source retry receipt preserves exact current-native-version root cause');
 $stale_proof = \Sabri\File26\Shadow_Index::validate($stale_uuid);
 file26_ci_require(is_wp_error($stale_proof) && $stale_proof->get_error_code()==='file26_shadow_incomplete', 'Stale owner batch cannot be promoted');
 
@@ -222,8 +225,11 @@ $owner_items = array($unsigned_delete);
 $unsigned_uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
 file26_ci_assert_ok($unsigned_uuid, 'Unconfirmed deletion negative-test generation created');
 $plugin->indexer()->process_queue();
-$unsigned_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM $jobs WHERE job_uuid=%s",$unsigned_uuid));
-file26_ci_require($unsigned_status==='retry', 'Owner deletion with no live tombstone cannot complete generation');
+$unsigned_status = $wpdb->get_row($wpdb->prepare("SELECT status,error_code FROM $jobs WHERE job_uuid=%s",$unsigned_uuid),ARRAY_A);
+file26_ci_require(is_array($unsigned_status)&&$unsigned_status['status']==='retry',
+    'Owner deletion with no live tombstone cannot complete generation');
+file26_ci_require($unsigned_status['error_code']==='file26_shadow_unconfirmed_revocation',
+    'Owner unconfirmed deletion worker receipt preserves precise canonical rights failure');
 $still_present = $wpdb->get_var($wpdb->prepare("SELECT object_version FROM $documents WHERE canonical_key=%s",$key));
 file26_ci_require((int)$still_present===3, 'Unconfirmed deletion never mutates active serving document');
 
