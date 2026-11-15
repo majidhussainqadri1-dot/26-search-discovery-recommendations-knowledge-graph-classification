@@ -39,7 +39,7 @@ final class Owner_Contracts {
 		foreach ( $adapters as $owner_key => $adapter ) {
 			$owner_key=sanitize_key($owner_key); if(!isset($requirements[$owner_key])||!is_array($adapter)){continue;} $required=$requirements[$owner_key];
 			$provided_types=isset($adapter['entity_types'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['entity_types'])))):array(); if(array_diff($required['entity_types'],$provided_types)){continue;}
-			if(empty($adapter['contract_version'])||empty($adapter['list_batch'])||!is_callable($adapter['list_batch'])||empty($adapter['can_view'])||!is_callable($adapter['can_view'])||empty($adapter['health'])||!is_callable($adapter['health'])){continue;}
+			if(empty($adapter['contract_version'])||empty($adapter['list_batch'])||!is_callable($adapter['list_batch'])||empty($adapter['can_view'])||!is_callable($adapter['can_view'])||empty($adapter['health'])||!is_callable($adapter['health'])||empty($adapter['fetch_object'])||!is_callable($adapter['fetch_object'])){continue;}
 			$privacy_classes=isset($adapter['privacy_classes'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['privacy_classes'])))):array();
 			$visibility_fields=isset($adapter['visibility_fields'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['visibility_fields'])))):array();
 			$deletion_semantics=isset($adapter['deletion_semantics'])?sanitize_key($adapter['deletion_semantics']):'';
@@ -47,7 +47,7 @@ final class Owner_Contracts {
 			$manifests[]=array(
 				'slug'=>isset($adapter['slug'])?sanitize_key($adapter['slug']):$owner_key.'-search-owner','owner_file'=>$required['owner_file'],'contract_version'=>substr(sanitize_text_field($adapter['contract_version']),0,64),'entity_types'=>$provided_types,
 				'privacy_classes'=>$privacy_classes,'visibility_fields'=>$visibility_fields,'deletion_semantics'=>$deletion_semantics,'status'=>isset($adapter['status'])?sanitize_key($adapter['status']):'proposed',
-				'list_batch'=>$adapter['list_batch'],'can_view'=>$adapter['can_view'],'health'=>$adapter['health'],'fetch_object'=>isset($adapter['fetch_object'])&&is_callable($adapter['fetch_object'])?$adapter['fetch_object']:null,'event_contract'=>isset($adapter['event_contract'])?substr(sanitize_text_field($adapter['event_contract']),0,191):'','index_schema'=>isset($adapter['index_schema'])?substr(sanitize_text_field($adapter['index_schema']),0,191):'sabri.file26.document.v1.1',
+				'list_batch'=>$adapter['list_batch'],'can_view'=>$adapter['can_view'],'health'=>$adapter['health'],'fetch_object'=>$adapter['fetch_object'],'event_contract'=>isset($adapter['event_contract'])?substr(sanitize_text_field($adapter['event_contract']),0,191):'','index_schema'=>isset($adapter['index_schema'])?substr(sanitize_text_field($adapter['index_schema']),0,191):'sabri.file26.document.v1.1',
 			);
 		}
 		return $manifests;
@@ -57,7 +57,7 @@ final class Owner_Contracts {
 		$requirements=$this->requirements(); $registry=$this->connectors->all(); $result=array();
 		foreach($requirements as $key=>$required){
 			$matches=array();
-			foreach($registry as $connector){if(!is_array($connector)||!isset($connector['owner_file'],$connector['entity_types'])||$connector['owner_file']!==$required['owner_file']||array_diff($required['entity_types'],(array)$connector['entity_types'])){continue;}$callbacks=isset($connector['list_batch'],$connector['can_view'],$connector['health'])&&is_callable($connector['list_batch'])&&is_callable($connector['can_view'])&&is_callable($connector['health']);$matches[]=array('connector'=>$connector,'callbacks'=>$callbacks,'ready'=>$callbacks&&isset($connector['status'])&&'active'===$connector['status']);}
+			foreach($registry as $connector){if(!is_array($connector)||!isset($connector['owner_file'],$connector['entity_types'])||$connector['owner_file']!==$required['owner_file']||array_diff($required['entity_types'],(array)$connector['entity_types'])){continue;}$callbacks=isset($connector['list_batch'],$connector['can_view'],$connector['health'],$connector['fetch_object'])&&is_callable($connector['list_batch'])&&is_callable($connector['can_view'])&&is_callable($connector['health'])&&is_callable($connector['fetch_object']);$matches[]=array('connector'=>$connector,'callbacks'=>$callbacks,'ready'=>$callbacks&&isset($connector['status'])&&'active'===$connector['status']);}
 			usort($matches,static function($a,$b){if($a['ready']!==$b['ready']){return $a['ready']?-1:1;}if($a['callbacks']!==$b['callbacks']){return $a['callbacks']?-1:1;}return strcmp(isset($a['connector']['slug'])?$a['connector']['slug']:'',isset($b['connector']['slug'])?$b['connector']['slug']:'');});
 			$selected=$matches?$matches[0]:null; $matched=$selected?$selected['connector']:null;
 			$result[$key]=array('owner_file'=>$required['owner_file'],'required_entity_types'=>$required['entity_types'],'registered'=>(bool)$matched,'contract_version'=>$matched?$matched['contract_version']:null,'status'=>$matched?$matched['status']:'missing','callbacks_complete'=>$selected?(bool)$selected['callbacks']:false,'production_ready'=>$selected?(bool)$selected['ready']:false,'matching_connector_count'=>count($matches));
