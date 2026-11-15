@@ -42,6 +42,9 @@ final class Governance {
 		$context = sanitize_key( isset( $input['context'] ) ? $input['context'] : 'search' ); $audience = sanitize_key( isset( $input['audience'] ) ? $input['audience'] : 'public' ); $version = substr( sanitize_text_field( isset( $input['version'] ) ? $input['version'] : '' ), 0, 64 );
 		$features = isset( $input['features'] ) && is_array( $input['features'] ) ? $this->sanitize_policy_features( $input['features'] ) : array(); if ( is_wp_error( $features ) ) { return $features; }
 		if ( ! $version || ! $features ) { return new \WP_Error( 'file26_invalid_policy', 'Version and bounded feature definitions are required.', array( 'status' => 400 ) ); }
+		if ( 'doctor_global' === $context && 'public' === $audience && ! Doctor_Ranking::is_assurance_policy_version( $version ) ) {
+			return new \WP_Error( 'file26_invalid_doctor_policy_version', 'Doctor-ranking policy version must satisfy the current File24 assurance contract.', array( 'status' => 400 ) );
+		}
 		$encoded = wp_json_encode( $features ); if ( false === $encoded || strlen( $encoded ) > 65535 ) { return new \WP_Error( 'file26_policy_too_large', 'Ranking policy features exceed the allowed size.', array( 'status' => 413 ) ); }
 		$uuid = DB::uuid();
 		$ok = $wpdb->insert( DB::table( 'ranking_policies' ), array( 'policy_uuid'=>$uuid,'context_name'=>$context,'audience'=>$audience,'version'=>$version,'status'=>'staged','features_json'=>$encoded,'approval_one'=>get_current_user_id(),'approval_two'=>null,'effective_at'=>null,'created_at'=>DB::now(),'updated_at'=>DB::now() ) );
@@ -65,6 +68,9 @@ final class Governance {
 		$uuid = sanitize_text_field( $uuid ); $row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . ' WHERE policy_uuid=%s', $uuid ), ARRAY_A ); $second = $row ? (int) $row['approval_two'] : 0;
 		if ( ! $row || 'staged' !== $row['status'] || ! $second || $second === (int) $row['approval_one'] || ( $second_approver_id && $second !== absint( $second_approver_id ) ) ) { return new \WP_Error( 'file26_dual_approval_required', 'A separately recorded distinct second approval is required.', array( 'status' => 409 ) ); }
 		if ( ! apply_filters( 'sabri_file26_validate_ranking_approver', user_can( $second, 'approve_sabri_ranking' ), $second, $row ) ) { return new \WP_Error( 'file26_invalid_second_approver', 'The recorded second approver is no longer authorized.', array( 'status' => 403 ) ); }
+		if ( 'doctor_global' === $row['context_name'] && 'public' === $row['audience'] && ! Doctor_Ranking::is_assurance_policy_version( $row['version'] ) ) {
+			return new \WP_Error( 'file26_invalid_doctor_policy_version', 'A legacy or malformed doctor-ranking version cannot be activated without an approved versioned policy.', array( 'status' => 409 ) );
+		}
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_policy_activation_transaction_unavailable', 'Ranking policy activation transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			$old = $wpdb->query( $wpdb->prepare( 'UPDATE ' . DB::table( 'ranking_policies' ) . " SET status='rolled_back',updated_at=%s WHERE context_name=%s AND audience=%s AND status='active'", DB::now(), $row['context_name'], $row['audience'] ) );
@@ -94,6 +100,9 @@ final class Governance {
 		$receipt_key = 'file26_rb_' . hash( 'sha256', $row['policy_uuid'] ); $receipt = get_transient( $receipt_key ); $second = is_array($receipt)&&!empty($receipt['user_id'])&&(int)$receipt['expires_at']>=time()?(int)$receipt['user_id']:0;
 		if ( ! $second || $second === get_current_user_id() || ( $second_approver_id && $second !== absint($second_approver_id) ) || ! apply_filters( 'sabri_file26_validate_ranking_approver', user_can($second,'approve_sabri_ranking'), $second, $row ) ) { return new \WP_Error( 'file26_dual_approval_required', 'A separately recorded distinct authorized second rollback approval is required.', array( 'status' => 409 ) ); }
 		$previous = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . DB::table( 'ranking_policies' ) . " WHERE context_name=%s AND audience=%s AND status='rolled_back' AND policy_uuid<>%s ORDER BY effective_at DESC,id DESC LIMIT 1", $row['context_name'],$row['audience'],$row['policy_uuid'] ), ARRAY_A ); if(!$previous){return new \WP_Error('file26_no_previous_policy','No previously active policy is available to restore.',array('status'=>409));}
+		if ( 'doctor_global' === $row['context_name'] && 'public' === $row['audience'] && ! Doctor_Ranking::is_assurance_policy_version( $previous['version'] ) ) {
+			return new \WP_Error( 'file26_invalid_doctor_policy_version', 'Incompatible historical doctor-ranking policy cannot be restored without assurance approval.', array( 'status' => 409 ) );
+		}
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_policy_rollback_transaction_unavailable', 'Ranking policy rollback transaction could not be started safely.', array( 'status' => 500 ) ); }
 		try {
 			$current_updated=$wpdb->update(DB::table('ranking_policies'),array('status'=>'rolled_back','updated_at'=>DB::now()),array('policy_uuid'=>$row['policy_uuid'],'status'=>'active'),array('%s','%s'),array('%s','%s'));

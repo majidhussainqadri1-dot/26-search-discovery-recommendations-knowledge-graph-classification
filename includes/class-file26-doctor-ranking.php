@@ -7,6 +7,16 @@ final class Doctor_Ranking {
 	private $security;
 	public function __construct( Security $security ) { $this->security = $security; }
 
+	/**
+	 * File24 assurance accepts a semantic policy version, never an arbitrary
+	 * human-readable identifier.  Keep policy identity in the separate context.
+	 * This guard deliberately does not migrate or relabel historical approvals.
+	 */
+	public static function is_assurance_policy_version( $version ) {
+		return is_string( $version ) && '' !== $version && strlen( $version ) <= 40
+			&& 1 === preg_match( '/^[0-9]+(?:\\.[0-9]+){0,3}(?:-[a-z0-9.-]+)?$/i', $version );
+	}
+
 	public function recompute( $reason = 'scheduled_monthly' ) {
 		global $wpdb;
 		$scheduled = 'scheduled_monthly' === $reason;
@@ -81,14 +91,27 @@ final class Doctor_Ranking {
 
 	public function policy() {
 		global $wpdb;
-		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', 'doctor-global-1.0' ), 'safe_fallback' => false, 'policy_read_failed' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
+		$defaults = array( 'version' => (string) DB::setting( 'doctor_ranking_policy_version', '1.0.0' ), 'safe_fallback' => false, 'policy_read_failed' => false, 'weights' => array( 'qualification_score' => 0.16, 'experience_score' => 0.12, 'patient_verified_review_score' => 0.17, 'ethical_conduct_score' => 0.15, 'knowledge_contribution_score' => 0.14, 'responsiveness_score' => 0.08, 'profile_completeness_score' => 0.06, 'complaint_appeal_outcome_score' => 0.07, 'manipulation_resistant_engagement_score' => 0.05 ) );
 		$wpdb->last_error='';
 		$row = $wpdb->get_row( "SELECT version,features_json FROM " . DB::table( 'ranking_policies' ) . " WHERE context_name='doctor_global' AND audience='public' AND status='active' ORDER BY effective_at DESC,id DESC LIMIT 1", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		if ( null === $row && '' !== (string) $wpdb->last_error ) { $defaults['safe_fallback']=true; $defaults['policy_read_failed']=true; $defaults['version']='policy-unavailable'; return $defaults; }
-		if ( ! $row ) { return $defaults; }
+		if ( ! $row ) {
+			if ( ! self::is_assurance_policy_version( $defaults['version'] ) ) {
+				$defaults['safe_fallback'] = true;
+				$defaults['policy_read_failed'] = true;
+				$defaults['version'] = 'policy-unavailable';
+			}
+			return $defaults;
+		}
+		if ( ! self::is_assurance_policy_version( isset( $row['version'] ) ? $row['version'] : null ) ) {
+			$defaults['safe_fallback'] = true;
+			$defaults['policy_read_failed'] = true;
+			$defaults['version'] = 'policy-unavailable';
+			return $defaults;
+		}
 		$features = json_decode( $row['features_json'], true ); $features = is_array( $features ) ? $features : array(); $weights = isset( $features['weights'] ) && is_array( $features['weights'] ) ? $features['weights'] : $features; $candidate = $defaults['weights'];
 		foreach ( $candidate as $field => $fallback ) { if ( isset( $weights[ $field ] ) && is_numeric( $weights[ $field ] ) ) { $candidate[ $field ] = min( 1.0, max( 0.0, (float) $weights[ $field ] ) ); } }
-		$total = array_sum( $candidate ); if ( $total <= 0 ) { $defaults['safe_fallback'] = true; $defaults['version'] = 'safe-fallback-' . sanitize_key( $row['version'] ); return $defaults; }
+		$total = array_sum( $candidate ); if ( $total <= 0 ) { $defaults['safe_fallback'] = true; $defaults['policy_read_failed'] = true; $defaults['version'] = 'policy-unavailable'; return $defaults; }
 		foreach ( $candidate as &$weight ) { $weight = $weight / $total; } unset( $weight ); $defaults['weights'] = $candidate; $defaults['version'] = sanitize_text_field( $row['version'] ); return $defaults;
 	}
 
