@@ -178,6 +178,8 @@ $live_change = $doc;
 $live_change['object_version'] = 3;
 $live_change['source_event_sequence'] = 3;
 $live_change['title'] = 'Concurrent Owner Live Update';
+// The owner has really committed v3; a delayed shadow v2 must be refused.
+$owner_documents[$doc['object_id']] = $live_change;
 file26_ci_assert_ok(sabri_file26_upsert_document($live_change), 'Concurrent live owner update made after snapshot');
 $drift_proof = \Sabri\File26\Shadow_Index::validate($drift_uuid);
 file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()==='file26_shadow_source_drift', 'Real database drift correctly blocks stale candidate promotion');
