@@ -5,6 +5,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class Graph {
 	private $security;
+	private $connectors;
 
 	private $allowed_edges = array(
 		'author-of',
@@ -18,8 +19,9 @@ final class Graph {
 		'topic-related',
 	);
 
-	public function __construct( Security $security ) {
+	public function __construct( Security $security, Connectors $connectors = null ) {
 		$this->security = $security;
+		$this->connectors = $connectors;
 	}
 
 	public function create_edge( array $input ) {
@@ -186,7 +188,10 @@ final class Graph {
 			$nodes = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
 		$visible_keys = array();
-		foreach ( (array) $nodes as $node ) { $visible_keys[ $node['node_key'] ] = true; }
+		$nodes = array_values( array_filter( (array) $nodes, function ( $node ) {
+			return isset( $node['node_key'] ) && $this->public_node_exists( $node['node_key'] );
+		} ) ); // Recheck current owner ACL immediately before exposing any node title.
+		foreach ( $nodes as $node ) { $visible_keys[ $node['node_key'] ] = true; }
 		if ( ! isset( $visible_keys[ $start_key ] ) ) {
 			return new \WP_Error( 'file26_graph_node_not_found', 'Graph node is no longer public.', array( 'status' => 404 ) );
 		}
@@ -250,11 +255,40 @@ final class Graph {
 
 	private function public_node_exists( $key ) {
 		global $wpdb;
-		return (bool) $wpdb->get_var(
+		// Graph is a PUBLIC knowledge surface. A stale File26 node/edge marked
+		// "public" is not proof of the CURRENT canonical owner's visibility.
+		// No native owner registry, read error, invalid payload or absent owner
+		// callback must ever leak stored node title, URL, edge or provenance.
+		if ( ! $this->connectors || ! is_string( $key ) ||
+			1 !== preg_match( '/^[a-f0-9]{64}$/D', $key ) ) {
+			return false;
+		}
+		$wpdb->last_error = '';
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				'SELECT 1 FROM ' . DB::table( 'nodes' ) . " WHERE node_key=%s AND state IN ('active','published','corrected') AND visibility='public' LIMIT 1",
+				'SELECT d.* FROM ' . DB::table( 'documents' ) . ' d INNER JOIN ' . DB::table( 'nodes' ) .
+				" n ON n.node_key=d.canonical_key WHERE d.canonical_key=%s AND
+				n.state IN ('active','published','corrected') AND n.visibility='public'
+				AND d.state IN ('active','published','corrected') AND d.visibility='public'
+				AND n.version=d.object_version AND n.title=d.title AND n.node_type=d.entity_type LIMIT 1",
 				$key
-			)
+			), ARRAY_A
+		);
+		if ( ! is_array( $row ) || '' !== (string) $wpdb->last_error ||
+			! isset( $row['connector_slug'], $row['payload'] ) ) {
+			return false;
+		}
+		$payload = json_decode( (string) $row['payload'], true );
+		if ( ! is_array( $payload ) ) {
+			return false;
+		}
+		$row['payload'] = $payload;
+		// Deliberately check as the anonymous PUBLIC audience even when an
+		// administrator is querying; privileged private records are not graph.
+		return true === $this->connectors->can_view(
+			$row['connector_slug'],
+			$row,
+			array( 'authenticated' => false, 'user_id' => 0, 'is_public_graph' => true )
 		);
 	}
 }
