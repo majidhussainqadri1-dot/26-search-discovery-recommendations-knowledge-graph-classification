@@ -14,6 +14,17 @@ jobs:
         php: ['7.4', '8.3']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 / node24
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Assert checkout equals exact candidate source head
+        env:
+          FILE26_EXPECTED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$FILE26_EXPECTED_SOURCE_SHA" || { echo "FAIL: File26 QA checked out a synthetic merge/other commit."; exit 1; }
+          echo "PASS: exact-source checkout $actual"
       - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
         with:
           php-version: ${{ matrix.php }}
@@ -35,11 +46,22 @@ jobs:
   forty_round_verification:
     name: Forty full QA review repetitions
     needs: qa
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integrate/file26-future24-main-parity-20261019' || github.head_ref == 'audit/file26-fresh40-and-crossrepo-parity-20261019' || github.head_ref == 'audit/file26-20261020-forty-reliability-and-owner-parity' || github.head_ref == 'audit/file26-20261020-merged-parity-graph-cursor' || github.head_ref == 'audit/file26-v12-shadow-index-20261108' || startsWith(github.head_ref, 'fix/file26-v12-3-'))
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integrate/file26-future24-main-parity-20261019' || github.head_ref == 'audit/file26-fresh40-and-crossrepo-parity-20261019' || github.head_ref == 'audit/file26-20261020-forty-reliability-and-owner-parity' || github.head_ref == 'audit/file26-20261020-merged-parity-graph-cursor' || github.head_ref == 'integrate/file26-v123-pr39-doctor-hardening-20261115' || github.head_ref == 'audit/file26-v12-shadow-index-20261108' || startsWith(github.head_ref, 'fix/file26-v12-3-'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert forty-round source equals exact Pull Request head
+        env:
+          FILE26_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$FILE26_EXPECTED_SOURCE_SHA" || { echo "FAIL: forty-round QA uses non-exact PR source."; exit 1; }
+          echo "PASS: 40 review rounds pinned to candidate $actual"
       - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761
         with:
           php-version: '8.3'
