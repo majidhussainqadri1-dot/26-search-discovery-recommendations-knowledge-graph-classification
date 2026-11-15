@@ -9,6 +9,7 @@ on:
       - 'tests/file26-20261115-real-file24-assurance.php'
       - 'tests/file26-20261115-tombstone-expiry-cold-replay-mysql.php'
       - 'tests/file26-20261115-graph-current-owner-mysql.php'
+      - 'tests/file26-20261115-file03-identity-consumer-mysql.php'
       - '.github/workflows/file26-mysql-integration.yml'
   push:
     branches: ['audit/file26-v12-shadow-index-20261108']
@@ -433,3 +434,10 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261109-native-file08-public-clinic.php --path=/tmp/file26-ci-wp --allow-root
+      - name: Prove current File03 owner identity outbox and File26 reindex in real disposable MariaDB
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery/tests/file26-20261115-file03-identity-consumer-mysql.php --path=/tmp/file26-ci-wp --allow-root
