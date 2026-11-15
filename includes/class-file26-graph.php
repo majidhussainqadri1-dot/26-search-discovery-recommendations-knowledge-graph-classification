@@ -5,6 +5,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class Graph {
 	private $security;
+	private $connectors;
 
 	private $allowed_edges = array(
 		'author-of',
@@ -18,8 +19,9 @@ final class Graph {
 		'topic-related',
 	);
 
-	public function __construct( Security $security ) {
+	public function __construct( Security $security, Connectors $connectors = null ) {
 		$this->security = $security;
+		$this->connectors = $connectors;
 	}
 
 	public function create_edge( array $input ) {
@@ -185,8 +187,18 @@ final class Graph {
 			);
 			$nodes = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
+		// Graph/edge tables are derivative caches, not current canonical rights.
+		// Recheck EVERY node against its active connector and live source ACL
+		// before exposing cached title/URL or any provenance-bearing edge.
+		$audience = $this->security->audience();
+		$eligible_nodes = array();
 		$visible_keys = array();
-		foreach ( (array) $nodes as $node ) { $visible_keys[ $node['node_key'] ] = true; }
+		foreach ( (array) $nodes as $node ) {
+			if ( ! $this->current_public_node_authorized( $node, $audience ) ) { continue; }
+			$eligible_nodes[] = $node;
+			$visible_keys[ $node['node_key'] ] = true;
+		}
+		$nodes = $eligible_nodes;
 		if ( ! isset( $visible_keys[ $start_key ] ) ) {
 			return new \WP_Error( 'file26_graph_node_not_found', 'Graph node is no longer public.', array( 'status' => 404 ) );
 		}
@@ -194,6 +206,41 @@ final class Graph {
 			return isset( $visible_keys[ $edge['source_key'] ], $visible_keys[ $edge['target_key'] ] );
 		} ) );
 		return array( 'contract_version' => SABRI_FILE26_CONTRACT_VERSION, 'start_key' => $start_key, 'depth' => $depth, 'nodes' => $nodes, 'edges' => $edges );
+	}
+
+	/**
+	 * Resolve a graph node to a currently indexed canonical document and ask
+	 * its source owner to authorize this exact current record. A Graph node is
+	 * never authority by itself; current source owner outage fails closed.
+	 */
+	private function current_public_node_authorized( array $node, array $audience ) {
+		global $wpdb;
+		if ( ! $this->connectors || ! isset( $node['node_key'], $node['version'] ) ) {
+			return false;
+		}
+		$docs = DB::table( 'documents' );
+		$active = DB::table( 'connectors' );
+		$wpdb->last_error = '';
+		$doc = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT d.* FROM $docs d INNER JOIN $active c
+				 ON c.slug=d.connector_slug AND c.status='active'
+				 WHERE d.canonical_key=%s AND d.visibility='public'
+				 AND d.state IN ('published','active','corrected') LIMIT 1",
+				$node['node_key']
+			),
+			ARRAY_A
+		);
+		if ( ! is_array( $doc ) || '' !== (string) $wpdb->last_error ) { return false; }
+		if ( ! isset( $doc['object_version'], $doc['visibility'], $doc['connector_slug'] )
+			|| (string) $doc['object_version'] !== (string) $node['version'] ) { return false; }
+		$payload = isset( $doc['payload'] ) ? json_decode( (string) $doc['payload'], true ) : array();
+		if ( ! is_array( $payload ) ) { return false; }
+		$doc['payload'] = $payload;
+		if ( ! $this->security->can_view_visibility( $doc['visibility'], $audience, $payload ) ) {
+			return false;
+		}
+		return $this->connectors->can_view( $doc['connector_slug'], $doc, $audience );
 	}
 
 	private function sanitize_provenance( array $value, $depth = 0 ) {
