@@ -176,6 +176,7 @@ $live_change = $doc;
 $live_change['object_version'] = 3;
 $live_change['source_event_sequence'] = 3;
 $live_change['title'] = 'Concurrent Owner Live Update';
+$owner_documents[$live_change['object_id']]=$live_change; // Real native owner advanced before the File26 write.
 file26_ci_assert_ok(sabri_file26_upsert_document($live_change), 'Concurrent live owner update made after snapshot');
 $drift_proof = \Sabri\File26\Shadow_Index::validate($drift_uuid);
 file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()==='file26_shadow_source_drift', 'Real database drift correctly blocks stale candidate promotion');

@@ -23,17 +23,6 @@ final class Indexer {
 			$table = DB::table( 'documents' );
 			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT object_version,source_event_sequence,checksum FROM $table WHERE canonical_key=%s", $document['canonical_key'] ), ARRAY_A );
 			if ( null === $existing && '' !== $wpdb->last_error ) { return new \WP_Error( 'file26_document_version_read_failed', 'Existing search-document state could not be verified; indexing failed closed.' ); }
-			// A missing serving record is ambiguous: fresh first publication OR
-			// a stale replay after the bounded revocation tombstone has expired.
-			// Never infer freshness from absence. The native owner must attest
-			// this exact current version/projection before creating the row.
-			if ( ! $existing ) {
-				$owner_projection = null;
-				$fresh = Owner_Freshness::attest_cold_document( $this->connectors, $document, $owner_projection );
-				if ( is_wp_error( $fresh ) ) { return $fresh; }
-				$parity = $this->attest_canonical_projection_parity( $document, $owner_projection );
-				if ( is_wp_error( $parity ) ) { return $parity; }
-			}
 			if ( $existing ) {
 				$incoming_version = (int) $document['object_version'];
 				$existing_version = (int) $existing['object_version'];
@@ -49,6 +38,17 @@ final class Indexer {
 					}
 				}
 			}
+			// Version ordering only proves that an event is newer than File26's
+			// derivative index, NOT that the native owner currently authorized
+			// it. A revoked owner can otherwise be overwritten by a forged or
+			// delayed higher-version public event while a serving row exists.
+			// Require fresh owner proof for *every write* (cold and hot), after
+			// idempotent stale/duplicate no-op decisions have been returned.
+			$owner_projection = null;
+			$fresh = Owner_Freshness::attest_cold_document( $this->connectors, $document, $owner_projection );
+			if ( is_wp_error( $fresh ) ) { return $fresh; }
+			$parity = $this->attest_canonical_projection_parity( $document, $owner_projection );
+			if ( is_wp_error( $parity ) ) { return $parity; }
 			if ( false === $wpdb->query( 'START TRANSACTION' ) ) { return new \WP_Error( 'file26_index_transaction_unavailable', 'Search indexing transaction could not be started safely.' ); }
 			try {
 				$sql = $wpdb->prepare(
