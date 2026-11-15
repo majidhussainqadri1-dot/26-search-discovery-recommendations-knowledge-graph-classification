@@ -32,6 +32,7 @@ node --check "$ROOT/assets/js/file26-future.js"
 
 printf '[3/15] Pure normalization and ranking tests\n'
 run_php_test "$ROOT/tests/test-normalizer-ranking.php"
+run_php_test "$ROOT/tests/file26-20261115-file24-policy-version-regression.php"
 printf '[4/15] Architecture, policy and traceability contracts\n'
 run_php_test "$ROOT/tests/contract-tests.php"
 printf '[5/15] Corrective architecture regressions\n'
@@ -101,6 +102,7 @@ printf '[15/15] Clean-extract QA and manifest parity\n'
 unzip -q "$TMP/a.zip" -d "$TMP/extract"
 PACKAGE="$TMP/extract/sabri-file26-search-discovery"
 run_php_test "$PACKAGE/tests/test-normalizer-ranking.php"
+run_php_test "$PACKAGE/tests/file26-20261115-file24-policy-version-regression.php"
 run_php_test "$PACKAGE/tests/contract-tests.php"
 run_php_test "$PACKAGE/tests/corrective-contract-tests.php"
 run_php_test "$PACKAGE/tests/central-plan-contract-tests.php"
