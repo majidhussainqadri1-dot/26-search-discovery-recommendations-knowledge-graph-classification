@@ -58,7 +58,10 @@ f26_lifecycle_assert(get_post_field('post_modified_gmt',$post_id)===$initial_pos
 f26_lifecycle_assert((int)get_post_meta($post_id,$source_meta,true)===(int)$restored['object_version'],'Owner event sequence is durably stored in post metadata');
 $old_replay=sabri_file26_upsert_document($old_event);
 $after_replay=$wpdb->get_var($wpdb->prepare("SELECT object_version FROM $document_table WHERE canonical_key=%s",$key));
-f26_lifecycle_assert(!is_wp_error($old_replay)&&(int)$after_replay===(int)$restored['object_version'],'Out-of-order old public event cannot override restored current owner version');
+f26_lifecycle_assert(is_wp_error($old_replay)
+    && in_array($old_replay->get_error_code(),array('file26_cold_owner_version_conflict','file26_cold_owner_projection_conflict'),true)
+    && (int)$after_replay===(int)$restored['object_version'],
+    'Superseded public source event now returns a typed current-owner denial without overwriting restored owner version');
 
 update_post_meta($post_id,$review::META_LANGUAGE,'ur');
 $localized=$wpdb->get_row($wpdb->prepare("SELECT object_version,locale FROM $document_table WHERE canonical_key=%s",$key),ARRAY_A);
