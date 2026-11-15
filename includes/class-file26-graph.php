@@ -171,7 +171,10 @@ final class Graph {
 				$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				foreach ( $rows as $edge ) {
 					if ( ! $this->public_node_exists( $edge['target_key'] ) ) { continue; }
-					$edge['provenance'] = json_decode( $edge['provenance'], true );
+					$edge['provenance'] = json_decode( (string) $edge['provenance'], true );
+					// An old/corrupt edge must not be presented as a verified
+					// relationship without a structured current source record.
+					if ( ! is_array( $edge['provenance'] ) || empty( $edge['provenance'] ) ) { continue; }
 					$edges[] = $edge;
 					if ( ! isset( $visited[ $edge['target_key'] ] ) ) { $visited[ $edge['target_key'] ] = true; $next[] = $edge['target_key']; }
 				}
