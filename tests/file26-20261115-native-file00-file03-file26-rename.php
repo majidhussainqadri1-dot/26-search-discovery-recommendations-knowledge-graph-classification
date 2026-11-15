@@ -126,6 +126,21 @@ $consumer = new \Sabri\File26\File03_Identity_Consumer(
 	\Sabri\File26\Plugin::instance()->indexer(),
 	new \Sabri\File26\Security()
 );
+$repeat_current = SPD_Contracts::file26_fetch_object( 'founder', $profile_uuid );
+$reflect_sanitizer = new ReflectionMethod( \Sabri\File26\Indexer::class, 'sanitize_document' );
+$actual_latest = $reflect_sanitizer->invoke( \Sabri\File26\Plugin::instance()->indexer(), $repeat_current );
+$stored_checksum = $wpdb->get_var( $wpdb->prepare( 'SELECT checksum FROM ' . $documents . ' WHERE canonical_key=%s', $key ) );
+if ( is_array( $actual_latest ) && $stored_checksum !== ( $actual_latest['checksum'] ?? '' ) ) {
+	$stored = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $documents . ' WHERE canonical_key=%s', $key ), ARRAY_A );
+	$changed_fields = array();
+	foreach ( (array) $actual_latest as $field => $value ) {
+		if ( in_array( $field, array( 'indexed_at', 'updated_at', 'checksum', 'freshness_at' ), true ) ) { continue; }
+		if ( is_array( $stored ) && isset( $stored[$field] ) && (string) $stored[$field] !== (string) $value ) {
+			$changed_fields[] = $field;
+		}
+	}
+	echo "DIAG: current File03 native projection is non-idempotent for saved fields: " . implode( ',', $changed_fields ) . "\n";
+}
 $consumer->on_file03_outbox( 'PublicProfileUpdated.v1', array(
 	'version' => 15, 'changed_fields' => array( 'file00_public_display_name' )
 ), array( 'aggregate_id' => $profile_uuid ) );
