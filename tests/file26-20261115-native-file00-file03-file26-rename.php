@@ -51,7 +51,18 @@ f26_3native_require( is_array( $before ) && $before['object_id'] === $profile_uu
 	$before['entity_type'] === 'founder' && (int) $before['object_version'] === 14 &&
 	$before['visibility'] === 'public' && $before['connector_slug'] === 'file03-profiles',
 	'Native File03 owner verifies current File00 founder and exposes genuine public-only search projection' );
-$manifest = SPD_Contracts::file26_owner_connector_adapters( array() )['file03'];
+// File03 provides its native adapter; File26's canonical Owner_Contracts
+// validates entity types and supplies the authoritative owner_file.
+$manifests = \Sabri\File26\Plugin::instance()->owner_contracts()->collect( array() );
+$manifest = null;
+foreach ( $manifests as $candidate ) {
+	if ( is_array( $candidate ) && ( $candidate['slug'] ?? '' ) === 'file03-profiles' ) {
+		$manifest = $candidate;
+		break;
+	}
+}
+f26_3native_require( is_array( $manifest ) && $manifest['owner_file'] === 'File 03',
+	'File26 canonical owner collection retains real File03 source and true owner_file' );
 $registered = sabri_file26_register_connector( $manifest );
 f26_3native_require( true === $registered, 'Genuine File03 owner connector registered in File26 proposed lane: ' .
 	( is_wp_error( $registered ) ? $registered->get_error_code() : gettype( $registered ) ) );
