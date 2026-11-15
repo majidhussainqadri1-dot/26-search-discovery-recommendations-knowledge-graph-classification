@@ -113,6 +113,9 @@ final class Shadow_Index {
 		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_live_version_unreadable','Current serving version could not be verified.');}
 		if ( ! $serving && ! in_array( $doc['state'], array( 'deleted', 'suspended', 'restricted', 'rejected', 'private' ), true )
 			&& 'restricted' !== $doc['visibility'] ) {
+			if ( ! class_exists( Plugin::class ) ) {
+				return new \WP_Error( 'file26_cold_owner_attestation_unavailable', 'Native canonical owner registry is required for cold shadow indexing.' );
+			}
 			$native = Plugin::instance()->connectors();
 			$fresh = Owner_Freshness::attest_cold_document( $native, $doc );
 			if ( is_wp_error( $fresh ) ) { return $fresh; }
