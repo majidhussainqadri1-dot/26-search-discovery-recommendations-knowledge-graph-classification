@@ -12,6 +12,7 @@ function file26_lang_assert($condition,$message) {
     echo "PASS: $message\n";
 }
 $slug='file26_ci_languages';
+$owner_current_by_id=array();
 $manifest=array(
     'slug'=>$slug, 'owner_file'=>'File 26 CI Only','contract_version'=>'1.0',
     'entity_types'=>array('article'),'privacy_classes'=>array('public','members'),
@@ -19,6 +20,10 @@ $manifest=array(
     'status'=>'proposed',
     'list_batch'=>static function(){return array('items'=>array(),'done'=>true);},
     'can_view'=>static function(){return true;},
+    'fetch_object'=>static function($entity,$object_id)use(&$owner_current_by_id){
+        return isset($owner_current_by_id[$object_id])&&$owner_current_by_id[$object_id]['entity_type']===$entity
+            ? $owner_current_by_id[$object_id] : null;
+    },
     'health'=>static function(){return array('state'=>'healthy');}
 );
 $registered=sabri_file26_register_connector($manifest);
@@ -45,6 +50,7 @@ foreach($cases as $case){
         'canonical_url'=>home_url('/file26-ci/language/'.$case['id']),
         'search_text'=>$case['title']
     );
+    $owner_current_by_id[$case['id']]=$doc;
     $res=sabri_file26_upsert_document($doc);
     file26_lang_assert(!is_wp_error($res),'Real SQL stores '.$case['locale'].' public fixture');
 }
@@ -66,6 +72,7 @@ $private=array(
     'title'=>'Private Members Only Teaching Record','excerpt'=>'Not public',
     'canonical_url'=>home_url('/file26-ci/language/secret')
 );
+$owner_current_by_id[$private['object_id']]=$private;
 file26_lang_assert(!is_wp_error(sabri_file26_upsert_document($private)),'Members-only fixture indexed for privacy-negative search');
 $attacks=array(
     'Private Members Only Teaching Record',
