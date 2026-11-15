@@ -13,7 +13,7 @@ file11_x26_assert(class_exists('RSV_File26_Connector'),'Real native File11 sourc
 $plugin=\Sabri\File26\Plugin::instance();
 $owners=$plugin->owner_contracts()->readiness();
 file11_x26_assert(!empty($owners['file11']['registered']),'File26 detected File11 actual adapter from owner hook');
-file11_x26_assert(!empty($owners['file11']['callbacks_complete']),'File11 native list_batch/can_view/health all callable');
+file11_x26_assert(empty($owners['file11']['callbacks_complete']),'File11 old source lacks current fetch_object; registered only for observability, never Production-ready');
 file11_x26_assert($owners['file11']['status']==='proposed'&&empty($owners['file11']['production_ready']),'Unmerged Reel source cannot self-promote search connector');
 $connector=$plugin->connectors()->get('file11-reels');
 file11_x26_assert(is_array($connector)&&($connector['owner_file']??'')==='File 11','File11 native entity owner preserved');

@@ -17,7 +17,7 @@ f26native(is_array($native),'Native File21 owner registered its real File26 conn
 f26native(($native['owner_file']??'')==='File 21'&&($native['contract_version']??'')==='1.0','Canonical File21 owner and contract version match');
 f26native(($native['status']??'')==='proposed','Native owner remains proposed, cannot self-activate global search');
 f26native(isset($native['list_batch'],$native['can_view'],$native['health']),'Native owner exports batch, visibility and health callbacks');
-foreach(array('list_batch','can_view','health') as $callback){
+foreach(array('list_batch','can_view','health','fetch_object') as $callback){
     f26native(is_callable($native[$callback]),'Native owner '.$callback.' callback callable');
 }
 f26native($native['list_batch'][0]==='Sabri\\HomeNewsFeed\\SearchProviderRegistry' ||

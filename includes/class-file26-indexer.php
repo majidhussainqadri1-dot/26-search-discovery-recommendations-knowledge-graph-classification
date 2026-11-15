@@ -23,6 +23,14 @@ final class Indexer {
 			$table = DB::table( 'documents' );
 			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT object_version,source_event_sequence,checksum FROM $table WHERE canonical_key=%s", $document['canonical_key'] ), ARRAY_A );
 			if ( null === $existing && '' !== $wpdb->last_error ) { return new \WP_Error( 'file26_document_version_read_failed', 'Existing search-document state could not be verified; indexing failed closed.' ); }
+			// A missing serving record is ambiguous: fresh first publication OR
+			// a stale replay after the bounded revocation tombstone has expired.
+			// Never infer freshness from absence. The native owner must attest
+			// this exact current version/projection before creating the row.
+			if ( ! $existing ) {
+				$fresh = Owner_Freshness::attest_cold_document( $this->connectors, $document );
+				if ( is_wp_error( $fresh ) ) { return $fresh; }
+			}
 			if ( $existing ) {
 				$incoming_version = (int) $document['object_version'];
 				$existing_version = (int) $existing['object_version'];

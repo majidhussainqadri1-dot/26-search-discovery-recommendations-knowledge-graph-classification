@@ -78,4 +78,14 @@ wp_delete_post($post_id,true);
 $after_delete=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $document_table WHERE canonical_key=%s",$key));
 $deleted_version=$wpdb->get_var($wpdb->prepare("SELECT object_version FROM $tombstone_table WHERE canonical_key=%s",$key));
 f26_lifecycle_assert((int)$after_delete===0&&(int)$deleted_version>(int)$approved['object_version'],'Native owner physical deletion emits a higher versioned tombstone before removal');
+$latest_deleted=\Sabri\HomeNewsFeed\SearchProviderRegistry::file26_fetch_object('post',(string)$post_id);
+f26_lifecycle_assert(null===$latest_deleted,'Native File21 public owner read proves physically deleted post is no longer indexable');
+$wpdb->delete($tombstone_table,array('canonical_key'=>$key)); // Disposable R1 only: synthesize TTL expiry.
+f26_lifecycle_assert(null===$wpdb->get_var($wpdb->prepare("SELECT object_version FROM $tombstone_table WHERE canonical_key=%s",$key)),
+    'Real File21 revocation tombstone was purged only inside disposable test DB');
+$replay_after_expiry=sabri_file26_upsert_document($old_event);
+f26_lifecycle_assert(is_wp_error($replay_after_expiry)&&$replay_after_expiry->get_error_code()==='file26_cold_owner_attestation_denied',
+    'Stale public File21 owner event cannot resurrect a physically deleted post after bounded tombstone purge');
+f26_lifecycle_assert((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $document_table WHERE canonical_key=%s",$key))===0,
+    'Real File21 owner deletion does not reappear in File26 SQL after stale replay');
 echo "PASS: genuine File21 native metadata/public/restrict/restore/review/locale/delete with File26 real MariaDB\n";

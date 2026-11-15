@@ -44,6 +44,7 @@ $owner_doc['source_event_sequence'] = 2;
 $owner_doc['title'] = 'Shadow Updated Article';
 $owner_doc['excerpt'] = 'New source content';
 $owner_items = array($owner_doc);
+$owner_documents = array($doc['object_id']=>$doc);
 $owner_batch_mode = 'normal';
 $manifest = array(
     'slug'=>'file26_ci_fixture','owner_file'=>'File 26 CI only','contract_version'=>'1.0',
@@ -63,7 +64,14 @@ $manifest = array(
         if ($cursor !== '') { return array('items'=>array(), 'done'=>true); }
         return array('items'=>$owner_items, 'done'=>true);
     },
-    'can_view'=>static function($record, $audience) { return true; }
+    'can_view'=>static function($record, $audience) { return true; },
+    'fetch_object'=>static function($entity_type,$object_id) use (&$owner_documents,&$owner_items) {
+        if(isset($owner_documents[$object_id]) && $owner_documents[$object_id]['entity_type']===$entity_type){return $owner_documents[$object_id];}
+        foreach((array)$owner_items as $candidate){if(is_array($candidate)
+            && ($candidate['object_id']??'')===$object_id
+            && ($candidate['entity_type']??'')===$entity_type){return $candidate;}}
+        return null;
+    }
 );
 file26_ci_assert_ok(sabri_file26_register_connector($manifest), 'Fixture connector initial registration');
 $wpdb->update(\Sabri\File26\DB::table('connectors'),array('status'=>'active'),array('slug'=>'file26_ci_fixture'));
@@ -152,6 +160,7 @@ $member_doc['canonical_url'] = home_url('/file26-ci/fixture-private-18');
 $member_doc['title'] = 'Members Only Learning Notes';
 $member_doc['visibility'] = 'members';
 wp_set_current_user((int)$admin->ID);
+$owner_documents[$member_doc['object_id']]=$member_doc;
 file26_ci_assert_ok(sabri_file26_upsert_document($member_doc), 'Members-only indexed result stored for the privacy gate');
 wp_set_current_user(0);
 $guest_private = sabri_file26_search(array('q'=>'Members Only Learning Notes','locale'=>'ur'));
@@ -273,17 +282,21 @@ $pii_phone_doc['canonical_url'] = home_url('/file26-ci/pii-phone-decoy');
 $pii_phone_doc['title'] = '92 public educational reference';
 $pii_phone_doc['excerpt'] = 'Public-safe synthetic title to reproduce spaced-digit normalization.';
 wp_set_current_user((int)$admin->ID);
+$owner_documents[$pii_email_doc['object_id']]=$pii_email_doc;
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_email_doc), 'Synthetic email-shaped autocomplete decoy is indexed as public');
+$owner_documents[$pii_phone_doc['object_id']]=$pii_phone_doc;
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_phone_doc), 'Synthetic phone-shaped autocomplete decoy is indexed as public');
 $pii_at_title = $doc;
 $pii_at_title['object_id'] = 'pii-output-at-decoy';
 $pii_at_title['canonical_url'] = home_url('/file26-ci/pii-output-at-decoy');
 $pii_at_title['title'] = 'learner@example.com tutorial';
+$owner_documents[$pii_at_title['object_id']]=$pii_at_title;
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_at_title), 'Public email-shaped title indexed as synthetic unsafe output decoy');
 $pii_phone_title = $doc;
 $pii_phone_title['object_id'] = 'pii-output-phone-decoy';
 $pii_phone_title['canonical_url'] = home_url('/file26-ci/pii-output-phone-decoy');
 $pii_phone_title['title'] = '92 300 123 4567 educational reference';
+$owner_documents[$pii_phone_title['object_id']]=$pii_phone_title;
 file26_ci_assert_ok(sabri_file26_upsert_document($pii_phone_title), 'Public phone-shaped title indexed as synthetic unsafe output decoy');
 wp_set_current_user(0);
 $visible_email_control = $plugin->search()->suggest('learner', 'ur', 8);
@@ -339,6 +352,7 @@ $unowned['object_id'] = 'missing-owner-acl-public';
 $unowned['title'] = 'undocumentedaclvisibilitymarker';
 $unowned['canonical_url'] = home_url('/file26-ci/missing-owner-acl-public');
 wp_set_current_user((int)$admin->ID);
+$owner_documents[$unowned['object_id']]=$unowned;
 file26_ci_assert_ok(sabri_file26_upsert_document($unowned), 'Synthetic public document indexed for active owner without canonical ACL');
 wp_set_current_user(0);
 $unowned_results = sabri_file26_search(array('q'=>'undocumentedaclvisibilitymarker','locale'=>'ur'));
