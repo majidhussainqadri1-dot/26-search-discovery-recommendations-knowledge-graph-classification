@@ -4,9 +4,10 @@ namespace Sabri\File26;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * FR-002/003/004/006: validate a cold indexed record against the canonical
- * owner *now*, instead of treating missing serving/tombstone rows as proof
- * that a delayed source event is a first publication.
+ * FR-002/003/004/006: validate every incoming indexed projection against
+ * its current canonical owner, whether the serving document exists or not.
+ * Local version order cannot prove native rights if a delayed published event
+ * arrived after a source correction, deletion or visibility downgrade.
  *
  * This is deliberately a bounded read-only owner proof. It does NOT store an
  * indefinite deleted identity, override the native owner, or claim an
@@ -14,8 +15,9 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Owner_Freshness {
 	/**
-	 * Called only for a would-be published/accessible record that has no
-	 * existing serving document. Caller holds the File26 mutation lock.
+	 * Called for a would-be published/accessible serving write or shadow
+	 * staging operation. Caller holds the File26 mutation/generation lock.
+	 * The historical name is retained for source/API backwards compatibility.
 	 *
 	 * The native owner must provide a complete current public-safe document.
 	 * Unknown, unavailable, stale, conflicting and malformed source data deny.
