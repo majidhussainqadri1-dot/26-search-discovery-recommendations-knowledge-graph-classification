@@ -38,6 +38,17 @@ jobs:
           --health-retries=15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert exact File26 candidate is installed for disposable SQL
+        env:
+          FILE26_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$FILE26_EXPECTED_SOURCE_SHA" || { echo "FAIL: SQL matrix did not check out exact File26 PR head."; exit 1; }
+          echo "PASS: real disposable WordPress will install exact File26 $actual"
       - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761 # 2.30.5
         with:
           php-version: '8.3'
