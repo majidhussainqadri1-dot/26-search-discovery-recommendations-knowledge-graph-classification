@@ -76,6 +76,17 @@ $inserted = $wpdb->insert( $edges_table, array(
 	'created_at' => \Sabri\File26\DB::now(), 'updated_at' => \Sabri\File26\DB::now(),
 ) );
 f26_graph_assert( 1 === (int) $inserted, 'real SQL public graph edge materialized' );
+$invalid_edge_uuid = \Sabri\File26\DB::uuid();
+$invalid_edge = $wpdb->insert( $edges_table, array(
+	'edge_uuid' => $invalid_edge_uuid, 'source_key' => $key_a,
+	'target_key' => $key_b, 'edge_type' => 'topic-related',
+	'provenance' => '{malformed', 'owner_file' => 'File 26 CI',
+	'evidence_url' => '', 'state' => 'active', 'visibility' => 'public',
+	'version' => 1, 'created_at' => \Sabri\File26\DB::now(),
+	'updated_at' => \Sabri\File26\DB::now(),
+) );
+f26_graph_assert( 1 === (int) $invalid_edge,
+	'disposable source-corrupt edge materialized for negative provenance regression' );
 $graph = \Sabri\File26\Plugin::instance()->graph();
 $before = $graph->query( $key_a, 1, 10 );
 f26_graph_assert( ! is_wp_error( $before ) && count( $before['nodes'] ) === 2
@@ -101,6 +112,7 @@ f26_graph_assert( is_wp_error( $outage ) && 'file26_graph_node_not_found' === $o
 	'canonical owner ACL outage fails closed, never trusts cached graph labels' );
 $owner_outage = false;
 $wpdb->delete( $edges_table, array( 'edge_uuid' => $edge_uuid ) );
+$wpdb->delete( $edges_table, array( 'edge_uuid' => $invalid_edge_uuid ) );
 $wpdb->delete( \Sabri\File26\DB::table( 'nodes' ), array( 'node_key' => $key_a ) );
 $wpdb->delete( \Sabri\File26\DB::table( 'nodes' ), array( 'node_key' => $key_b ) );
 $wpdb->delete( \Sabri\File26\DB::table( 'documents' ), array( 'canonical_key' => $key_a ) );
