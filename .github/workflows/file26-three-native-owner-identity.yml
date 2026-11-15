@@ -1,0 +1,104 @@
+# F26-CEN-01 / F26-FR-002/003/006. Non-production only.
+# Actual native File00 + File03 + File26 WordPress/MariaDB integration.
+# Exact immutable GitHub source references; do not treat CI as Live deployment.
+name: File 26 Native File00-File03 Identity Outbox and Public Search
+on:
+  pull_request:
+    paths:
+      - 'includes/**'
+      - 'file-26-search-discovery.php'
+      - 'tests/file26-20261115-native-file00-file03-file26-rename.php'
+      - '.github/workflows/file26-three-native-owner-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-wordpress-identity:
+    name: Native File00, File03, File26 owner search, WordPress 7.0.1 / MariaDB11.4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      db:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress
+          MARIADB_PASSWORD: ephemeral-only-pass
+          MARIADB_ROOT_PASSWORD: ephemeral-only-root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=15
+    steps:
+      - name: Exact immutable File26 source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: file26
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Exact File00 native owner truth
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/00-sabri-membership-core
+          ref: f4204593d1a4e4ecd7ce12d0e1bc7174da33b246
+          path: native-file00
+          persist-credentials: false
+      - name: Exact File03 current owner name-version+outbox candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: majidhussainqadri1-dot/03-sabri-profiles-and-doctors
+          ref: fd9180590cde1d663377fd5ce9d359ae14eb1261
+          path: native-file03
+          persist-credentials: false
+      - name: Prove all three exact source trees
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C file26 rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          test "$(git -C native-file00 rev-parse HEAD)" = f4204593d1a4e4ecd7ce12d0e1bc7174da33b246
+          test "$(git -C native-file03 rev-parse HEAD)" = fd9180590cde1d663377fd5ce9d359ae14eb1261
+          grep -q 'class-file26-file03-identity-consumer.php' file26/file-26-search-discovery.php
+          echo "PASS: all 3 native source git SHAs pinned, not PR synthetic merges"
+      - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761
+        with:
+          php-version: '8.3'
+          extensions: mysqli, mbstring, curl, json, openssl
+      - name: Install real disposable WordPress 7.0.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /tmp/wp-cli.phar
+          mkdir -p /tmp/file26-ci-wp
+          php /tmp/wp-cli.phar core download --version=7.0.1 --path=/tmp/file26-ci-wp --quiet --allow-root
+          test "$(php /tmp/wp-cli.phar core version --path=/tmp/file26-ci-wp --allow-root)" = '7.0.1'
+          php /tmp/wp-cli.phar config create --path=/tmp/file26-ci-wp --dbname=wordpress --dbuser=wordpress --dbpass=ephemeral-only-pass --dbhost=127.0.0.1:3306 --quiet --allow-root
+          php /tmp/wp-cli.phar config set WP_ENVIRONMENT_TYPE staging --type=constant --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY file26-disposable-only-not-real-secret --type=constant --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar config set SMC_MASTER_KEY_ID file26-ci-key-v1 --type=constant --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar config set SMC_FOUNDER_USER_ID 1 --type=constant --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar core install --url=http://file26-ci.local --title="Three native owner CI" --admin_user=admin --admin_password=disposable-only-not-a-real-password --admin_email=admin@example.test --skip-email --path=/tmp/file26-ci-wp --allow-root
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-membership-core
+          tar -C native-file00/source/sabri-membership-core -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-membership-core -xf -
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-profiles-doctors
+          tar -C native-file03 --exclude=.git --exclude=.github -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-profiles-doctors -xf -
+          mkdir -p /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery
+          tar -C file26 --exclude=.git --exclude=.github -cf - . | tar -C /tmp/file26-ci-wp/wp-content/plugins/sabri-file26-search-discovery -xf -
+      - name: Activate actual File00, complete bootstrap, then File03 and File26
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar plugin activate sabri-membership-core --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar eval 'wp_set_current_user(1); do_action("admin_init"); if(!defined("SMC_DB_VERSION") || (string)get_option("smc_db_version","")!==(string)SMC_DB_VERSION){fwrite(STDERR,"FAIL File00 deferred schema\n");exit(1);} echo "PASS native File00 current schema\n";' --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar plugin activate sabri-profiles-doctors --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar eval 'if(!SPD_Schema_Guard::base_ready() || !SPD_Schema_Guard::central_ready()){fwrite(STDERR,"FAIL File03 real owned schema\n");exit(1);} echo "PASS native File03 current schema\n";' --path=/tmp/file26-ci-wp --allow-root
+          php /tmp/wp-cli.phar plugin activate sabri-file26-search-discovery --path=/tmp/file26-ci-wp --allow-root
+      - name: Verify true native File00 post-commit identity -> File03 monotonic outbox -> File26 owner search
+        env:
+          FILE26_CI_EPHEMERAL_DB: yes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file "$GITHUB_WORKSPACE/file26/tests/file26-20261115-native-file00-file03-file26-rename.php" --path=/tmp/file26-ci-wp --allow-root
+          echo "PASS three actual isolated native plugins; no Staging or Live installed-parity claim"

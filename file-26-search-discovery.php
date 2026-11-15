@@ -27,6 +27,7 @@ require_once SABRI_FILE26_DIR . 'includes/class-file26-ranking.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-connectors.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-owner-contracts.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-owner-freshness.php';
+require_once SABRI_FILE26_DIR . 'includes/class-file26-file03-identity-consumer.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-shadow-index.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-indexer.php';
 require_once SABRI_FILE26_DIR . 'includes/class-file26-search.php';
