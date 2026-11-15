@@ -55,6 +55,18 @@ namespace {
     }
 }
 namespace Sabri\File26 {
+    // This isolated job-lease test stubs the registry/owner proof. Full native
+    // owner projection and ACL are tested separately against real MariaDB.
+    class Plugin {
+        public static function instance() { return new self(); }
+        public function connectors() { return new \stdClass(); }
+    }
+    class Owner_Freshness {
+        public static function attest_cold_document( $registry, array $doc ) {
+            return !empty($GLOBALS['f26_mock_owner_confirmed'])
+                ? true : new \WP_Error('file26_cold_owner_attestation_denied');
+        }
+    }
     class DB {
         public static function table($name) { global $wpdb; return $wpdb->prefix . 'f26_' . $name; }
     }
@@ -76,6 +88,7 @@ namespace {
         'canonical_url'=>'https://example.org/article-17','locale'=>'ur',
         'title'=>'Test','payload'=>'{}','updated_at'=>'2026-11-09 01:00:00'
     );
+    $GLOBALS['f26_mock_owner_confirmed'] = false;
     $GLOBALS['f26_options'] = array($option=>array(
         'state'=>'prepared','connector'=>'file05','partial_object_id'=>''
     ));
@@ -106,10 +119,11 @@ namespace {
     $wpdb = new F26FakeWpdb();
     $GLOBALS['f26_options'][$option]['state'] = 'prepared';
     $no_owner = Shadow_Index::stage($uuid, $doc, 'valid-lease-token');
-    verify(is_wp_error($no_owner) && $no_owner->get_error_code()==='file26_cold_owner_attestation_unavailable',
+    verify(is_wp_error($no_owner) && $no_owner->get_error_code()==='file26_cold_owner_attestation_denied',
         'Cold shadow worker cannot invent an owner proof when standalone registry is absent');
     verify(count($wpdb->writes)===0 && $wpdb->releases===1, 'Unverified cold source writes no shadow table rows');
 
+    $GLOBALS['f26_mock_owner_confirmed'] = true;
     $wpdb = new F26FakeWpdb();
     $wpdb->serving = array('object_version'=>1,'source_event_sequence'=>1,
         'checksum'=>str_repeat('c',64),'connector_slug'=>'file05');

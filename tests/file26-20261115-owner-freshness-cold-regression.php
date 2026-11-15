@@ -4,6 +4,11 @@
  * No WordPress state, source database, plugin installer or network required.
  */
 namespace Sabri\File26 {
+	// This test stubs normalization only; real WordPress SQL tests load the
+	// actual File26 Normalizer before owner proof.
+	final class Normalizer {
+		public function normalize( $value ) { return strtolower( trim( (string) $value ) ); }
+	}
 	final class Connectors {
 		public $manifest = array();
 		public function get( $slug ) { return $this->manifest; }
@@ -36,6 +41,9 @@ namespace {
 		'locale' => 'en-US',
 		'title' => 'A Current Article',
 		'excerpt' => 'Safe public summary',
+		'normalized_body' => 'safe public summary',
+		'author_key' => '', 'country' => '', 'location' => '',
+		'availability' => '', 'safety_class' => 'general',
 		'canonical_url' => 'https://example.test/articles/501',
 	);
 	$current = $incoming;
@@ -76,6 +84,18 @@ namespace {
 	$current['excerpt'] = 'Different public summary';
 	assert_cold( 'file26_cold_owner_projection_conflict' === $verify()->get_error_code(), 'same-version changed summary cannot revive old content' );
 	$current['excerpt'] = $incoming['excerpt'];
+	$current['search_text'] = 'Unauthorized new clinical keywords';
+	assert_cold( 'file26_cold_owner_projection_conflict' === $verify()->get_error_code(),
+		'stale searchable terms denied even if title, URL and version match' );
+	unset( $current['search_text'] );
+	$current['location'] = 'Restricted place';
+	assert_cold( 'file26_cold_owner_projection_conflict' === $verify()->get_error_code(),
+		'stale public location denied under unchanged native version' );
+	unset( $current['location'] );
+	$current['safety_class'] = 'restricted_content';
+	assert_cold( 'file26_cold_owner_projection_conflict' === $verify()->get_error_code(),
+		'current owner safety downgrade cannot be bypassed by stale source event' );
+	unset( $current['safety_class'] );
 	$owner->manifest['fetch_object'] = static function () { return null; };
 	assert_cold( 'file26_cold_owner_attestation_denied' === $verify()->get_error_code(), 'owner deletion null refuses stale replay' );
 	$owner->manifest['fetch_object'] = static function () { throw new \RuntimeException( 'owner outage' ); };

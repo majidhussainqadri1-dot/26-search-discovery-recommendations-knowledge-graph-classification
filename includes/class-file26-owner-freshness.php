@@ -4,9 +4,10 @@ namespace Sabri\File26;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * FR-002/003/004/006: validate a cold indexed record against the canonical
- * owner *now*, instead of treating missing serving/tombstone rows as proof
- * that a delayed source event is a first publication.
+ * FR-002/003/004/006: validate every incoming indexed projection against
+ * its current canonical owner, whether the serving document exists or not.
+ * Local version order cannot prove native rights if a delayed published event
+ * arrived after a source correction, deletion or visibility downgrade.
  *
  * This is deliberately a bounded read-only owner proof. It does NOT store an
  * indefinite deleted identity, override the native owner, or claim an
@@ -14,8 +15,9 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Owner_Freshness {
 	/**
-	 * Called only for a would-be published/accessible record that has no
-	 * existing serving document. Caller holds the File26 mutation lock.
+	 * Called for a would-be published/accessible serving write or shadow
+	 * staging operation. Caller holds the File26 mutation/generation lock.
+	 * The historical name is retained for source/API backwards compatibility.
 	 *
 	 * The native owner must provide a complete current public-safe document.
 	 * Unknown, unavailable, stale, conflicting and malformed source data deny.
@@ -78,10 +80,46 @@ final class Owner_Freshness {
 				return new \WP_Error( 'file26_cold_owner_projection_conflict', 'Current canonical owner projection disagrees with the stale index event.' );
 			}
 		}
-		if ( isset( $fresh['excerpt'] ) && isset( $document['excerpt'] )
-			&& is_string( $fresh['excerpt'] ) && is_string( $document['excerpt'] )
-			&& ! hash_equals( $document['excerpt'], wp_strip_all_tags( $fresh['excerpt'], true ) ) ) {
-			return new \WP_Error( 'file26_cold_owner_projection_conflict', 'Current canonical owner excerpt differs from the source event.' );
+		// A source can keep its title/URL/version while the public abstract,
+		// searchable body, region or safety label is revoked. Recheck all
+		// material fields used for retrieval, excerpts or public filtering.
+		if ( isset( $fresh['excerpt'] ) && ! is_string( $fresh['excerpt'] ) ) {
+			return new \WP_Error( 'file26_cold_owner_projection_incomplete', 'Current owner abstract is malformed.' );
+		}
+		$fresh_excerpt = isset( $fresh['excerpt'] ) ? wp_strip_all_tags( $fresh['excerpt'], true ) : '';
+		if ( ! isset( $document['excerpt'] ) || ! is_string( $document['excerpt'] )
+			|| ! hash_equals( $document['excerpt'], $fresh_excerpt ) ) {
+			return new \WP_Error( 'file26_cold_owner_projection_conflict', 'Current canonical owner excerpt differs from the indexed source event.' );
+		}
+		if ( isset( $fresh['search_text'] ) && ! is_string( $fresh['search_text'] ) ) {
+			return new \WP_Error( 'file26_cold_owner_projection_incomplete', 'Current owner searchable text is malformed.' );
+		}
+		if ( isset( $document['normalized_body'] ) ) {
+			$fresh_body = isset( $fresh['search_text'] ) ? wp_strip_all_tags( $fresh['search_text'], true ) : $fresh_excerpt;
+			$normalizer = new Normalizer();
+			if ( ! is_string( $document['normalized_body'] )
+				|| ! hash_equals( $document['normalized_body'], $normalizer->normalize( $fresh_body ) ) ) {
+				return new \WP_Error( 'file26_cold_owner_projection_conflict', 'Current owner searchable text differs from stale indexed terms.' );
+			}
+		}
+		$additional = array(
+			'author_key' => array( '', 'text', 191 ),
+			'country' => array( '', 'text', 191 ),
+			'location' => array( '', 'text', 191 ),
+			'availability' => array( '', 'key', 0 ),
+			'safety_class' => array( 'general', 'key', 0 ),
+		);
+		foreach ( $additional as $key => $rule ) {
+			if ( isset( $fresh[ $key ] ) && ! is_string( $fresh[ $key ] ) ) {
+				return new \WP_Error( 'file26_cold_owner_projection_incomplete', 'Current owner public metadata is malformed.' );
+			}
+			$expected_value = isset( $fresh[ $key ] ) ? $fresh[ $key ] : $rule[0];
+			$expected_value = 'key' === $rule[1] ? sanitize_key( $expected_value ) : sanitize_text_field( $expected_value );
+			if ( $rule[2] > 0 ) { $expected_value = substr( $expected_value, 0, $rule[2] ); }
+			if ( ! isset( $document[ $key ] ) || ! is_string( $document[ $key ] )
+				|| ! hash_equals( $document[ $key ], $expected_value ) ) {
+				return new \WP_Error( 'file26_cold_owner_projection_conflict', 'Current native owner public metadata differs from the indexed event.' );
+			}
 		}
 		if ( ! in_array( $fresh['state'], array( 'published', 'active', 'corrected' ), true )
 			|| 'restricted' === $fresh['visibility'] ) {

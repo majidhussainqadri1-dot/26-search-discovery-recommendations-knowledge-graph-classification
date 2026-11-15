@@ -59,6 +59,25 @@ f26cold_db_check( is_string( $initial ) && $initial === $key, 'first cold public
 f26cold_db_check( 1 === (int) $wpdb->get_var(
 	$wpdb->prepare( "SELECT COUNT(*) FROM $docs WHERE canonical_key=%s", $key ) ), 'v1 published in actual MySQL serving index' );
 
+// An existing serving v1 document does NOT authorize delayed source v2
+// if the canonical owner already advanced to a different current v3.
+$owner_current = $doc;
+$owner_current['object_version'] = 3;
+$owner_current['source_event_sequence'] = 3;
+$owner_current['title'] = 'Newest owner text must win';
+$stale_existing = $doc;
+$stale_existing['object_version'] = 2;
+$stale_existing['source_event_sequence'] = 2;
+$stale_existing['title'] = 'Delayed superseded intermediate v2';
+$denied_existing = sabri_file26_upsert_document( $stale_existing );
+f26cold_db_check( is_wp_error( $denied_existing ) &&
+	'file26_cold_owner_version_conflict' === $denied_existing->get_error_code(),
+	'newly arrived stale higher-version event cannot overwrite an existing v1 document' );
+f26cold_db_check( 1 === (int) $wpdb->get_var(
+	$wpdb->prepare( "SELECT object_version FROM $docs WHERE canonical_key=%s", $key ) ),
+	'latest owner disagreement prevents any intermediate serving index write' );
+$owner_current = null;
+
 // The source owner now deletes the object at v2.
 $owner_current = null;
 $removed = sabri_file26_tombstone_document( $slug, 'articles', $doc['object_id'], 2, 'deleted' );

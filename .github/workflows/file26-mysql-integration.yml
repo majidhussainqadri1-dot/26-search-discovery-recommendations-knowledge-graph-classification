@@ -343,7 +343,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/03-sabri-profiles-and-doctors
-          ref: 9076b4ced1974f71480d6c9f418e3c7f3fb60c12
+          ref: 9e048d5485a2d125cd7550d681e736e5d4fc4ed2
           path: native-file03
           persist-credentials: false
       - name: Materialize File03 native source without overriding File00/09 claims

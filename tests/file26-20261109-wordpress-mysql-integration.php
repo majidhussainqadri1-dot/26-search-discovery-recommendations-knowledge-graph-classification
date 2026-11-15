@@ -89,6 +89,8 @@ file26_ci_require(is_array($live_v1) && (int)$live_v1['object_version']===1 && $
 wp_set_current_user(0);
 $search_v1 = sabri_file26_search(array('q'=>'Original Article','locale'=>'ur'));
 file26_ci_require(!is_wp_error($search_v1) && !empty($search_v1['results']) && $search_v1['results'][0]['title']==='Original Article', 'Guest search returns original active title through ranking and owner privacy contracts');
+// The native owner truly publishes v2 before the shadow worker starts.
+$owner_documents[$doc['object_id']] = $owner_doc;
 $uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
 file26_ci_assert_ok($uuid, 'Owner full shadow generation created with MySQL CREATE TABLE LIKE');
 file26_ci_require(is_string($uuid) && preg_match('/^[0-9a-f-]{36}$/',$uuid)===1, 'Owner queue has a generation UUID');
@@ -176,6 +178,8 @@ $live_change = $doc;
 $live_change['object_version'] = 3;
 $live_change['source_event_sequence'] = 3;
 $live_change['title'] = 'Concurrent Owner Live Update';
+// The owner has really committed v3; a delayed shadow v2 must be refused.
+$owner_documents[$doc['object_id']] = $live_change;
 file26_ci_assert_ok(sabri_file26_upsert_document($live_change), 'Concurrent live owner update made after snapshot');
 $drift_proof = \Sabri\File26\Shadow_Index::validate($drift_uuid);
 file26_ci_require(is_wp_error($drift_proof) && $drift_proof->get_error_code()==='file26_shadow_source_drift', 'Real database drift correctly blocks stale candidate promotion');
