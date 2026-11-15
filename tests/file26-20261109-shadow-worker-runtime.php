@@ -105,8 +105,16 @@ namespace {
 
     $wpdb = new F26FakeWpdb();
     $GLOBALS['f26_options'][$option]['state'] = 'prepared';
+    $no_owner = Shadow_Index::stage($uuid, $doc, 'valid-lease-token');
+    verify(is_wp_error($no_owner) && $no_owner->get_error_code()==='file26_cold_owner_attestation_unavailable',
+        'Cold shadow worker cannot invent an owner proof when standalone registry is absent');
+    verify(count($wpdb->writes)===0 && $wpdb->releases===1, 'Unverified cold source writes no shadow table rows');
+
+    $wpdb = new F26FakeWpdb();
+    $wpdb->serving = array('object_version'=>1,'source_event_sequence'=>1,
+        'checksum'=>str_repeat('c',64),'connector_slug'=>'file05');
     $result = Shadow_Index::stage($uuid, $doc, 'valid-lease-token');
-    verify($result===true && count($wpdb->writes)===2, 'Valid worker stages document and graph node together');
+    verify($result===true && count($wpdb->writes)===2, 'Valid worker updates an existing versioned document and graph node together');
     verify(strpos($wpdb->writes[0]['table'], 'wp_f26_sd_')===0 && strpos($wpdb->writes[1]['table'], 'wp_f26_sn_')===0, 'Valid worker writes only physically separate shadow tables');
     verify($wpdb->transactions===array('START TRANSACTION','COMMIT') && $wpdb->releases===1, 'Successful staging commits then releases lock');
 
