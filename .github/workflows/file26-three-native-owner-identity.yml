@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: majidhussainqadri1-dot/03-sabri-profiles-and-doctors
-          ref: 3f7f8a7cfc242b0c38ae1b0af76047c6f9bcb6aa
+          ref: fd9180590cde1d663377fd5ce9d359ae14eb1261
           path: native-file03
           persist-credentials: false
       - name: Prove all three exact source trees
@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           test "$(git -C file26 rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
           test "$(git -C native-file00 rev-parse HEAD)" = f4204593d1a4e4ecd7ce12d0e1bc7174da33b246
-          test "$(git -C native-file03 rev-parse HEAD)" = 3f7f8a7cfc242b0c38ae1b0af76047c6f9bcb6aa
+          test "$(git -C native-file03 rev-parse HEAD)" = fd9180590cde1d663377fd5ce9d359ae14eb1261
           grep -q 'class-file26-file03-identity-consumer.php' file26/file-26-search-discovery.php
           echo "PASS: all 3 native source git SHAs pinned, not PR synthetic merges"
       - uses: shivammathur/setup-php@fc14643b0a99ee9db10a3c025a33d76544fa3761
