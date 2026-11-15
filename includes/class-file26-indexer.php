@@ -28,8 +28,11 @@ final class Indexer {
 			// Never infer freshness from absence. The native owner must attest
 			// this exact current version/projection before creating the row.
 			if ( ! $existing ) {
-				$fresh = Owner_Freshness::attest_cold_document( $this->connectors, $document );
+				$owner_projection = null;
+				$fresh = Owner_Freshness::attest_cold_document( $this->connectors, $document, $owner_projection );
 				if ( is_wp_error( $fresh ) ) { return $fresh; }
+				$parity = $this->attest_canonical_projection_parity( $document, $owner_projection );
+				if ( is_wp_error( $parity ) ) { return $parity; }
 			}
 			if ( $existing ) {
 				$incoming_version = (int) $document['object_version'];
@@ -91,6 +94,58 @@ final class Indexer {
 		$now=DB::now();
 		$data=array('canonical_key'=>self::canonical_key($connector,$domain,$object_id),'connector_slug'=>$connector,'domain_name'=>$domain,'object_id'=>$object_id,'object_version'=>$version,'entity_type'=>sanitize_key($document['entity_type']),'locale'=>substr(sanitize_text_field($document['locale']),0,20),'state'=>$state,'visibility'=>$visibility,'title'=>$title,'excerpt'=>$excerpt,'normalized_title'=>$this->normalizer->normalize($title),'normalized_body'=>$this->normalizer->normalize($body),'canonical_url'=>$url,'author_key'=>isset($document['author_key'])?substr(sanitize_text_field($document['author_key']),0,191):'','topic_ids'=>wp_json_encode(array_slice(array_values(array_unique(array_map('sanitize_text_field',isset($document['topic_ids'])?(array)$document['topic_ids']:array()))),0,100)),'country'=>isset($document['country'])?substr(sanitize_text_field($document['country']),0,191):'','location'=>isset($document['location'])?substr(sanitize_text_field($document['location']),0,191):'','availability'=>isset($document['availability'])?sanitize_key($document['availability']):'','quality_score'=>$scores['quality_score'],'authority_score'=>$scores['authority_score'],'popularity_score'=>$scores['popularity_score'],'freshness_at'=>$freshness,'safety_class'=>isset($document['safety_class'])?sanitize_key($document['safety_class']):'general','payload'=>wp_json_encode($payload),'source_event_id'=>isset($document['source_event_id'])?substr(sanitize_text_field($document['source_event_id']),0,191):'','source_event_sequence'=>$sequence,'indexed_at'=>$now,'updated_at'=>$now);
 		$checksum_data = $data; unset( $checksum_data['indexed_at'], $checksum_data['updated_at'] ); if ( ! $freshness_provided ) { unset( $checksum_data['freshness_at'] ); } $data['checksum']=hash('sha256',wp_json_encode($checksum_data)); return $data;
+	}
+
+	/**
+	 * A same-version owner response is not enough: every indexed search field
+	 * must match the fully sanitized *current* native owner projection. A stale
+	 * search_text, country, topic, safety label, rank or trust payload may
+	 * otherwise survive while identity/title/version checks all pass.
+	 *
+	 * Called only AFTER the caller obtained a current native owner response.
+	 * No direct owner database access, no writes, no global rank mutation.
+	 */
+	public function attest_canonical_projection_parity( array $candidate, $owner_current ) {
+		if ( ! is_array( $owner_current ) ) {
+			return new \WP_Error( 'file26_native_projection_unavailable', 'A current canonical owner document is required.' );
+		}
+		$expected = $this->sanitize_document( $owner_current );
+		if ( is_wp_error( $expected ) ) {
+			return new \WP_Error( 'file26_native_projection_invalid', 'Current owner returned a malformed or non-indexable projection.' );
+		}
+		$compared = 0;
+		foreach ( $expected as $name => $native ) {
+			if ( in_array( $name, array( 'indexed_at', 'updated_at', 'checksum' ), true ) ) {
+				continue; // Only database-generated temporal/checksum fields.
+			}
+			// When neither source supplies freshness_at, both calls to the
+			// sanitizer use their own wall-clock time. This field is not a
+			// canonical owner assertion and must not cause false rejections.
+			if ( 'freshness_at' === $name &&
+				( ! isset( $owner_current['freshness_at'] ) || '' === trim( (string) $owner_current['freshness_at'] ) ) &&
+				( ! isset( $candidate['freshness_at'] ) || '' === trim( (string) $candidate['freshness_at'] ) ) ) {
+				continue;
+			}
+			if ( ! array_key_exists( $name, $candidate ) ) {
+				return new \WP_Error( 'file26_native_projection_missing', 'The indexed candidate omitted a required canonical field.' );
+			}
+			$indexed = $candidate[ $name ];
+			if ( is_float( $native ) || is_float( $indexed ) ) {
+				if ( ! is_numeric( $native ) || ! is_numeric( $indexed ) ||
+					! is_finite( (float) $native ) || ! is_finite( (float) $indexed ) ||
+					sprintf( '%.13g', (float) $native ) !== sprintf( '%.13g', (float) $indexed ) ) {
+					return new \WP_Error( 'file26_native_projection_mismatch', 'Candidate ranking evidence differs from canonical owner truth.' );
+				}
+			} elseif ( ! is_scalar( $native ) || ! is_scalar( $indexed ) ||
+				! hash_equals( (string) $native, (string) $indexed ) ) {
+				return new \WP_Error( 'file26_native_projection_mismatch', 'Candidate search projection differs from canonical owner truth.' );
+			}
+			++$compared;
+		}
+		if ( $compared < 20 ) {
+			return new \WP_Error( 'file26_native_projection_incomplete', 'Canonical field-by-field comparison could not be completed.' );
+		}
+		return true;
 	}
 
 	private function strict_integer( $value, $minimum = 0 ) {

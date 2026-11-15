@@ -110,6 +110,50 @@ f26cold_db_check( 3 === (int) $wpdb->get_var(
 	$wpdb->prepare( "SELECT object_version FROM $docs WHERE canonical_key=%s", $key ) ),
 	'MariaDB contains only fresh native v3, not stale v1' );
 
+// A stale or forged event may keep the exact owner version, title and URL,
+// but change *another* indexed public field. R3 proves full normalized parity,
+// not a superficial version/title-only attestation, in actual MariaDB.
+$parity_truth = $doc;
+$parity_truth['object_id'] = 'field-parity-fresh-102';
+$parity_truth['canonical_url'] = home_url( '/articles/field-parity-fresh-102' );
+$parity_truth['object_version'] = 9;
+$parity_truth['source_event_sequence'] = 9;
+$parity_truth['search_text'] = 'Owner-approved public education content';
+$parity_truth['country'] = 'Pakistan';
+$parity_truth['location'] = 'Gujrat';
+$parity_truth['author_key'] = 'owner:approved-public';
+$parity_truth['safety_class'] = 'general';
+$parity_truth['topic_ids'] = array( 'remedy-history' );
+$parity_truth['quality_score'] = 0.7;
+$parity_truth['payload'] = array( 'verified_doctor' => false, 'content_type_label' => 'Education' );
+$owner_current = $parity_truth;
+foreach ( array(
+	'body' => array( 'search_text' => 'stale personal patient data' ),
+	'city' => array( 'location' => 'Hidden private clinic' ),
+	'country' => array( 'country' => 'Unapproved private address' ),
+	'owner' => array( 'author_key' => 'unverified:other-owner' ),
+	'topic' => array( 'topic_ids' => array( 'restricted-patient-topic' ) ),
+	'quality' => array( 'quality_score' => 0.99 ),
+	'trust' => array( 'payload' => array( 'verified_doctor' => true, 'content_type_label' => 'Education' ) ),
+	'label' => array( 'payload' => array( 'verified_doctor' => false, 'content_type_label' => 'Unapproved medical advice' ) ),
+	'safety' => array( 'safety_class' => 'verified_professional_directory' ),
+) as $name => $changes ) {
+	$tampered = array_merge( $parity_truth, $changes );
+	$denied = sabri_file26_upsert_document( $tampered );
+	f26cold_db_check( is_wp_error( $denied ) &&
+		'file26_native_projection_mismatch' === $denied->get_error_code(),
+		'current same-version owner refuses stale or forged public index field: ' . $name );
+}
+$parity_key = \Sabri\File26\Indexer::canonical_key( $slug, 'articles', $parity_truth['object_id'] );
+f26cold_db_check( 0 === (int) $wpdb->get_var( $wpdb->prepare(
+	"SELECT COUNT(*) FROM $docs WHERE canonical_key=%s", $parity_key ) ),
+	'No partial tampered index row entered real MariaDB after nine malicious field variants' );
+$parity_saved = sabri_file26_upsert_document( $parity_truth );
+f26cold_db_check( is_string( $parity_saved ) && $parity_saved === $parity_key,
+	'Exact complete native owner public-safe search projection remains indexable' );
+$wpdb->delete( $docs, array( 'canonical_key' => $parity_key ) );
+$wpdb->delete( $nodes, array( 'node_key' => $parity_key ) );
+
 // No content is used outside the ephemeral CI instance.
 $wpdb->delete( $docs, array( 'canonical_key' => $key ) );
 $wpdb->delete( $nodes, array( 'node_key' => $key ) );
