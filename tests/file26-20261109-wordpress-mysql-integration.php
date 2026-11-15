@@ -89,6 +89,8 @@ file26_ci_require(is_array($live_v1) && (int)$live_v1['object_version']===1 && $
 wp_set_current_user(0);
 $search_v1 = sabri_file26_search(array('q'=>'Original Article','locale'=>'ur'));
 file26_ci_require(!is_wp_error($search_v1) && !empty($search_v1['results']) && $search_v1['results'][0]['title']==='Original Article', 'Guest search returns original active title through ranking and owner privacy contracts');
+// The native owner truly publishes v2 before the shadow worker starts.
+$owner_documents[$doc['object_id']] = $owner_doc;
 $uuid = $plugin->indexer()->enqueue_reindex('file26_ci_fixture');
 file26_ci_assert_ok($uuid, 'Owner full shadow generation created with MySQL CREATE TABLE LIKE');
 file26_ci_require(is_string($uuid) && preg_match('/^[0-9a-f-]{36}$/',$uuid)===1, 'Owner queue has a generation UUID');
