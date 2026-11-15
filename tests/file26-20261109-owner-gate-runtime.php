@@ -46,12 +46,14 @@ namespace {
             'list_batch'=>static function() { return array('items'=>array(),'done'=>true); },
             'can_view'=>static function() { return false; },
             'health'=>static function() { return array('state'=>'healthy'); },
+            'fetch_object'=>static function() { return null; },
         );
         $adapters[$key] = array(
             'entity_types'=>$owner['entity_types'],'contract_version'=>'1.0',
             'list_batch'=>$registry[$key]['list_batch'],
             'can_view'=>$registry[$key]['can_view'],
             'health'=>$registry[$key]['health'],
+            'fetch_object'=>$registry[$key]['fetch_object'],
             'privacy_classes'=>array('public'),
             'visibility_fields'=>array('public'),
             'deletion_semantics'=>'versioned_tombstone'
@@ -73,6 +75,9 @@ namespace {
     $bad = $registry; unset($bad['file21']['list_batch']);
     $badGate = new Sabri\File26\Owner_Contracts(new Sabri\File26\Connectors($bad));
     assertion(!$badGate->all_required_active(), 'File21 missing batch callback fails gate');
+    $bad = $registry; unset($bad['file10']['fetch_object']);
+    $badGate = new Sabri\File26\Owner_Contracts(new Sabri\File26\Connectors($bad));
+    assertion(!$badGate->all_required_active(), 'File10 absent current owner fetch is not production ready even when all other callbacks pass');
     $bad = $registry; $bad['file08']['owner_file']='File 03';
     $badGate = new Sabri\File26\Owner_Contracts(new Sabri\File26\Connectors($bad));
     assertion(!$badGate->all_required_active(), 'Impersonated wrong owner_file cannot satisfy canonical File08 readiness');
@@ -81,6 +86,10 @@ namespace {
     $collect = new Sabri\File26\Owner_Contracts(new Sabri\File26\Connectors(array()));
     $manifests = $collect->collect(array());
     assertion(count($manifests)===11, 'All eleven correctly formed synthetic native adapter contracts collected');
+    unset($GLOBALS['file26_adapters']['file12']['fetch_object']);
+    $manifests = $collect->collect(array());
+    assertion(count($manifests)===10, 'Missing File12 fresh object callback cannot register a canonical owner adapter');
+    $GLOBALS['file26_adapters']['file12']['fetch_object']=$registry['file12']['fetch_object'];
     unset($GLOBALS['file26_adapters']['file06']['list_batch']);
     $manifests = $collect->collect(array());
     assertion(count($manifests)===10, 'Absent list_batch prevents File06 source owner from registering');
