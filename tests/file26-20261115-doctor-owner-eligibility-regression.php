@@ -23,6 +23,7 @@ namespace Sabri\File26 {
 			$this->calls++;
 			if ( 'outage' === $this->mode ) { throw new \RuntimeException( 'private owner DB unavailable' ); }
 			if ( 'deny' === $this->mode ) { return false; }
+			if ( 'string_true' === $this->mode ) { return 'true'; }
 			if ( 'second_denied' === $this->mode ) { return 2 !== (int) $document['object_version']; }
 			return isset( $document['payload']['verified_doctor'] ) && true === $document['payload']['verified_doctor'];
 		}
@@ -90,6 +91,15 @@ namespace {
 		$unavailable = $reader->invoke( $ranking );
 		must( is_wp_error( $unavailable ) && 'file26_doctor_owner_unavailable' === $unavailable->get_error_code(), 'untrusted owner manifest must fail closed: ' . $mode );
 	}
+	$connectors->mode = 'string_true';
+	$wrongType = $reader->invoke( $ranking );
+	must( is_wp_error( $wrongType ) && 'file26_doctor_owner_not_current' === $wrongType->get_error_code(), 'string-shaped owner permission must not count as true' );
+
+	$connectors->mode = 'allow';
+	$legacyPureHelper = new \Sabri\File26\Doctor_Ranking( $security );
+	$noRegistry = $reader->invoke( $legacyPureHelper );
+	must( is_wp_error( $noRegistry ) && 'file26_doctor_owner_unavailable' === $noRegistry->get_error_code(), 'legacy one-argument constructor cannot serve an unverified ranking' );
+
 	$connectors->mode = 'outage';
 	$outage = $reader->invoke( $ranking );
 	must( is_wp_error( $outage ) && 'file26_doctor_owner_read_failed' === $outage->get_error_code(), 'owner DB/callback outage must fail closed' );
