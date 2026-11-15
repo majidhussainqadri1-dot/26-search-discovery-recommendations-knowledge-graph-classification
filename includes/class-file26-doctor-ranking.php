@@ -6,7 +6,7 @@ defined( 'ABSPATH' ) || exit;
 final class Doctor_Ranking {
 	private $security;
 	private $connectors;
-	public function __construct( Security $security, Connectors $connectors ) {
+	public function __construct( Security $security, Connectors $connectors = null ) {
 		$this->security = $security;
 		$this->connectors = $connectors;
 	}
@@ -112,6 +112,11 @@ final class Doctor_Ranking {
 		// trusted indexed visibility alone. An owner may have retired or revoked
 		// a doctor since that projection was stored. No ranking is served until
 		// every candidate is rechecked against its CURRENT native File 07 owner.
+		// Legacy library callers may still construct the ranking helper without
+		// connectors for pure score/policy calculations, but cannot serve rankings.
+		if ( null === $this->connectors && ! empty( $rows ) ) {
+			return new \WP_Error( 'file26_doctor_owner_unavailable', 'Native File07 owner verification has not been configured.', array( 'status' => 503 ) );
+		}
 		foreach ( $rows as $row ) {
 			$slug = isset( $row['connector_slug'] ) ? (string) $row['connector_slug'] : '';
 			$manifest = $this->connectors->get( $slug );
