@@ -110,6 +110,39 @@ f26cold_db_check( 3 === (int) $wpdb->get_var(
 	$wpdb->prepare( "SELECT object_version FROM $docs WHERE canonical_key=%s", $key ) ),
 	'MariaDB contains only fresh native v3, not stale v1' );
 
+// R2.1 HOT path: a serving row already exists at v3. A fabricated native
+// v4 event is not authoritative merely because 4 > 3.
+$fabricated_v4 = $reapproved;
+$fabricated_v4['object_version'] = 4;
+$fabricated_v4['source_event_sequence'] = 4;
+$fabricated_v4['title'] = 'Injected disallowed professional claim';
+$owner_current = null;
+$revoked_hot = sabri_file26_upsert_document( $fabricated_v4 );
+f26cold_db_check( is_wp_error( $revoked_hot ) &&
+	'file26_cold_owner_attestation_denied' === $revoked_hot->get_error_code(),
+	'Serving v3 cannot be overwritten by a fabricated higher v4 during native owner revocation' );
+$owner_current = $reapproved;
+$false_newer = sabri_file26_upsert_document( $fabricated_v4 );
+f26cold_db_check( is_wp_error( $false_newer ) &&
+	'file26_cold_owner_version_conflict' === $false_newer->get_error_code(),
+	'Serving v3 rejects higher v4 that current owner has not issued' );
+f26cold_db_check( 3 === (int) $wpdb->get_var( $wpdb->prepare(
+	"SELECT object_version FROM $docs WHERE canonical_key=%s", $key ) ),
+	'Failed hot replay preserved v3 active serving version' );
+$owner_current = $fabricated_v4;
+$owner_current['title'] = 'Actually current approved professional education';
+$spoofed = sabri_file26_upsert_document( $fabricated_v4 );
+f26cold_db_check( is_wp_error( $spoofed ) &&
+	'file26_cold_owner_projection_conflict' === $spoofed->get_error_code(),
+	'Serving v3 cannot accept same-v4 but counterfeit title' );
+$valid_native_v4 = $owner_current;
+$approved_v4 = sabri_file26_upsert_document( $valid_native_v4 );
+f26cold_db_check( is_string( $approved_v4 ) && $approved_v4 === $key,
+	'Genuinely current native v4 can safely advance an existing serving record' );
+f26cold_db_check( 4 === (int) $wpdb->get_var( $wpdb->prepare(
+	"SELECT object_version FROM $docs WHERE canonical_key=%s", $key ) ),
+	'Actual SQL serving index advanced only after current owner approval' );
+
 // A stale or forged event may keep the exact owner version, title and URL,
 // but change *another* indexed public field. R3 proves full normalized parity,
 // not a superficial version/title-only attestation, in actual MariaDB.
