@@ -72,7 +72,11 @@ final class File03_Identity_Consumer {
 	public function on_profile_changed( $public_id, $version ) {
 		if ( ! $this->enabled() ) { return; }
 		$validated = self::strict_version( $version );
-		$result = $this->refresh( $public_id, null === $validated ? 0 : $validated );
+		if ( null === $validated ) {
+			$this->record_failure( new \WP_Error( 'file26_file03_event_version_invalid' ), $public_id );
+			return;
+		}
+		$result = $this->refresh( $public_id, $validated );
 		if ( is_wp_error( $result ) ) { $this->record_failure( $result, $public_id ); }
 		else { delete_option( 'sabri_file26_file03_identity_refresh_error' ); }
 	}
