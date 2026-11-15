@@ -5,7 +5,11 @@ defined( 'ABSPATH' ) || exit;
 /** Explainable global verified-doctor ranking projection. */
 final class Doctor_Ranking {
 	private $security;
-	public function __construct( Security $security ) { $this->security = $security; }
+	private $connectors;
+	public function __construct( Security $security, Connectors $connectors = null ) {
+		$this->security = $security;
+		$this->connectors = $connectors;
+	}
 
 	/**
 	 * File24 assurance accepts a semantic policy version, never an arbitrary
@@ -119,8 +123,44 @@ final class Doctor_Ranking {
 		global $wpdb;
 		$documents = DB::table( 'documents' ); $connectors = DB::table( 'connectors' );
 		$wpdb->last_error='';
-		$rows = $wpdb->get_results( "SELECT d.canonical_key,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( null === $rows ) { return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) ); }
+		$rows = $wpdb->get_results( "SELECT d.canonical_key,d.connector_slug,d.domain_name,d.object_id,d.object_version,d.entity_type,d.state,d.visibility,d.title,d.canonical_url,d.country,d.location,d.locale,d.topic_ids,d.payload FROM $documents d INNER JOIN $connectors c ON c.slug=d.connector_slug AND c.status='active' AND c.owner_file='File 07' WHERE d.entity_type='doctor_directory_projection' AND d.state IN ('published','active','corrected') AND d.visibility='public' ORDER BY d.canonical_key", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		if ( null === $rows || '' !== (string) $wpdb->last_error ) {
+			return new \WP_Error( 'file26_doctor_ranking_read_failed', 'Doctor ranking source projections could not be read safely.', array( 'status' => 500 ) );
+		}
+		$audience = $this->security->audience();
+		if ( ! is_array( $audience ) ) {
+			return new \WP_Error( 'file26_doctor_owner_audience_unknown', 'Current membership context is unavailable.', array( 'status' => 503 ) );
+		}
+		// Unlike ordinary search, the direct doctor-ranking SQL path previously
+		// trusted indexed visibility alone. An owner may have retired or revoked
+		// a doctor since that projection was stored. No ranking is served until
+		// every candidate is rechecked against its CURRENT native File 07 owner.
+		// Legacy library callers may still construct the ranking helper without
+		// connectors for pure score/policy calculations, but cannot serve rankings.
+		if ( null === $this->connectors && ! empty( $rows ) ) {
+			return new \WP_Error( 'file26_doctor_owner_unavailable', 'Native File07 owner verification has not been configured.', array( 'status' => 503 ) );
+		}
+		foreach ( $rows as $row ) {
+			$slug = isset( $row['connector_slug'] ) ? (string) $row['connector_slug'] : '';
+			$manifest = $this->connectors->get( $slug );
+			if ( ! is_array( $manifest ) || ! isset( $manifest['can_view'] ) || ! is_callable( $manifest['can_view'] )
+				|| ! isset( $manifest['owner_file'], $manifest['status'] ) || 'File 07' !== $manifest['owner_file'] || 'active' !== $manifest['status'] ) {
+				return new \WP_Error( 'file26_doctor_owner_unavailable', 'Current doctor-source authorization is not available.', array( 'status' => 503 ) );
+			}
+			$projection = $row;
+			$projection['payload'] = json_decode( isset( $row['payload'] ) ? (string) $row['payload'] : '', true );
+			if ( ! is_array( $projection['payload'] ) ) {
+				return new \WP_Error( 'file26_doctor_owner_projection_invalid', 'Doctor projection cannot be revalidated safely.', array( 'status' => 503 ) );
+			}
+			try {
+				$allowed = $this->connectors->can_view( $slug, $projection, $audience );
+			} catch ( \Throwable $e ) {
+				return new \WP_Error( 'file26_doctor_owner_read_failed', 'Doctor-source authorization could not be completed.', array( 'status' => 503 ) );
+			}
+			if ( true !== $allowed ) {
+				return new \WP_Error( 'file26_doctor_owner_not_current', 'Current doctor authorization rejected an indexed ranking candidate.', array( 'status' => 503 ) );
+			}
+		}
 		return $rows;
 	}
 	private function matches_context( array $row, array $payload, $context, $value ) { if ( 'global' === $context ) { return true; } $topics = json_decode( isset( $row['topic_ids'] ) ? $row['topic_ids'] : '', true ); $topics = is_array( $topics ) ? array_map( 'sanitize_key', $topics ) : array(); if ( 'educator' === $context ) { return in_array( 'educator', $topics, true ) || in_array( 'teacher', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.6 ); } if ( 'researcher' === $context ) { return in_array( 'researcher', $topics, true ) || in_array( 'research', $topics, true ) || ( isset( $payload['knowledge_contribution_score'] ) && (float) $payload['knowledge_contribution_score'] >= 0.75 ); } $needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $value ), 'UTF-8' ) : strtolower( trim( $value ) ); if ( 'country' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['country'] ), 'UTF-8' ) : strtolower( trim( (string) $row['country'] ) ); return $candidate === $needle; } if ( 'city' === $context ) { $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $row['location'] ), 'UTF-8' ) : strtolower( trim( (string) $row['location'] ) ); return $candidate === $needle; } if ( 'language' === $context ) { $language = isset( $payload['language'] ) ? (string) $payload['language'] : (string) $row['locale']; $candidate = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $language ), 'UTF-8' ) : strtolower( trim( $language ) ); return $candidate === $needle || 0 === strpos( $candidate, $needle . '-' ); } if ( 'specialization' === $context ) { return in_array( sanitize_key( $value ), $topics, true ); } return false; }
