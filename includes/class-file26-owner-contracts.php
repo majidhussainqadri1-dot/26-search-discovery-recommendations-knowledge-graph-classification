@@ -39,7 +39,7 @@ final class Owner_Contracts {
 		foreach ( $adapters as $owner_key => $adapter ) {
 			$owner_key=sanitize_key($owner_key); if(!isset($requirements[$owner_key])||!is_array($adapter)){continue;} $required=$requirements[$owner_key];
 			$provided_types=isset($adapter['entity_types'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['entity_types'])))):array(); if(array_diff($required['entity_types'],$provided_types)){continue;}
-			if(empty($adapter['contract_version'])||empty($adapter['list_batch'])||!is_callable($adapter['list_batch'])||empty($adapter['can_view'])||!is_callable($adapter['can_view'])||empty($adapter['health'])||!is_callable($adapter['health'])||empty($adapter['fetch_object'])||!is_callable($adapter['fetch_object'])){continue;}
+			if(empty($adapter['contract_version'])||empty($adapter['list_batch'])||!is_callable($adapter['list_batch'])||empty($adapter['can_view'])||!is_callable($adapter['can_view'])||empty($adapter['health'])||!is_callable($adapter['health'])){continue;}
 			$privacy_classes=isset($adapter['privacy_classes'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['privacy_classes'])))):array();
 			$visibility_fields=isset($adapter['visibility_fields'])?array_values(array_unique(array_filter(array_map('sanitize_key',(array)$adapter['visibility_fields'])))):array();
 			$deletion_semantics=isset($adapter['deletion_semantics'])?sanitize_key($adapter['deletion_semantics']):'';
@@ -47,7 +47,7 @@ final class Owner_Contracts {
 			$manifests[]=array(
 				'slug'=>isset($adapter['slug'])?sanitize_key($adapter['slug']):$owner_key.'-search-owner','owner_file'=>$required['owner_file'],'contract_version'=>substr(sanitize_text_field($adapter['contract_version']),0,64),'entity_types'=>$provided_types,
 				'privacy_classes'=>$privacy_classes,'visibility_fields'=>$visibility_fields,'deletion_semantics'=>$deletion_semantics,'status'=>isset($adapter['status'])?sanitize_key($adapter['status']):'proposed',
-				'list_batch'=>$adapter['list_batch'],'can_view'=>$adapter['can_view'],'health'=>$adapter['health'],'fetch_object'=>$adapter['fetch_object'],'event_contract'=>isset($adapter['event_contract'])?substr(sanitize_text_field($adapter['event_contract']),0,191):'','index_schema'=>isset($adapter['index_schema'])?substr(sanitize_text_field($adapter['index_schema']),0,191):'sabri.file26.document.v1.1',
+				'list_batch'=>$adapter['list_batch'],'can_view'=>$adapter['can_view'],'health'=>$adapter['health'],'fetch_object'=>isset($adapter['fetch_object'])&&is_callable($adapter['fetch_object'])?$adapter['fetch_object']:null,'event_contract'=>isset($adapter['event_contract'])?substr(sanitize_text_field($adapter['event_contract']),0,191):'','index_schema'=>isset($adapter['index_schema'])?substr(sanitize_text_field($adapter['index_schema']),0,191):'sabri.file26.document.v1.1',
 			);
 		}
 		return $manifests;
