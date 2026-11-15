@@ -20,7 +20,7 @@ final class Owner_Freshness {
 	 * The native owner must provide a complete current public-safe document.
 	 * Unknown, unavailable, stale, conflicting and malformed source data deny.
 	 */
-	public static function attest_cold_document( Connectors $connectors, array $document ) {
+	public static function attest_cold_document( Connectors $connectors, array $document, &$current_owner = null ) {
 		$slug = isset( $document['connector_slug'] ) && is_string( $document['connector_slug'] ) ? $document['connector_slug'] : '';
 		$manifest = $slug !== '' ? $connectors->get( $slug ) : null;
 		if ( ! is_array( $manifest ) || ! isset( $manifest['status'], $manifest['fetch_object'] )
@@ -87,6 +87,7 @@ final class Owner_Freshness {
 			|| 'restricted' === $fresh['visibility'] ) {
 			return new \WP_Error( 'file26_cold_owner_attestation_denied', 'Owner source is withdrawn or restricted.' );
 		}
+		$current_owner = $fresh;
 		return true;
 	}
 
