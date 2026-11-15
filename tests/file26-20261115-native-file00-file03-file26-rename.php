@@ -53,7 +53,8 @@ f26_3native_require( is_array( $before ) && $before['object_id'] === $profile_uu
 	'Native File03 owner verifies current File00 founder and exposes genuine public-only search projection' );
 $manifest = SPD_Contracts::file26_owner_connector_adapters( array() )['file03'];
 $registered = sabri_file26_register_connector( $manifest );
-f26_3native_require( true === $registered, 'Genuine File03 owner connector registered in File26 proposed lane' );
+f26_3native_require( true === $registered, 'Genuine File03 owner connector registered in File26 proposed lane: ' .
+	( is_wp_error( $registered ) ? $registered->get_error_code() : gettype( $registered ) ) );
 $connectors = \Sabri\File26\DB::table( 'connectors' );
 f26_3native_require( 1 === (int) $wpdb->update( $connectors,
 	array( 'status' => 'active' ), array( 'slug' => 'file03-profiles' ) ),
