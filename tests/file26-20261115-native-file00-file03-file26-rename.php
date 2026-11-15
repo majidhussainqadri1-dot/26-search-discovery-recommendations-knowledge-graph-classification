@@ -141,4 +141,36 @@ if ( ! is_wp_error( $results ) ) {
 }
 f26_3native_require( $found, 'Actual anonymous File26 public search finds only latest approved native File00 founder name' );
 
-echo "PASS: real disposable File00+03+26 identity update, native monotonic outbox, owner ACL, indexed v14->v15 and public search.\n";
+// Owner suspension is canonical File03 state, not a delayed File26
+// tombstone. PUBLIC Search and Graph must suppress immediately.
+$graph_before = \Sabri\File26\Plugin::instance()->graph()->query( $key, 1, 5 );
+f26_3native_require( ! is_wp_error( $graph_before ) && count( $graph_before['nodes'] ) === 1,
+	'Real native File03 public founder is visible in the owner-revalidated Graph' );
+$revoked = $wpdb->update( $profiles, array( 'state' => 'suspended' ),
+	array( 'id' => (int) $profile['id'] ) );
+f26_3native_require( 1 === (int) $revoked,
+	'Only disposable File03 source owner is suspended for revocation test' );
+$hidden_search = sabri_file26_search( array( 'q' => $new_name, 'locale' => 'en-US', 'limit' => 10 ) );
+$leaked = false;
+if ( ! is_wp_error( $hidden_search ) ) {
+	foreach ( (array) ( $hidden_search['results'] ?? array() ) as $item ) {
+		if ( ( $item['key'] ?? '' ) === $key ) { $leaked = true; }
+	}
+}
+f26_3native_require( ! $leaked && (int) $get_row()['object_version'] === 15,
+	'Current File03 suspension immediately suppresses Search even when native v15 derivative row remains' );
+$graph_after = \Sabri\File26\Plugin::instance()->graph()->query( $key, 1, 5 );
+f26_3native_require( is_wp_error( $graph_after ) &&
+	'file26_graph_node_not_found' === $graph_after->get_error_code(),
+	'Current File03 suspension immediately suppresses public Graph node and provenance' );
+$wpdb->update( $profiles, array( 'state' => 'active' ), array( 'id' => (int) $profile['id'] ) );
+$restored_search = sabri_file26_search( array( 'q' => $new_name, 'locale' => 'en-US', 'limit' => 10 ) );
+$restored = false;
+if ( ! is_wp_error( $restored_search ) ) {
+	foreach ( (array) ( $restored_search['results'] ?? array() ) as $item ) {
+		if ( ( $item['key'] ?? '' ) === $key && ( $item['title'] ?? '' ) === $new_name ) { $restored = true; }
+	}
+}
+f26_3native_require( $restored,
+	'Restored File03 canonical owner eligibility exposes only current approved File00 display name' );
+echo "PASS: native File00+03+26 name/outbox and independent current-owner suspension across Search/Graph.\n";
