@@ -117,8 +117,11 @@ final class Shadow_Index {
 				return new \WP_Error( 'file26_cold_owner_attestation_unavailable', 'Native canonical owner registry is required for cold shadow indexing.' );
 			}
 			$native = Plugin::instance()->connectors();
-			$fresh = Owner_Freshness::attest_cold_document( $native, $doc );
+			$owner_projection = null;
+			$fresh = Owner_Freshness::attest_cold_document( $native, $doc, $owner_projection );
 			if ( is_wp_error( $fresh ) ) { return $fresh; }
+			$parity = Plugin::instance()->indexer()->attest_canonical_projection_parity( $doc, $owner_projection );
+			if ( is_wp_error( $parity ) ) { return $parity; }
 		}
 		if($serving){
 			if((string)$serving['connector_slug']!==(string)$doc['connector_slug']){return new \WP_Error('file26_shadow_identity_conflict','Owner cannot replace another connector projection.');}
