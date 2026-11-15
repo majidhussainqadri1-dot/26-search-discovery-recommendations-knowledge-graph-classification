@@ -88,7 +88,7 @@ namespace {
     assertion(count($manifests)===11, 'All eleven correctly formed synthetic native adapter contracts collected');
     unset($GLOBALS['file26_adapters']['file12']['fetch_object']);
     $manifests = $collect->collect(array());
-    assertion(count($manifests)===10, 'Missing File12 fresh object callback cannot register a canonical owner adapter');
+    assertion(count($manifests)===11 && !isset($manifests[7]['fetch_object']), 'Incomplete File12 adapter remains observable but cannot be production-ready without fresh fetch');
     $GLOBALS['file26_adapters']['file12']['fetch_object']=$registry['file12']['fetch_object'];
     unset($GLOBALS['file26_adapters']['file06']['list_batch']);
     $manifests = $collect->collect(array());
