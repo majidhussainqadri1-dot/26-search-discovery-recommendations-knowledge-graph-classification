@@ -28,6 +28,7 @@ global $wpdb;
 $plugin = \Sabri\File26\Plugin::instance();
 $slug = 'file26_ci_doctor_acl';
 $mode = 'allow';
+$fixture_current = null;
 $manifest = array(
 	'slug' => $slug,
 	'owner_file' => 'File 07',
@@ -39,6 +40,11 @@ $manifest = array(
 	'status' => 'proposed',
 	'list_batch' => static function () {
 		return array( 'items' => array(), 'done' => true );
+	},
+	'fetch_object' => static function ( $entity_type, $object_id ) use ( &$fixture_current ) {
+		if ( ! is_array( $fixture_current ) || $entity_type !== $fixture_current['entity_type'] ||
+			$object_id !== $fixture_current['object_id'] ) { return null; }
+		return $fixture_current;
 	},
 	'health' => static function () {
 		return array( 'state' => 'ok', 'source' => 'synthetic-file07-ci' );
@@ -80,6 +86,7 @@ $doc = array(
 	'canonical_url' => home_url( '/doctors/file26-ci-public-doctor-1' ),
 	'payload' => array( 'verified_doctor' => true ),
 );
+$fixture_current = $doc;
 $inserted = sabri_file26_upsert_document( $doc );
 f26doctor_sql_assert( ! is_wp_error( $inserted ) && is_string( $inserted ),
 	'actual indexer writes synthetic doctor through real WordPress/MariaDB'
