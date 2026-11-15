@@ -111,7 +111,9 @@ final class Shadow_Index {
 		$wpdb->last_error='';
 		$serving=$wpdb->get_row($wpdb->prepare("SELECT object_version,source_event_sequence,checksum,connector_slug FROM $live_table WHERE canonical_key=%s",$key),ARRAY_A);
 		if(''!==(string)$wpdb->last_error){return new \WP_Error('file26_shadow_live_version_unreadable','Current serving version could not be verified.');}
-		if ( ! $serving && ! in_array( $doc['state'], array( 'deleted', 'suspended', 'restricted', 'rejected', 'private' ), true )
+		// Validate *every* staged active source against current canonical owner,
+		// including updates to existing serving objects, not only cold rows.
+		if ( ! in_array( $doc['state'], array( 'deleted', 'suspended', 'restricted', 'rejected', 'private' ), true )
 			&& 'restricted' !== $doc['visibility'] ) {
 			if ( ! class_exists( Plugin::class ) ) {
 				return new \WP_Error( 'file26_cold_owner_attestation_unavailable', 'Native canonical owner registry is required for cold shadow indexing.' );
